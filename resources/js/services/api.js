@@ -76,6 +76,11 @@ export const streamsAPI = {
     massStart: (ids) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=mass_start`, { ids }),
     massStop: (ids) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=mass_stop`, { ids }),
     fetchM3U: (url) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=fetch_m3u`, { url }),
+    // Stream analysis endpoints
+    analyze: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=analyze&id=${id}`),
+    analyzeBatch: (ids) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=analyze_batch`, { ids }),
+    checkAccessibility: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=check_accessibility&id=${id}`),
+    getTechnicalInfo: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=get_technical_info&id=${id}`),
 };
 
 /**
@@ -259,4 +264,17 @@ export const dashboardAPI = {
     getSecurity: () => api.get(`${ADMIN_API_PREFIX}/dashboard.php?action=security`),
     getSystem: () => api.get(`${ADMIN_API_PREFIX}/dashboard.php?action=system`),
     getAlerts: () => api.get(`${ADMIN_API_PREFIX}/dashboard.php?action=alerts`),
+};
+
+/**
+ * PM2 Process Manager API
+ */
+export const pm2API = {
+    getStatus: () => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=status`),
+    start: (workerId = 'all') => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=start&worker_id=${workerId}`),
+    stop: (workerId = 'all') => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=stop&worker_id=${workerId}`),
+    restart: (workerId = 'all') => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=restart&worker_id=${workerId}`),
+    getLogs: (worker = 'all', lines = 100) => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=logs&worker=${worker}&lines=${lines}`),
+    getQueueStats: () => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=queue_stats`),
+    serviceAction: (service, action) => api.post(`${ADMIN_API_PREFIX}/pm2.php?action=service_action`, { service, action }),
 };

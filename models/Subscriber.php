@@ -21,9 +21,14 @@ class Subscriber extends FosStreaming {
         return $return;
     }
 
+    public function activities()
+    {
+        return $this->hasMany(Activity::class, 'user_id');
+    }
+
     public function activity()
     {
-        return $this->hasMany(Activity::class);
+        return $this->hasMany(Activity::class, 'user_id');
     }
 
     public function laststream()

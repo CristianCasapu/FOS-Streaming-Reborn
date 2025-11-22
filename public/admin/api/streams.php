@@ -130,6 +130,8 @@ try {
             $stream = new Stream();
             $stream->name = $input['name'];
             $stream->streamurl = $input['stream_source']; // Database column is 'streamurl'
+            $stream->streamurl2 = ''; // Optional backup URL
+            $stream->streamurl3 = ''; // Optional backup URL
             $stream->cat_id = $input['cat_id'] ?? 0;
             $stream->trans_id = $input['trans_id'] ?? 0;
             $stream->status = 0;
@@ -362,6 +364,156 @@ try {
             echo json_encode([
                 'success' => true,
                 'content' => $content
+            ]);
+            break;
+
+        case 'analyze':
+            // Analyze a single stream with FFprobe
+            $id = $_GET['id'] ?? null;
+            if (!$id) {
+                throw new Exception('Stream ID is required');
+            }
+
+            $stream = Stream::find($id);
+            if (!$stream) {
+                throw new Exception('Stream not found');
+            }
+
+            // Mark as analyzing
+            $stream->analysis_status = 'analyzing';
+            $stream->save();
+
+            // Analyze stream using FFprobeService
+            require_once __DIR__ . '/../../../app/Services/FFprobeService.php';
+            $ffprobeService = new \App\Services\FFprobeService();
+
+            // Determine if it's a live stream (default to true)
+            $isLive = $stream->stream_type !== 'vod';
+
+            $analysis = $ffprobeService->analyzeStream($stream->streamurl, $isLive);
+
+            // Update stream with analysis results
+            $stream->updateFromAnalysis($analysis);
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Stream analyzed successfully',
+                'data' => [
+                    'analysis_status' => $stream->analysis_status,
+                    'technical_summary' => $stream->getTechnicalSummary()
+                ]
+            ]);
+            break;
+
+        case 'analyze_batch':
+            // Analyze multiple streams in batch
+            $input = json_decode(file_get_contents('php://input'), true);
+            $ids = $input['ids'] ?? [];
+
+            if (empty($ids)) {
+                throw new Exception('No stream IDs provided');
+            }
+
+            // Limit batch size to prevent timeouts
+            if (count($ids) > 50) {
+                throw new Exception('Maximum 50 streams can be analyzed in one batch');
+            }
+
+            require_once __DIR__ . '/../../../app/Services/FFprobeService.php';
+            $ffprobeService = new \App\Services\FFprobeService();
+
+            $results = [
+                'analyzed' => 0,
+                'failed' => 0,
+                'skipped' => 0
+            ];
+
+            foreach ($ids as $id) {
+                $stream = Stream::find($id);
+                if (!$stream) {
+                    $results['skipped']++;
+                    continue;
+                }
+
+                // Mark as analyzing
+                $stream->analysis_status = 'analyzing';
+                $stream->save();
+
+                $isLive = $stream->stream_type !== 'vod';
+
+                try {
+                    $analysis = $ffprobeService->analyzeStream($stream->streamurl, $isLive);
+                    $stream->updateFromAnalysis($analysis);
+
+                    if ($stream->analysis_status === 'completed') {
+                        $results['analyzed']++;
+                    } else {
+                        $results['failed']++;
+                    }
+                } catch (Exception $e) {
+                    $stream->analysis_status = 'failed';
+                    $stream->analysis_error = $e->getMessage();
+                    $stream->save();
+                    $results['failed']++;
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "Batch analysis completed",
+                'data' => $results
+            ]);
+            break;
+
+        case 'check_accessibility':
+            // Quick check if stream is accessible
+            $id = $_GET['id'] ?? null;
+            if (!$id) {
+                throw new Exception('Stream ID is required');
+            }
+
+            $stream = Stream::find($id);
+            if (!$stream) {
+                throw new Exception('Stream not found');
+            }
+
+            require_once __DIR__ . '/../../../app/Services/FFprobeService.php';
+            $ffprobeService = new \App\Services\FFprobeService();
+
+            $isAccessible = $ffprobeService->isStreamAccessible($stream->streamurl);
+
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'accessible' => $isAccessible,
+                    'url' => $stream->streamurl
+                ]
+            ]);
+            break;
+
+        case 'get_technical_info':
+            // Get technical information for a stream
+            $id = $_GET['id'] ?? null;
+            if (!$id) {
+                throw new Exception('Stream ID is required');
+            }
+
+            $stream = Stream::find($id);
+            if (!$stream) {
+                throw new Exception('Stream not found');
+            }
+
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'id' => $stream->id,
+                    'name' => $stream->name,
+                    'analysis_status' => $stream->analysis_status,
+                    'analysis_status_label' => $stream->analysisStatusLabel,
+                    'last_analyzed' => $stream->last_analyzed,
+                    'technical_summary' => $stream->getTechnicalSummary(),
+                    'recommended_settings' => $stream->recommended_settings ? json_decode($stream->recommended_settings, true) : null
+                ]
             ]);
             break;
 

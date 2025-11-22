@@ -4,7 +4,7 @@
             <div class="flex justify-between items-center mb-6">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-900">Activity Logs</h1>
-                    <p class="mt-2 text-sm text-gray-600">Monitor user streaming activity and connections</p>
+                    <p class="mt-2 text-sm text-gray-600">Monitor subscriber streaming activity and connections</p>
                 </div>
                 <button @click="confirmDeleteAll" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700">
                     <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -37,7 +37,7 @@
                             </svg>
                         </div>
                         <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-500">Unique Users</p>
+                            <p class="text-sm font-medium text-gray-500">Unique Subscribers</p>
                             <p class="text-2xl font-semibold text-gray-900">{{ stats.unique_users }}</p>
                         </div>
                     </div>
@@ -119,7 +119,7 @@
                 <table v-else class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subscriber</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stream</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date/Time</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>

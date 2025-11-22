@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
-import { resolve } from 'path';
+import { fileURLToPath, URL } from 'node:url';
 
-// https://vitejs.dev/config/
+// https://vite.dev/config/
 export default defineConfig({
     plugins: [
         vue(),
@@ -26,20 +26,22 @@ export default defineConfig({
         outDir: 'public/build',
         emptyOutDir: true,
         manifest: true,
+        // Vite 7 uses modern browser targets by default (baseline-widely-available)
+        target: 'esnext',
         rollupOptions: {
             input: {
-                app: resolve(__dirname, 'resources/js/app.js'),
-                subscriber: resolve(__dirname, 'resources/js/subscriber.js'),
-                style: resolve(__dirname, 'resources/css/app.css'),
+                app: fileURLToPath(new URL('./resources/js/app.js', import.meta.url)),
+                subscriber: fileURLToPath(new URL('./resources/js/subscriber.js', import.meta.url)),
+                style: fileURLToPath(new URL('./resources/css/app.css', import.meta.url)),
             },
         },
     },
 
-    // Path resolution
+    // Path resolution - Updated to use fileURLToPath for ESM compatibility
     resolve: {
         alias: {
-            '@': resolve(__dirname, 'resources/js'),
-            '~': resolve(__dirname, 'resources'),
+            '@': fileURLToPath(new URL('./resources/js', import.meta.url)),
+            '~': fileURLToPath(new URL('./resources', import.meta.url)),
         },
     },
 

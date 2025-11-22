@@ -105,29 +105,108 @@
         </div>
 
         <!-- Create/Edit Modal -->
-        <div v-if="showCreateModal || showEditModal" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-            <div class="bg-white rounded-lg p-6 max-w-md w-full">
+        <div v-if="showCreateModal || showEditModal" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50 overflow-y-auto">
+            <div class="bg-white rounded-lg p-6 max-w-2xl w-full my-8">
                 <h3 class="text-lg font-medium mb-4">{{ showEditModal ? 'Edit Subscriber' : 'Create Subscriber' }}</h3>
                 <form @submit.prevent="showEditModal ? updateSubscriber() : createSubscriber()">
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Username</label>
-                            <input v-model="form.username" type="text" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" />
+                    <div class="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
+                        <!-- Basic Information -->
+                        <div class="border-b pb-4">
+                            <h4 class="text-sm font-semibold text-gray-700 mb-3">Basic Information</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Username *</label>
+                                    <input v-model="form.username" type="text" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Email</label>
+                                    <input v-model="form.email" type="email" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Password {{ showEditModal ? '(leave blank to keep current)' : '*' }}</label>
+                                    <input v-model="form.password" type="password" :required="!showEditModal" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Phone Number</label>
+                                    <input v-model="form.phone" type="tel" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="+1234567890" />
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Email</label>
-                            <input v-model="form.email" type="email" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" />
+
+                        <!-- Location Information -->
+                        <div class="border-b pb-4">
+                            <h4 class="text-sm font-semibold text-gray-700 mb-3">Location Information</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Country</label>
+                                    <input v-model="form.country" type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="United States" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">City</label>
+                                    <input v-model="form.city" type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="New York" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Address</label>
+                                    <input v-model="form.address" type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="123 Main St" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Postal Code</label>
+                                    <input v-model="form.postal_code" type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="10001" />
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Password {{ showEditModal ? '(leave blank to keep current)' : '' }}</label>
-                            <input v-model="form.password" type="password" :required="!showEditModal" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" />
+
+                        <!-- Service Information -->
+                        <div class="border-b pb-4">
+                            <h4 class="text-sm font-semibold text-gray-700 mb-3">Service Information</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">ISP (Internet Service Provider)</label>
+                                    <input v-model="form.isp" type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="Comcast, AT&T, etc." />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Package/Plan</label>
+                                    <select v-model="form.package" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                                        <option value="">Select a package</option>
+                                        <option value="basic">Basic - 10 Streams</option>
+                                        <option value="standard">Standard - 25 Streams</option>
+                                        <option value="premium">Premium - 50 Streams</option>
+                                        <option value="enterprise">Enterprise - Unlimited</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Max Connections</label>
+                                    <input v-model.number="form.max_connections" type="number" min="1" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="5" />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Expiration Date</label>
+                                    <input v-model="form.expiration_date" type="date" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" />
+                                </div>
+                            </div>
                         </div>
-                        <div class="flex items-center">
-                            <input v-model="form.enabled" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" />
-                            <label class="ml-2 block text-sm text-gray-900">Active</label>
+
+                        <!-- Additional Information -->
+                        <div>
+                            <h4 class="text-sm font-semibold text-gray-700 mb-3">Additional Information</h4>
+                            <div class="grid grid-cols-1 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Notes</label>
+                                    <textarea v-model="form.notes" rows="3" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="Any additional notes about this subscriber..."></textarea>
+                                </div>
+                                <div class="flex items-center space-x-6">
+                                    <div class="flex items-center">
+                                        <input v-model="form.enabled" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" />
+                                        <label class="ml-2 block text-sm text-gray-900">Active</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input v-model="form.is_reseller" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" />
+                                        <label class="ml-2 block text-sm text-gray-900">Is Reseller</label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="flex justify-end space-x-3 mt-6">
+                    <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
                         <button type="button" @click="closeModal" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Cancel</button>
                         <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">{{ showEditModal ? 'Update' : 'Create' }}</button>
                     </div>
@@ -172,7 +251,18 @@ const form = ref({
     username: '',
     email: '',
     password: '',
-    enabled: true
+    phone: '',
+    country: '',
+    city: '',
+    address: '',
+    postal_code: '',
+    isp: '',
+    package: '',
+    max_connections: 5,
+    expiration_date: '',
+    notes: '',
+    enabled: true,
+    is_reseller: false
 });
 
 const fetchSubscribers = async () => {
@@ -206,7 +296,18 @@ const createSubscriber = async () => {
             username: form.value.username,
             email: form.value.email,
             password: form.value.password,
-            enabled: form.value.enabled ? 1 : 0
+            phone: form.value.phone,
+            country: form.value.country,
+            city: form.value.city,
+            address: form.value.address,
+            postal_code: form.value.postal_code,
+            isp: form.value.isp,
+            package: form.value.package,
+            max_connections: form.value.max_connections,
+            expiration_date: form.value.expiration_date,
+            notes: form.value.notes,
+            enabled: form.value.enabled ? 1 : 0,
+            is_reseller: form.value.is_reseller ? 1 : 0
         });
         showMessage('Subscriber created successfully');
         closeModal();
@@ -222,7 +323,18 @@ const editSubscriber = (subscriber) => {
         username: subscriber.username,
         email: subscriber.email || '',
         password: '',
-        enabled: subscriber.enabled === 1
+        phone: subscriber.phone || '',
+        country: subscriber.country || '',
+        city: subscriber.city || '',
+        address: subscriber.address || '',
+        postal_code: subscriber.postal_code || '',
+        isp: subscriber.isp || '',
+        package: subscriber.package || '',
+        max_connections: subscriber.max_connections || 5,
+        expiration_date: subscriber.expiration_date || '',
+        notes: subscriber.notes || '',
+        enabled: subscriber.enabled === 1,
+        is_reseller: subscriber.is_reseller === 1
     };
     showEditModal.value = true;
 };
@@ -232,7 +344,18 @@ const updateSubscriber = async () => {
         const data = {
             username: form.value.username,
             email: form.value.email,
-            enabled: form.value.enabled ? 1 : 0
+            phone: form.value.phone,
+            country: form.value.country,
+            city: form.value.city,
+            address: form.value.address,
+            postal_code: form.value.postal_code,
+            isp: form.value.isp,
+            package: form.value.package,
+            max_connections: form.value.max_connections,
+            expiration_date: form.value.expiration_date,
+            notes: form.value.notes,
+            enabled: form.value.enabled ? 1 : 0,
+            is_reseller: form.value.is_reseller ? 1 : 0
         };
         if (form.value.password) {
             data.password = form.value.password;
@@ -266,7 +389,24 @@ const deleteSubscriber = async () => {
 const closeModal = () => {
     showCreateModal.value = false;
     showEditModal.value = false;
-    form.value = { id: null, username: '', email: '', password: '', enabled: true };
+    form.value = {
+        id: null,
+        username: '',
+        email: '',
+        password: '',
+        phone: '',
+        country: '',
+        city: '',
+        address: '',
+        postal_code: '',
+        isp: '',
+        package: '',
+        max_connections: 5,
+        expiration_date: '',
+        notes: '',
+        enabled: true,
+        is_reseller: false
+    };
 };
 
 const formatDate = (dateStr) => {

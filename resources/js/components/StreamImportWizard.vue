@@ -593,7 +593,9 @@ const finishImport = async () => {
             }
         }
 
-        // Import streams
+        // Import streams and collect their IDs
+        const importedStreamIds = [];
+
         for (const stream of filteredStreams.value) {
             let catId = stream.categoryId;
 
@@ -605,13 +607,27 @@ const finishImport = async () => {
                 // catId already set from groupCategoryMap
             }
 
-            await streamsAPI.create({
+            const response = await streamsAPI.create({
                 name: stream.name,
                 stream_source: stream.url,
                 cat_id: parseInt(catId) || 0
             });
 
+            // Collect stream ID for batch analysis
+            if (response.data.success && response.data.data?.id) {
+                importedStreamIds.push(response.data.data.id);
+            }
+
             importCount++;
+        }
+
+        // Trigger batch analysis for imported streams in the background
+        if (importedStreamIds.length > 0) {
+            // Don't wait for analysis to complete - run in background
+            streamsAPI.analyzeBatch(importedStreamIds).catch(err => {
+                console.error('Background analysis failed:', err);
+                // Silent fail - analysis can be retried later
+            });
         }
 
         emit('imported', importCount);

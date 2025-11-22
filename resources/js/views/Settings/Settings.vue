@@ -356,6 +356,13 @@
 
                     <hr class="border-gray-200" />
 
+                    <!-- PM2 Process Manager Section -->
+                    <div>
+                        <PM2Manager />
+                    </div>
+
+                    <hr class="border-gray-200" />
+
                     <!-- Branding Section -->
                     <div>
                         <h3 class="text-lg font-medium text-gray-900 mb-4 flex items-center">
@@ -567,6 +574,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import AppLayout from '../../components/AppLayout.vue';
+import PM2Manager from '../../components/PM2Manager.vue';
 import { settingsAPI, systemCommandsAPI } from '../../services/api';
 
 const loading = ref(false);

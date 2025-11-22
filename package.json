@@ -16,25 +16,32 @@
     "dev": "vite",
     "build": "vite build",
     "watch": "vite build --watch",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop ecosystem.config.js",
+    "pm2:restart": "pm2 restart ecosystem.config.js",
+    "pm2:status": "pm2 status",
+    "pm2:logs": "pm2 logs",
+    "pm2:monit": "pm2 monit"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.0",
-    "autoprefixer": "^10.4.16",
-    "axios": "^1.13.2",
-    "laravel-vite-plugin": "^1.0.0",
-    "postcss": "^8.4.32",
-    "tailwindcss": "^3.4.0",
-    "vite": "^5.0.0"
+    "@vitejs/plugin-vue": "^6.0.2",
+    "autoprefixer": "^10.4.20",
+    "axios": "^1.7.9",
+    "laravel-vite-plugin": "^2.0.1",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "vite": "^7.2.4"
   },
   "dependencies": {
     "pinia": "^3.0.4",
-    "vue": "^3.4.0",
-    "vue-router": "^4.6.3"
+    "pm2": "^5.4.3",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
   },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
+    "node": ">=20.19.0",
+    "npm": ">=10.0.0"
   },
   "author": {
     "name": "Cristian Casapu",
