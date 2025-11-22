@@ -3,10 +3,7 @@
  * BannedIP Model
  * Manages permanently banned/whitelisted IPs
  */
-
-use Illuminate\Database\Eloquent\Model;
-
-class BannedIP extends Model
+class BannedIP extends FosStreaming
 {
     protected $table = 'banned_ips';
     public $timestamps = true;

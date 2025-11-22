@@ -1,0 +1,55 @@
+#!/usr/bin/env php
+<?php
+
+define('LARAVEL_START', microtime(true));
+
+/*
+|--------------------------------------------------------------------------
+| Register The Auto Loader
+|--------------------------------------------------------------------------
+*/
+
+require __DIR__.'/vendor/autoload.php';
+require __DIR__.'/config.php';
+
+use Illuminate\Console\Application;
+use Illuminate\Container\Container;
+use Illuminate\Events\Dispatcher;
+
+/*
+|--------------------------------------------------------------------------
+| Bootstrap The Application
+|--------------------------------------------------------------------------
+*/
+
+$app = new Container;
+Container::setInstance($app);
+
+$events = new Dispatcher($app);
+
+$artisan = new Application($app, $events, 'FOS Streaming v70');
+
+/*
+|--------------------------------------------------------------------------
+| Register Commands
+|--------------------------------------------------------------------------
+*/
+
+// Register Sail commands
+$artisan->resolve(\Laravel\Sail\Console\InstallCommand::class);
+$artisan->resolve(\Laravel\Sail\Console\PublishCommand::class);
+
+// Register built-in commands
+require_once __DIR__.'/app/Console/Commands/ServeCommand.php';
+$artisan->add(new \App\Console\Commands\ServeCommand);
+
+// Add custom commands here
+// $artisan->add(new App\Console\Commands\StreamMonitorCommand);
+
+/*
+|--------------------------------------------------------------------------
+| Run The Artisan Application
+|--------------------------------------------------------------------------
+*/
+
+$artisan->run();

@@ -1,0 +1,10 @@
+# Ignore built assets
+/build/*
+!/build/.gitkeep
+
+# Ignore hot-update files
+*.hot-update.js
+*.hot-update.json
+
+# Keep index.php
+!index.php

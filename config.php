@@ -1,13 +1,33 @@
 <?php
+
+// Prevent loading config.php multiple times
+if (defined('FOS_CONFIG_LOADED')) {
+    return;
+}
+define('FOS_CONFIG_LOADED', true);
+
 session_start();
-date_default_timezone_set('America/Chicago');
 
 require 'vendor/autoload.php';
+
+// Load environment variables
+use Dotenv\Dotenv;
+
+$dotenv = Dotenv::createImmutable(__DIR__);
+$dotenv->load();
+
+// Load helper functions
+require_once 'helpers.php';
+
+// Set timezone from environment
+date_default_timezone_set(env('APP_TIMEZONE', 'America/Chicago'));
+
 include('functions.php');
 
 use Illuminate\Database\Capsule\Manager as Capsule;
 
 // Simple template class with basic Blade syntax support
+if (!class_exists('SimpleTemplate')) {
 class SimpleTemplate {
     private $viewsPath;
     private $cachePath;
@@ -103,24 +123,52 @@ class SimpleTemplate {
         };
     }
 }
+}
 
-$views = __DIR__ . '/views';
-$cache = __DIR__ . '/cache';
-$template = new SimpleTemplate($views);
+$views = __DIR__ . '/' . env('VIEWS_PATH', 'views');
+$cache = __DIR__ . '/' . env('CACHE_PATH', 'cache');
+$template = new SimpleTemplate($views, $cache);
 
 $capsule = new Capsule;
 $capsule->addConnection([
-    'driver'    => 'mysql',
-    'host'      => 'localhost',
-    'database'  => 'fos_dev',
-    'username'  => 'fos_dev',
-    'password'  => 'fos_dev_password',
-    'charset'   => 'utf8',
-    'collation' => 'utf8_unicode_ci',
-    'prefix'    => '',
+    'driver'    => env('DB_CONNECTION', 'mysql'),
+    'host'      => env('DB_HOST', 'localhost'),
+    'database'  => env('DB_DATABASE', 'fos_dev'),
+    'username'  => env('DB_USERNAME', 'fos_dev'),
+    'password'  => env('DB_PASSWORD', 'fos_dev_password'),
+    'charset'   => env('DB_CHARSET', 'utf8mb4'),
+    'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+    'prefix'    => env('DB_PREFIX', ''),
 ]);
 $capsule->setAsGlobal();
 $capsule->bootEloquent();
+
+// Configure Laravel Encryption (Crypt facade)
+use Illuminate\Encryption\Encrypter;
+use Illuminate\Support\Facades\Facade;
+use Illuminate\Container\Container;
+
+$app = Container::getInstance();
+
+// Get the encryption key from environment
+$appKey = env('APP_KEY');
+if (!$appKey) {
+    throw new RuntimeException('No application encryption key has been specified. Add APP_KEY to your .env file.');
+}
+
+// Parse the key (Laravel uses base64: prefix)
+if (strpos($appKey, 'base64:') === 0) {
+    $key = base64_decode(substr($appKey, 7));
+} else {
+    $key = $appKey;
+}
+
+// Create and register the encrypter
+$encrypter = new Encrypter($key, 'AES-256-CBC');
+$app->instance('encrypter', $encrypter);
+
+// Set up Facade application
+Facade::setFacadeApplication($app);
 
 // Load port configuration
 $portsConfigFile = __DIR__ . '/config/ports.php';
@@ -130,8 +178,8 @@ if (file_exists($portsConfigFile)) {
     define('FOS_STREAM_PORT', $portsConfig['stream_port']);
     define('FOS_RTMP_PORT', $portsConfig['rtmp_port']);
 } else {
-    // Fallback to default ports if config doesn't exist
-    define('FOS_WEB_PORT', 7777);
-    define('FOS_STREAM_PORT', 8000);
-    define('FOS_RTMP_PORT', 1935);
+    // Fallback to environment variables, then default ports
+    define('FOS_WEB_PORT', env('APP_PORT', 7777));
+    define('FOS_STREAM_PORT', env('STREAMING_PORT', 8000));
+    define('FOS_RTMP_PORT', env('RTMP_PORT', 1935));
 }

@@ -1,0 +1,1212 @@
+#!/bin/bash
+################################################################################
+# FOS-Streaming v70 - Unified Installation Script for Debian 12 (Bookworm)
+#
+# This is the official installer for FOS-Streaming v70. It combines all
+# previous installation scripts into a single, comprehensive installer.
+#
+# Features:
+#   - Runs as normal user with sudo privileges
+#   - PHP 8.4 with all modern extensions
+#   - MariaDB 11.4 (latest stable) with UTF8MB4 support
+#   - Nginx 1.26.x with HTTP-FLV, HTTP/2, HTTP/3 support
+#   - FFmpeg latest static build
+#   - NVM + Node.js 20 LTS for Vue.js frontend builds
+#   - Composer 2.x for Laravel components
+#   - Laravel Eloquent ORM integration
+#   - Vue.js 3 + Vite 5 admin panel
+#   - Enhanced security configurations
+#   - Automated setup and deployment
+#   - Environment-based configuration (.env)
+#
+# Repository: https://github.com/YourRepo/FOS-Streaming-v70
+# Date: 2025-11-22
+# Version: 70.0.0
+# Supported OS: Debian 12 (Bookworm) only
+# Run as: Normal user (will request sudo password)
+#
+# Usage:
+#   chmod +x install/debian12-installer
+#   ./install/debian12-installer
+################################################################################
+
+set -e  # Exit on any error
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Configuration
+PHP_VERSION="8.4"
+MARIADB_VERSION="11.4"
+NODE_VERSION="20"  # LTS version
+FOS_USER="fosstreaming"
+FOS_HOME="/home/fos-streaming"
+FOS_DIR="${FOS_HOME}/fos"
+PORTS_CONFIG="${FOS_DIR}/www/config/ports.php"
+CERTS_DIR="${FOS_DIR}/nginx/conf/certs"
+
+# Ports will be randomly selected during installation
+WEB_PORT=""
+STREAM_PORT=""
+RTMP_PORT=""
+
+# Logging functions
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+log_step() {
+    echo -e "\n${BLUE}===${NC} $1 ${BLUE}===${NC}\n"
+}
+
+# Error handler
+error_exit() {
+    log_error "$1"
+    exit 1
+}
+
+# ============================================================================
+# Initial Checks
+# ============================================================================
+
+# Check if running as root (we DON'T want root)
+if [ "$EUID" -eq 0 ]; then
+    error_exit "This script should NOT be run as root. Run as normal user with sudo privileges."
+fi
+
+# Check if user has sudo access
+if ! sudo -n true 2>/dev/null; then
+    log_info "This script requires sudo privileges. You may be prompted for your password."
+    sudo -v || error_exit "Failed to obtain sudo privileges"
+fi
+
+# Keep sudo alive throughout the script
+while true; do
+    sudo -n true
+    sleep 50
+    kill -0 "$$" || exit
+done 2>/dev/null &
+
+# Check if Debian 12
+if [ ! -f /etc/debian_version ]; then
+    error_exit "This script is for Debian only"
+fi
+
+DEBIAN_VERSION=$(cat /etc/debian_version | cut -d. -f1)
+if [ "$DEBIAN_VERSION" != "12" ]; then
+    log_warn "This script is designed for Debian 12. Current version: $DEBIAN_VERSION"
+    read -p "Do you want to continue anyway? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
+
+log_step "FOS-Streaming v70 Enhanced Installation for Debian 12"
+log_info "PHP Version: ${PHP_VERSION}"
+log_info "MariaDB Version: ${MARIADB_VERSION}"
+log_info "Node.js Version: ${NODE_VERSION} LTS"
+log_info "Installation Directory: ${FOS_DIR}"
+log_info "Running as user: $(whoami)"
+
+# ============================================================================
+# Port Selection Functions
+# ============================================================================
+
+is_port_available() {
+    local port=$1
+    if sudo lsof -i :${port} -sTCP:LISTEN -t >/dev/null 2>&1 ; then
+        return 1
+    fi
+    if sudo netstat -tuln 2>/dev/null | grep -q ":${port} " ; then
+        return 1
+    fi
+    return 0
+}
+
+get_random_ssl_port() {
+    local cloudflare_ports=(2053 2083 2087 2096 8443)
+    local exclude_ports=("$@")
+
+    if command -v shuf &> /dev/null; then
+        cloudflare_ports=($(printf '%s\n' "${cloudflare_ports[@]}" | shuf))
+    fi
+
+    for port in "${cloudflare_ports[@]}"; do
+        local excluded=0
+        for exclude_port in "${exclude_ports[@]}"; do
+            if [ "$port" == "$exclude_port" ]; then
+                excluded=1
+                break
+            fi
+        done
+
+        if [ $excluded -eq 0 ] && is_port_available $port; then
+            echo $port
+            return 0
+        fi
+    done
+
+    for port in $(seq 8000 8999 | sort -R | head -20); do
+        local excluded=0
+        for exclude_port in "${exclude_ports[@]}"; do
+            if [ "$port" == "$exclude_port" ]; then
+                excluded=1
+                break
+            fi
+        done
+
+        if [ $excluded -eq 0 ] && is_port_available $port; then
+            echo $port
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+get_random_rtmp_port() {
+    local exclude_ports=("$@")
+    local port_ranges=(
+        $(seq 1935 1999 | sort -R | head -10)
+        $(seq 8000 8999 | sort -R | head -20)
+    )
+
+    if command -v shuf &> /dev/null; then
+        port_ranges=($(printf '%s\n' "${port_ranges[@]}" | shuf))
+    fi
+
+    for port in "${port_ranges[@]}"; do
+        local excluded=0
+        for exclude_port in "${exclude_ports[@]}"; do
+            if [ "$port" == "$exclude_port" ]; then
+                excluded=1
+                break
+            fi
+        done
+
+        if [ $excluded -eq 0 ] && is_port_available $port; then
+            echo $port
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+select_cloudflare_ssl_ports() {
+    log_step "Port Configuration (Cloudflare SSL Compatible)"
+
+    # Cloudflare SSL-compatible ports
+    # Source: https://developers.cloudflare.com/fundamentals/reference/network-ports/
+    local CF_SSL_PORTS=(443 2053 2083 2087 2096 8443)
+
+    log_info "Automatically selecting available Cloudflare SSL-compatible ports..."
+
+    # Select Web Port
+    WEB_PORT=""
+    for port in "${CF_SSL_PORTS[@]}"; do
+        if port_available "$port"; then
+            WEB_PORT=$port
+            log_info "Selected web port: ${WEB_PORT} (HTTPS, Cloudflare compatible)"
+            break
+        fi
+    done
+    [ -z "$WEB_PORT" ] && error_exit "Unable to find available Cloudflare SSL port for web service"
+
+    # Select Streaming Port (different from web)
+    STREAM_PORT=""
+    for port in "${CF_SSL_PORTS[@]}"; do
+        if [ "$port" != "$WEB_PORT" ] && port_available "$port"; then
+            STREAM_PORT=$port
+            log_info "Selected streaming port: ${STREAM_PORT} (HTTPS, Cloudflare compatible)"
+            break
+        fi
+    done
+    [ -z "$STREAM_PORT" ] && error_exit "Unable to find available Cloudflare SSL port for streaming service"
+
+    # Select RTMP Port (from Cloudflare SSL ports, different from web and streaming)
+    RTMP_PORT=""
+    for port in "${CF_SSL_PORTS[@]}"; do
+        if [ "$port" != "$WEB_PORT" ] && [ "$port" != "$STREAM_PORT" ] && port_available "$port"; then
+            RTMP_PORT=$port
+            log_info "Selected RTMP port: ${RTMP_PORT} (SSL, Cloudflare compatible)"
+            break
+        fi
+    done
+    [ -z "$RTMP_PORT" ] && error_exit "Unable to find available Cloudflare SSL port for RTMP service"
+
+    log_info "Port allocation complete (all Cloudflare SSL compatible):"
+    log_info "  Web (HTTPS):       ${WEB_PORT}"
+    log_info "  Streaming (HTTPS): ${STREAM_PORT}"
+    log_info "  RTMP (SSL):        ${RTMP_PORT}"
+}
+
+# Function to check if port is available
+port_available() {
+    local port=$1
+    ! sudo lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1
+}
+
+# ============================================================================
+# SSL Certificate Functions
+# ============================================================================
+
+generate_self_signed_cert() {
+    local domain=$1
+    local cert_dir=$2
+
+    log_info "Generating self-signed SSL certificate..."
+
+    sudo mkdir -p "$cert_dir"
+
+    sudo openssl req -x509 -nodes -days 365 -newkey rsa:4096 \
+        -keyout "${cert_dir}/privkey.pem" \
+        -out "${cert_dir}/fullchain.pem" \
+        -subj "/C=US/ST=State/L=City/O=FOS-Streaming/CN=${domain}" \
+        2>/dev/null
+
+    if [ $? -eq 0 ]; then
+        log_info "Self-signed certificate generated successfully"
+        sudo chmod 600 "${cert_dir}/privkey.pem"
+        sudo chmod 644 "${cert_dir}/fullchain.pem"
+        return 0
+    else
+        log_error "Failed to generate self-signed certificate"
+        return 1
+    fi
+}
+
+# ============================================================================
+# STEP 0: Port Selection and Security Configuration
+# ============================================================================
+log_step "Step 0: Port Selection and Security Configuration"
+
+# Automatically select Cloudflare SSL-compatible ports
+select_cloudflare_ssl_ports
+
+# Admin Path Configuration
+log_step "Admin Panel Security Configuration"
+log_warn "IMPORTANT: The admin panel path should be unique and hard to guess for security."
+log_info "Examples: /control-xyz123, /management-abc456, /secure-admin-portal"
+log_info "Default: /admin (NOT RECOMMENDED for production)"
+echo ""
+
+while true; do
+    read -p "Enter admin panel path (press Enter for /admin): " ADMIN_PATH
+    ADMIN_PATH=${ADMIN_PATH:-/admin}
+
+    # Validate admin path
+    if [[ ! "$ADMIN_PATH" =~ ^/[a-zA-Z0-9_-]+$ ]]; then
+        log_error "Invalid admin path. Must start with / and contain only letters, numbers, hyphens, and underscores."
+        log_info "Example: /my-admin-panel"
+        continue
+    fi
+
+    # Warn if using default
+    if [ "$ADMIN_PATH" = "/admin" ]; then
+        log_warn "You are using the default admin path '/admin' which is NOT secure."
+        read -p "Are you sure you want to continue with /admin? (y/N): " -n 1 -r
+        echo ""
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            continue
+        fi
+    fi
+
+    log_info "Admin panel path set to: ${ADMIN_PATH}"
+    break
+done
+
+# Domain Configuration
+log_step "Domain Configuration"
+log_info "This installation uses Cloudflare proxy with SSL/TLS."
+log_warn "Enter the domain name that points to this server (e.g., stream.example.com)"
+echo ""
+
+while true; do
+    read -p "Enter your domain name: " DOMAIN_NAME
+
+    # Validate domain format
+    if [[ ! "$DOMAIN_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$ ]] && [[ ! "$DOMAIN_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$ ]]; then
+        log_error "Invalid domain format. Please enter a valid domain (e.g., stream.example.com)"
+        continue
+    fi
+
+    log_info "Domain set to: ${DOMAIN_NAME}"
+
+    # Get server IP for reference
+    PUBLIC_IP=$(curl -s https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
+    log_info "Server IP: ${PUBLIC_IP}"
+    log_warn "Make sure your domain ${DOMAIN_NAME} points to this IP in Cloudflare DNS"
+
+    read -p "Is this correct? (y/N): " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        break
+    fi
+done
+
+# ============================================================================
+# STEP 1: System Update
+# ============================================================================
+log_step "Step 1: Updating System"
+
+sudo apt-get update -y
+sudo apt-get upgrade -y
+sudo apt-get dist-upgrade -y
+sudo apt-get autoremove -y
+
+# ============================================================================
+# STEP 2: Install Build Dependencies
+# ============================================================================
+log_step "Step 2: Installing Build Dependencies"
+
+sudo apt-get install -y \
+    build-essential \
+    libssl-dev \
+    libpcre3 \
+    libpcre3-dev \
+    zlib1g-dev \
+    curl \
+    nano \
+    wget \
+    zip \
+    unzip \
+    git \
+    lsof \
+    iftop \
+    htop \
+    vim \
+    ca-certificates \
+    apt-transport-https \
+    gnupg2 \
+    software-properties-common \
+    dirmngr \
+    imagemagick \
+    webp \
+    icoutils
+
+# ============================================================================
+# STEP 3: Install Library Dependencies
+# ============================================================================
+log_step "Step 3: Installing Library Dependencies"
+
+sudo apt-get install -y \
+    libxml2-dev \
+    libbz2-dev \
+    libcurl4-openssl-dev \
+    libxslt1-dev \
+    libpq-dev \
+    libsqlite3-dev \
+    libgd-dev \
+    libgeoip-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libfreetype6-dev \
+    libwebp-dev \
+    libxpm-dev \
+    libtidy-dev \
+    libzip-dev \
+    libonig-dev \
+    libreadline-dev \
+    libedit-dev \
+    libsodium-dev
+
+sudo apt-get autoremove -y
+
+# ============================================================================
+# STEP 4: Setup PHP 8.4 from Sury Repository
+# ============================================================================
+log_step "Step 4: Setting up PHP ${PHP_VERSION}"
+
+log_info "Adding Sury PHP repository..."
+sudo curl -sSL https://packages.sury.org/php/apt.gpg -o /etc/apt/trusted.gpg.d/php-sury.gpg
+echo "deb https://packages.sury.org/php/ bookworm main" | sudo tee /etc/apt/sources.list.d/php-sury.list
+
+sudo apt-get update -y
+
+log_info "Installing PHP ${PHP_VERSION} and extensions..."
+sudo apt-get install -y \
+    php${PHP_VERSION} \
+    php${PHP_VERSION}-cli \
+    php${PHP_VERSION}-fpm \
+    php${PHP_VERSION}-common \
+    php${PHP_VERSION}-mysql \
+    php${PHP_VERSION}-curl \
+    php${PHP_VERSION}-gd \
+    php${PHP_VERSION}-mbstring \
+    php${PHP_VERSION}-xml \
+    php${PHP_VERSION}-zip \
+    php${PHP_VERSION}-bcmath \
+    php${PHP_VERSION}-intl \
+    php${PHP_VERSION}-opcache \
+    php${PHP_VERSION}-readline \
+    php${PHP_VERSION}-bz2 \
+    php${PHP_VERSION}-soap \
+    php${PHP_VERSION}-xsl \
+    php${PHP_VERSION}-redis \
+    php${PHP_VERSION}-imagick
+
+# ============================================================================
+# STEP 4.5: Install Composer
+# ============================================================================
+log_step "Step 4.5: Installing Composer"
+
+log_info "Downloading and installing Composer..."
+cd /tmp
+curl -sS https://getcomposer.org/installer -o composer-setup.php
+sudo php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+rm composer-setup.php
+
+composer --version || error_exit "Failed to install Composer"
+log_info "Composer installed successfully"
+
+# ============================================================================
+# STEP 4.6: Install NVM and Node.js
+# ============================================================================
+log_step "Step 4.6: Installing NVM and Node.js ${NODE_VERSION}"
+
+log_info "Installing NVM (Node Version Manager)..."
+export NVM_DIR="$HOME/.nvm"
+
+# Download and install NVM
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+
+# Load NVM
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+# Install Node.js LTS
+log_info "Installing Node.js ${NODE_VERSION} LTS..."
+nvm install ${NODE_VERSION}
+nvm use ${NODE_VERSION}
+nvm alias default ${NODE_VERSION}
+
+# Verify installation
+node --version || error_exit "Failed to install Node.js"
+npm --version || error_exit "Failed to install NPM"
+
+log_info "Node.js $(node --version) installed successfully"
+log_info "NPM $(npm --version) installed successfully"
+
+# ============================================================================
+# STEP 5: Configure PHP 8.4
+# ============================================================================
+log_step "Step 5: Configuring PHP ${PHP_VERSION}"
+
+log_info "Configuring PHP-FPM pool..."
+sudo tee /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf > /dev/null <<'EOF'
+[php84]
+user = nginx
+group = nginx
+listen = 127.0.0.1:9002
+listen.owner = nginx
+listen.group = nginx
+pm = ondemand
+pm.max_children = 300
+pm.start_servers = 10
+pm.min_spare_servers = 10
+pm.max_spare_servers = 100
+pm.process_idle_timeout = 3s
+pm.max_requests = 500
+security.limit_extensions = .php
+php_admin_value[error_log] = /home/fos-streaming/fos/logs/php-fpm.log
+php_admin_flag[log_errors] = on
+php_admin_value[memory_limit] = 1128M
+php_admin_value[upload_max_filesize] = 10M
+php_admin_value[post_max_size] = 10M
+php_admin_value[max_execution_time] = 300
+php_admin_value[max_input_time] = 300
+
+; Session security
+php_admin_value[session.cookie_httponly] = 1
+php_admin_value[session.cookie_samesite] = "Strict"
+php_admin_value[session.use_strict_mode] = 1
+php_admin_value[session.use_only_cookies] = 1
+php_admin_value[session.cookie_secure] = 0
+
+; Security settings
+php_admin_value[expose_php] = Off
+php_admin_value[display_errors] = Off
+php_admin_value[log_errors] = On
+php_admin_value[error_reporting] = E_ALL
+EOF
+
+log_info "Configuring php.ini..."
+PHP_INI="/etc/php/${PHP_VERSION}/fpm/php.ini"
+
+sudo sed -i 's/;cgi.fix_pathinfo=1/cgi.fix_pathinfo=0/g' "$PHP_INI"
+sudo sed -i 's/output_buffering = 4096/output_buffering = Off/g' "$PHP_INI"
+sudo sed -i 's/expose_php = On/expose_php = Off/g' "$PHP_INI"
+sudo sed -i 's/;date.timezone =/date.timezone = UTC/g' "$PHP_INI"
+sudo sed -i 's/display_errors = On/display_errors = Off/g' "$PHP_INI"
+sudo sed -i 's/error_reporting = .*/error_reporting = E_ALL/g' "$PHP_INI"
+sudo sed -i 's/;opcache.enable=1/opcache.enable=1/g' "$PHP_INI"
+sudo sed -i 's/;opcache.memory_consumption=128/opcache.memory_consumption=256/g' "$PHP_INI"
+sudo sed -i 's/;opcache.interned_strings_buffer=8/opcache.interned_strings_buffer=16/g' "$PHP_INI"
+sudo sed -i 's/;opcache.max_accelerated_files=10000/opcache.max_accelerated_files=20000/g' "$PHP_INI"
+sudo sed -i 's/;opcache.validate_timestamps=1/opcache.validate_timestamps=0/g' "$PHP_INI"
+
+# ============================================================================
+# STEP 6: Create System Users
+# ============================================================================
+log_step "Step 6: Creating System Users"
+
+# Create nginx user for PHP-FPM
+if ! id "nginx" &>/dev/null; then
+    sudo useradd -r -s /sbin/nologin nginx
+    log_info "Created nginx user"
+fi
+
+# Create FOS user
+if ! id "$FOS_USER" &>/dev/null; then
+    sudo useradd -s /bin/bash -U -d "$FOS_HOME" -m "$FOS_USER"
+    log_info "Created $FOS_USER user"
+fi
+
+# Add FOS user to sudoers with NOPASSWD
+log_info "Adding $FOS_USER to sudoers..."
+echo "${FOS_USER} ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/${FOS_USER} > /dev/null
+sudo chmod 0440 /etc/sudoers.d/${FOS_USER}
+log_info "$FOS_USER added to sudoers with NOPASSWD"
+
+# Restart PHP-FPM
+sudo systemctl restart php${PHP_VERSION}-fpm
+sudo systemctl enable php${PHP_VERSION}-fpm
+
+# ============================================================================
+# STEP 7: Install MariaDB
+# ============================================================================
+log_step "Step 7: Installing MariaDB ${MARIADB_VERSION}"
+
+log_info "Adding MariaDB repository..."
+sudo curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc'
+echo "deb [arch=amd64,arm64] https://mirrors.xtom.com/mariadb/repo/${MARIADB_VERSION}/debian bookworm main" | sudo tee /etc/apt/sources.list.d/mariadb.list
+
+sudo apt-get update -y
+sudo apt-get install -y mariadb-server mariadb-client
+
+# Generate strong MySQL root password
+log_info "Generating MySQL root password..."
+SQL_PASSWD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
+echo "$SQL_PASSWD" | sudo tee /root/MYSQL_ROOT_PASSWORD > /dev/null
+sudo chmod 600 /root/MYSQL_ROOT_PASSWORD
+
+# Secure MariaDB installation
+log_info "Configuring MariaDB..."
+sudo systemctl stop mariadb
+sudo systemctl start mariadb
+
+# Set root password and secure installation
+sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${SQL_PASSWD}';" || true
+sudo mysql -u root -p"${SQL_PASSWD}" -e "DELETE FROM mysql.user WHERE User='';" 2>/dev/null || true
+sudo mysql -u root -p"${SQL_PASSWD}" -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');" 2>/dev/null || true
+sudo mysql -u root -p"${SQL_PASSWD}" -e "DROP DATABASE IF EXISTS test;" 2>/dev/null || true
+sudo mysql -u root -p"${SQL_PASSWD}" -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';" 2>/dev/null || true
+sudo mysql -u root -p"${SQL_PASSWD}" -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+
+# Create FOS database
+log_info "Creating FOS database..."
+sudo mysql -u root -p"${SQL_PASSWD}" -e "CREATE DATABASE IF NOT EXISTS fos_streaming CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+sudo mysql -u root -p"${SQL_PASSWD}" -e "GRANT ALL PRIVILEGES ON fos_streaming.* TO 'fos'@'localhost' IDENTIFIED BY '${SQL_PASSWD}';"
+sudo mysql -u root -p"${SQL_PASSWD}" -e "FLUSH PRIVILEGES;"
+
+# Configure MariaDB for performance
+log_info "Optimizing MariaDB configuration..."
+sudo tee /etc/mysql/mariadb.conf.d/99-fos.cnf > /dev/null <<'EOF'
+[mysqld]
+# FOS-Streaming optimizations
+max_connections = 500
+innodb_buffer_pool_size = 512M
+innodb_log_file_size = 128M
+innodb_flush_method = O_DIRECT
+innodb_file_per_table = 1
+query_cache_type = 0
+query_cache_size = 0
+
+# Security
+local_infile = 0
+bind-address = 127.0.0.1
+
+# Performance
+max_allowed_packet = 64M
+tmp_table_size = 64M
+max_heap_table_size = 64M
+EOF
+
+sudo systemctl restart mariadb
+sudo systemctl enable mariadb
+
+# ============================================================================
+# STEP 8: Clone and Build Nginx
+# ============================================================================
+log_step "Step 8: Building Nginx with HTTP-FLV Module"
+
+log_info "Cloning fospackv69 repository..."
+cd /tmp
+rm -rf /tmp/fospackv69
+git clone --recurse-submodules https://github.com/theraw/fospackv69.git
+
+# Copy fos directory structure
+log_info "Setting up FOS directory structure..."
+sudo mkdir -p "$FOS_HOME"
+sudo cp -a /tmp/fospackv69/fos "$FOS_HOME/"
+
+# Build nginx
+log_info "Building nginx (this will take several minutes)..."
+cd /tmp/fospackv69/nginx-builder
+
+if [ -f "build-debian12.sh" ]; then
+    log_info "Using Debian 12 optimized build script..."
+    sudo bash build-debian12.sh
+else
+    log_warn "Using original build script..."
+    sudo bash build.sh
+fi
+
+# Cleanup
+rm -rf /tmp/fospackv69
+
+# ============================================================================
+# STEP 9: Clone FOS-Streaming Web Application
+# ============================================================================
+log_step "Step 9: Installing FOS-Streaming Web Application"
+
+sudo rm -rf "${FOS_DIR}/www/vendor" "${FOS_DIR}/www/50x.html"
+
+log_info "Cloning FOS-Streaming repository..."
+cd /tmp
+rm -rf /tmp/FOS-Streaming-v69
+git clone https://github.com/theraw/FOS-Streaming-v69.git
+
+# Copy files to www directory
+sudo cp -R /tmp/FOS-Streaming-v69/* "${FOS_DIR}/www/"
+rm -rf /tmp/FOS-Streaming-v69
+
+# ============================================================================
+# STEP 10: Install Composer Dependencies
+# ============================================================================
+log_step "Step 10: Installing PHP Dependencies with Composer"
+
+cd "${FOS_DIR}/www"
+
+log_info "Installing Composer dependencies..."
+sudo -u $FOS_USER composer install --no-dev --optimize-autoloader --no-interaction
+
+log_info "Composer dependencies installed successfully"
+
+# ============================================================================
+# STEP 11: Setup Production Environment
+# ============================================================================
+log_step "Step 11: Creating Production .env File"
+
+log_info "Generating application encryption key..."
+APP_KEY="base64:$(openssl rand -base64 32)"
+
+log_info "Creating production .env file..."
+sudo tee "${FOS_DIR}/www/.env" > /dev/null <<EOF
+# Application
+APP_NAME="FOS Streaming v70"
+APP_ENV=production
+APP_DEBUG=false
+APP_KEY=${APP_KEY}
+APP_URL=https://${DOMAIN_NAME}
+APP_DOMAIN=${DOMAIN_NAME}
+APP_TIMEZONE=UTC
+
+# Laravel Sail
+WWWUSER=1000
+WWWGROUP=1000
+APP_PORT=${WEB_PORT}
+VITE_PORT=5173
+
+# Streaming Ports
+STREAMING_PORT=${STREAM_PORT}
+RTMP_PORT=${RTMP_PORT}
+NGINX_HTTP_PORT=80
+NGINX_HTTPS_PORT=443
+
+# Database (MariaDB)
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=fos_streaming
+DB_USERNAME=fos
+DB_PASSWORD=${SQL_PASSWD}
+DB_CHARSET=utf8mb4
+DB_COLLATION=utf8mb4_unicode_ci
+DB_PREFIX=
+
+# Redis (if installed)
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+
+# Cache
+CACHE_DRIVER=file
+QUEUE_CONNECTION=sync
+SESSION_DRIVER=file
+
+# Logging
+LOG_CHANNEL=daily
+LOG_LEVEL=info
+
+# Template Paths
+VIEWS_PATH=views
+CACHE_PATH=cache
+
+# Streaming Configuration
+WEB_IP=*
+DOMAIN=${DOMAIN_NAME}
+STREAMING_AUTH=true
+FAIL2BAN_ENABLED=true
+UFW_ENABLED=false
+
+# FFmpeg (Auto-detected during installation)
+FFMPEG_PATH=${FFMPEG_BIN}
+FFPROBE_PATH=${FFPROBE_BIN}
+
+# HLS Output
+HLS_PATH=${FOS_DIR}/www/hl
+HLS_URL_PREFIX=https://${DOMAIN_NAME}/live
+
+# Security Features
+RATE_LIMIT_ENABLED=true
+MAX_LOGIN_ATTEMPTS=5
+LOGIN_TIMEOUT=900
+SECURITY_LOGGING=true
+
+# Session
+SESSION_LIFETIME=120
+CSRF_TOKEN_TIMEOUT=7200
+
+# Admin Panel Security
+ADMIN_PATH=${ADMIN_PATH}
+
+# Server Ports (Cloudflare SSL Compatible)
+WEB_PORT=${WEB_PORT}
+HTTPS_PORT=443
+
+# Mail
+MAIL_MAILER=smtp
+MAIL_HOST=mailpit
+MAIL_PORT=1025
+MAIL_USERNAME=null
+MAIL_PASSWORD=null
+MAIL_ENCRYPTION=null
+MAIL_FROM_ADDRESS="noreply@fos-streaming.local"
+MAIL_FROM_NAME="\${APP_NAME}"
+
+# Mailpit Dashboard
+FORWARD_MAILPIT_PORT=1025
+FORWARD_MAILPIT_DASHBOARD_PORT=8025
+
+# Database Ports
+FORWARD_DB_PORT=3306
+FORWARD_REDIS_PORT=6379
+EOF
+
+sudo chmod 600 "${FOS_DIR}/www/.env"
+sudo chown ${FOS_USER}:${FOS_USER} "${FOS_DIR}/www/.env"
+
+log_info "Production .env file created"
+
+# ============================================================================
+# STEP 12: Install NPM Dependencies and Build Frontend (if needed)
+# ============================================================================
+log_step "Step 12: Installing NPM Dependencies and Building Frontend"
+
+if [ -f "${FOS_DIR}/www/package.json" ]; then
+    log_info "package.json found, installing NPM dependencies..."
+
+    cd "${FOS_DIR}/www"
+
+    # Load NVM for this shell
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+    # Install dependencies
+    npm install
+
+    # Update frontend config with admin path
+    if [ -f "resources/js/config.js" ]; then
+        log_info "Updating frontend config with admin path..."
+        sed -i "s|export const ADMIN_PATH = '.*'|export const ADMIN_PATH = '${ADMIN_PATH}'|" resources/js/config.js
+        log_info "Frontend config updated"
+    fi
+
+    # Build production assets
+    if grep -q "\"build\":" package.json; then
+        log_info "Running npm run build..."
+        npm run build
+        log_info "Frontend assets built successfully"
+    else
+        log_warn "No build script found in package.json, skipping build step"
+    fi
+else
+    log_info "No package.json found, skipping NPM setup"
+fi
+
+# ============================================================================
+# STEP 13: Configure Application
+# ============================================================================
+log_step "Step 13: Configuring FOS-Streaming Application"
+
+# Update database configuration
+log_info "Updating database configuration..."
+sudo sed -i "s/'xxx'/'fos_streaming'/g" "${FOS_DIR}/www/config.php"
+sudo sed -i "s/'zzz'/'${SQL_PASSWD}'/g" "${FOS_DIR}/www/config.php"
+sudo sed -i "s/'ttt'/'fos'/g" "${FOS_DIR}/www/config.php"
+
+# Create required directories
+log_info "Creating application directories..."
+sudo mkdir -p "${FOS_DIR}/www/config"
+sudo mkdir -p "${FOS_DIR}/www/lib"
+sudo mkdir -p "${FOS_DIR}/www/hl"
+sudo chmod 777 "${FOS_DIR}/www/hl"
+sudo mkdir -p "${FOS_DIR}/www/cache"
+sudo chmod 777 "${FOS_DIR}/www/cache"
+sudo mkdir -p "${FOS_DIR}/www/storage/framework/cache"
+sudo mkdir -p "${FOS_DIR}/www/storage/framework/sessions"
+sudo mkdir -p "${FOS_DIR}/www/storage/framework/views"
+sudo mkdir -p "${FOS_DIR}/www/storage/logs"
+sudo chmod -R 775 "${FOS_DIR}/www/storage"
+sudo mkdir -p "${FOS_DIR}/www1/log"
+sudo mkdir -p "${FOS_DIR}/logs"
+
+# Save port configuration
+log_info "Saving port configuration..."
+sudo tee "${FOS_DIR}/www/config/ports.php" > /dev/null <<EOF
+<?php
+/**
+ * FOS-Streaming Port Configuration
+ * Generated: $(date '+%Y-%m-%d %H:%M:%S')
+ */
+
+return [
+    'web_port' => ${WEB_PORT},
+    'stream_port' => ${STREAM_PORT},
+    'rtmp_port' => ${RTMP_PORT},
+];
+EOF
+
+sudo chmod 644 "${FOS_DIR}/www/config/ports.php"
+
+# Setup www1 directory for streaming
+log_info "Setting up streaming directory..."
+sudo cp -R "${FOS_DIR}/www/"* "${FOS_DIR}/www1/" 2>/dev/null || true
+sudo rm -rf "${FOS_DIR}/www1/"*.* "${FOS_DIR}/www1/hl" 2>/dev/null || true
+
+# Create symbolic links
+sudo ln -sf "${FOS_DIR}/www/hl" "${FOS_DIR}/www1/hl"
+sudo ln -sf "${FOS_DIR}/www/config.php" "${FOS_DIR}/www1/config.php"
+sudo ln -sf "${FOS_DIR}/www/functions.php" "${FOS_DIR}/www1/functions.php"
+sudo ln -sf "${FOS_DIR}/www/stream.php" "${FOS_DIR}/www1/stream.php"
+sudo ln -sf "${FOS_DIR}/www/playlist.php" "${FOS_DIR}/www1/playlist.php"
+
+# Create PHP symlink
+sudo mkdir -p "${FOS_DIR}/php/bin"
+sudo ln -sf /usr/bin/php "${FOS_DIR}/php/bin/php"
+
+# Set permissions
+log_info "Setting permissions..."
+sudo chown -R nginx:nginx "${FOS_DIR}/www"
+sudo chown -R nginx:nginx "${FOS_DIR}/www1"
+sudo chown -R fosstreaming:fosstreaming "${FOS_DIR}/nginx"
+sudo chown -R nginx:nginx "${FOS_DIR}/logs"
+
+# ============================================================================
+# STEP 14: Install FFmpeg
+# ============================================================================
+log_step "Step 14: Installing FFmpeg"
+
+log_info "Downloading latest FFmpeg static build..."
+wget -q "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" -O /tmp/ffmpeg-release-amd64-static.tar.xz
+
+log_info "Extracting FFmpeg..."
+tar -xJf /tmp/ffmpeg-release-amd64-static.tar.xz -C /tmp/
+
+log_info "Installing FFmpeg binaries..."
+sudo cp /tmp/ffmpeg-*/ffmpeg /usr/local/bin/ffmpeg
+sudo cp /tmp/ffmpeg-*/ffprobe /usr/local/bin/ffprobe
+sudo chmod 755 /usr/local/bin/ffmpeg
+sudo chmod 755 /usr/local/bin/ffprobe
+
+rm -rf /tmp/ffmpeg-*
+
+# Detect FFmpeg and FFprobe paths
+log_info "Detecting FFmpeg and FFprobe paths..."
+FFMPEG_BIN=$(which ffmpeg 2>/dev/null || echo "/usr/local/bin/ffmpeg")
+FFPROBE_BIN=$(which ffprobe 2>/dev/null || echo "/usr/local/bin/ffprobe")
+
+# Verify the binaries exist and are executable
+if [ ! -x "$FFMPEG_BIN" ]; then
+    log_error "FFmpeg not found or not executable at: $FFMPEG_BIN"
+    exit 1
+fi
+
+if [ ! -x "$FFPROBE_BIN" ]; then
+    log_error "FFprobe not found or not executable at: $FFPROBE_BIN"
+    exit 1
+fi
+
+log_success "FFmpeg detected at: ${FFMPEG_BIN}"
+log_success "FFprobe detected at: ${FFPROBE_BIN}"
+
+# Verify versions
+FFMPEG_VERSION=$($FFMPEG_BIN -version 2>/dev/null | head -n1 | awk '{print $3}')
+log_info "FFmpeg version: ${FFMPEG_VERSION}"
+
+# Add to sudoers for nginx and fosstreaming users
+log_info "Configuring FFmpeg sudo access..."
+echo "nginx ALL = (root) NOPASSWD: ${FFMPEG_BIN}" | sudo tee -a /etc/sudoers.d/fos-ffmpeg > /dev/null
+echo "nginx ALL = (root) NOPASSWD: ${FFPROBE_BIN}" | sudo tee -a /etc/sudoers.d/fos-ffmpeg > /dev/null
+echo "${FOS_USER} ALL = (root) NOPASSWD: ${FFMPEG_BIN}" | sudo tee -a /etc/sudoers.d/fos-ffmpeg > /dev/null
+echo "${FOS_USER} ALL = (root) NOPASSWD: ${FFPROBE_BIN}" | sudo tee -a /etc/sudoers.d/fos-ffmpeg > /dev/null
+sudo chmod 0440 /etc/sudoers.d/fos-ffmpeg
+
+# ============================================================================
+# STEP 15: Configure Nginx and SSL Certificates
+# ============================================================================
+log_step "Step 15: Configuring Nginx and SSL Certificates"
+
+log_info "Generating self-signed certificate for ${DOMAIN_NAME}..."
+generate_self_signed_cert "${DOMAIN_NAME}" "${CERTS_DIR}"
+
+log_info "Configuring nginx with domain: ${DOMAIN_NAME}, ports - Web: ${WEB_PORT}, Stream: ${STREAM_PORT}, RTMP: ${RTMP_PORT}..."
+
+# Update HTTPS ports in nginx config
+sudo sed -i "s/listen 8000;/listen ${STREAM_PORT} ssl http2;/g" "${FOS_DIR}/nginx/conf/nginx.conf"
+sudo sed -i "s/listen \[::\]:8000;/listen [::]:${STREAM_PORT} ssl http2;/g" "${FOS_DIR}/nginx/conf/nginx.conf"
+sudo sed -i "s/listen 7777;/listen ${WEB_PORT} ssl http2;/g" "${FOS_DIR}/nginx/conf/nginx.conf"
+sudo sed -i "s/listen \[::\]:7777;/listen [::]:${WEB_PORT} ssl http2;/g" "${FOS_DIR}/nginx/conf/nginx.conf"
+sudo sed -i "s/listen 1935;/listen ${RTMP_PORT};/g" "${FOS_DIR}/nginx/conf/nginx.conf"
+
+# Add server_name configuration
+sudo sed -i "/listen ${STREAM_PORT} ssl http2;/a\\
+        server_name ${DOMAIN_NAME};" "${FOS_DIR}/nginx/conf/nginx.conf"
+sudo sed -i "/listen ${WEB_PORT} ssl http2;/a\\
+        server_name ${DOMAIN_NAME};" "${FOS_DIR}/nginx/conf/nginx.conf"
+
+# Add SSL configuration
+sudo sed -i "/server_name ${DOMAIN_NAME};/a\\
+\\
+        ssl_certificate ${CERTS_DIR}/fullchain.pem;\\
+        ssl_certificate_key ${CERTS_DIR}/privkey.pem;\\
+        ssl_protocols TLSv1.2 TLSv1.3;\\
+        ssl_ciphers HIGH:!aNULL:!MD5;\\
+        ssl_prefer_server_ciphers on;" "${FOS_DIR}/nginx/conf/nginx.conf"
+
+sudo chown -R fosstreaming:fosstreaming "${FOS_DIR}/nginx/conf"
+sudo chown -R fosstreaming:fosstreaming "${CERTS_DIR}"
+
+# ============================================================================
+# STEP 16: Configure System Startup
+# ============================================================================
+log_step "Step 16: Configuring System Startup"
+
+sudo tee /etc/systemd/system/fos-nginx.service > /dev/null <<EOF
+[Unit]
+Description=FOS-Streaming Nginx Server
+After=network.target
+
+[Service]
+Type=forking
+User=fosstreaming
+Group=fosstreaming
+PIDFile=${FOS_DIR}/nginx/pid/nginx.pid
+ExecStartPre=${FOS_DIR}/nginx/sbin/nginx -t -c ${FOS_DIR}/nginx/conf/nginx.conf
+ExecStart=${FOS_DIR}/nginx/sbin/nginx -c ${FOS_DIR}/nginx/conf/nginx.conf
+ExecReload=/bin/kill -s HUP \$MAINPID
+ExecStop=/bin/kill -s QUIT \$MAINPID
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable fos-nginx
+sudo systemctl enable php${PHP_VERSION}-fpm
+
+sudo systemctl stop fos-nginx 2>/dev/null || true
+sudo systemctl stop php${PHP_VERSION}-fpm 2>/dev/null || true
+
+log_info "Starting services..."
+sudo systemctl start php${PHP_VERSION}-fpm
+sleep 2
+sudo systemctl start fos-nginx
+
+# ============================================================================
+# STEP 17: Initialize Database
+# ============================================================================
+log_step "Step 17: Initializing Database"
+
+log_info "Waiting for services to start..."
+sleep 5
+
+log_info "Creating database tables..."
+curl -s -k "https://127.0.0.1:${WEB_PORT}/install_database_tables.php?install=fresh" > /dev/null 2>&1 || true
+sleep 2
+curl -s -k "https://127.0.0.1:${WEB_PORT}/install_database_tables.php?install" > /dev/null 2>&1 || true
+sleep 2
+curl -s -k "https://127.0.0.1:${WEB_PORT}/install_database_tables.php?update" > /dev/null 2>&1 || true
+
+sudo rm -f "${FOS_DIR}/www/install_database_tables.php"
+
+# ============================================================================
+# STEP 18: Setup Cron Job
+# ============================================================================
+log_step "Step 18: Setting up Cron Job"
+
+log_info "Adding cron job for stream monitoring..."
+CRON_CMD="*/2 * * * * /usr/bin/php ${FOS_DIR}/www/cron.php"
+(crontab -l 2>/dev/null | grep -v "cron.php"; echo "$CRON_CMD") | crontab -
+
+# ============================================================================
+# STEP 19: Security Hardening
+# ============================================================================
+log_step "Step 19: Applying Security Hardening"
+
+if command -v ufw &> /dev/null; then
+    log_info "Configuring firewall..."
+    sudo ufw allow ${WEB_PORT}/tcp comment 'FOS Web Panel HTTPS'
+    sudo ufw allow ${STREAM_PORT}/tcp comment 'FOS Streaming HTTPS'
+    sudo ufw allow ${RTMP_PORT}/tcp comment 'FOS RTMP'
+fi
+
+sudo chmod 600 "${FOS_DIR}/www/config.php"
+sudo chmod 644 "${FOS_DIR}/www/config/ports.php"
+sudo chmod 600 /root/MYSQL_ROOT_PASSWORD
+
+# ============================================================================
+# INSTALLATION COMPLETE
+# ============================================================================
+log_step "Installation Complete!"
+
+cat <<EOF
+
+================================================================
+  FOS-Streaming v70 Enhanced Installation Successful!
+================================================================
+
+  🔒 SECURE HTTPS INSTALLATION (Cloudflare Proxied)
+
+  Domain:            ${DOMAIN_NAME}
+  Subscriber Portal: https://${DOMAIN_NAME}/
+  Admin Panel:       https://${DOMAIN_NAME}${ADMIN_PATH}
+
+  Direct Access (Bypass Cloudflare if needed):
+    Web:      https://${PUBLIC_IP}:${WEB_PORT}
+    Streaming: https://${PUBLIC_IP}:${STREAM_PORT}
+    RTMP:      rtmp://${PUBLIC_IP}:${RTMP_PORT}
+
+  Default Admin Credentials:
+    Username:     admin
+    Password:     admin
+
+  ⚠️  SECURITY IMPORTANT:
+    1. Change the default admin password immediately!
+    2. Your admin path: ${ADMIN_PATH}
+    3. All ports are Cloudflare SSL compatible
+
+================================================================
+  Installed Components:
+================================================================
+
+  ✓ PHP ${PHP_VERSION} with Laravel components
+  ✓ Composer $(composer --version | head -n1 | awk '{print $3}')
+  ✓ Node.js $(node --version)
+  ✓ NPM $(npm --version)
+  ✓ MariaDB ${MARIADB_VERSION}
+  ✓ Nginx with HTTP-FLV module
+  ✓ FFmpeg latest
+  ✓ Self-signed SSL certificates
+
+================================================================
+  User Configuration:
+================================================================
+
+  FOS User:     ${FOS_USER}
+  Nginx User:   nginx
+  Sudo Access:  ${FOS_USER} has NOPASSWD sudo access
+
+================================================================
+  Database Credentials:
+================================================================
+
+  MySQL Root Password: /root/MYSQL_ROOT_PASSWORD
+  Database: fos_streaming
+  DB User:  fos
+  DB Pass:  (same as MySQL root)
+
+================================================================
+  Environment:
+================================================================
+
+  Production .env file created at:
+    ${FOS_DIR}/www/.env
+
+  Ports configured in:
+    ${FOS_DIR}/www/config/ports.php
+
+================================================================
+  Post-Installation Steps:
+================================================================
+
+  1. Login to web panel: https://${PUBLIC_IP}:${WEB_PORT}
+     (Accept self-signed certificate warning)
+
+  2. Go to Settings and update 'Web ip' to: ${PUBLIC_IP}
+
+  3. Change default admin password
+
+  4. Configure your first stream
+
+  5. (Optional) Setup Let's Encrypt SSL
+
+================================================================
+  Service Management:
+================================================================
+
+  systemctl status fos-nginx
+  systemctl status php${PHP_VERSION}-fpm
+  systemctl status mariadb
+
+  systemctl restart fos-nginx
+  systemctl reload fos-nginx
+
+================================================================
+  NVM Usage (for current user):
+================================================================
+
+  To use NVM in new shells, add to ~/.bashrc:
+    export NVM_DIR="\$HOME/.nvm"
+    [ -s "\$NVM_DIR/nvm.sh" ] && \\. "\$NVM_DIR/nvm.sh"
+
+  Commands:
+    nvm use ${NODE_VERSION}
+    nvm ls
+    node --version
+    npm --version
+
+================================================================
+
+EOF
+
+log_info "Installation script finished successfully!"
+log_info "Enjoy your FOS-Streaming installation with Laravel components!"

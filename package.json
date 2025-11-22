@@ -1,0 +1,57 @@
+{
+  "name": "fos-streaming-reborn",
+  "version": "70.0.0",
+  "description": "FOS Streaming Reborn - Professional Live Streaming Solution",
+  "private": false,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CristianCasapu/FOS-Streaming-Reborn.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CristianCasapu/FOS-Streaming-Reborn/issues"
+  },
+  "homepage": "https://github.com/CristianCasapu/FOS-Streaming-Reborn#readme",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "watch": "vite build --watch",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "autoprefixer": "^10.4.16",
+    "axios": "^1.13.2",
+    "laravel-vite-plugin": "^1.0.0",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "pinia": "^3.0.4",
+    "vue": "^3.4.0",
+    "vue-router": "^4.6.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "author": {
+    "name": "Cristian Casapu",
+    "url": "https://github.com/CristianCasapu"
+  },
+  "contributors": [
+    "FOS Streaming Development Team (Original)"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "streaming",
+    "rtmp",
+    "hls",
+    "http-flv",
+    "vue3",
+    "vite",
+    "tailwindcss",
+    "live-streaming"
+  ]
+}

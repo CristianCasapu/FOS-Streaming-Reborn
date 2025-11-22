@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="FOS Streaming - Your streaming content portal">
+    <title>FOS Streaming - Live Channels & Content</title>
+
+    <!-- Vite Dev Server -->
+    <?php if ($_ENV['APP_ENV'] === 'local' || (isset($_SERVER['HTTP_HOST']) && strpos($_SERVER['HTTP_HOST'], 'localhost') !== false)): ?>
+    <script type="module" src="http://localhost:5173/@vite/client"></script>
+    <script type="module" src="http://localhost:5173/resources/js/subscriber.js"></script>
+    <?php else: ?>
+    <!-- Production assets -->
+    <link rel="stylesheet" href="/build/assets/subscriber.css">
+    <script type="module" src="/build/assets/subscriber.js"></script>
+    <?php endif; ?>
+</head>
+<body>
+    <div id="app"></div>
+</body>
+</html>

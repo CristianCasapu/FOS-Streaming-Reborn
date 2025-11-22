@@ -1,28 +1,54 @@
-# FOS-Streaming v70
+# FOS-Streaming Reborn v70
 
-A powerful streaming and restreaming platform with advanced transcoding capabilities, user management, and security features.
+A powerful streaming and restreaming platform with **modern Vue.js 3 admin interface**, advanced transcoding capabilities, user management, and enterprise-grade security features.
+
+**GitHub**: [CristianCasapu/FOS-Streaming-Reborn](https://github.com/CristianCasapu/FOS-Streaming-Reborn)
+
+## ✨ What's New in v70
+
+- 🎨 **Modern Vue.js 3 SPA Admin Panel** - Complete rewrite from legacy PHP/Blade to Vue.js with Composition API
+- 🚀 **Laravel API Backend** - RESTful APIs with Eloquent ORM
+- 🎯 **TailwindCSS UI** - Beautiful, responsive interface
+- 🔒 **Advanced Security** - UFW firewall + fail2ban integration directly in admin panel
+- 📊 **Real-time Monitoring** - Activity tracking with statistics dashboard
+- 🛠️ **FFmpeg Testing** - Built-in tools to test FFmpeg/FFprobe
+- 📱 **Mobile Responsive** - Works seamlessly on all devices
 
 ## Features
 
-### Core Features
-- **Streaming & Restreaming**: Full RTMP/HLS/HTTP-FLV support with authentication and M3U8 playlists
-- **User Management**: Complete CRUD operations for users (add, edit, delete, enable, disable)
-- **Category Management**: Organize streams with categories
-- **Stream Management**: Full control over streams (overview, add, edit, delete, start, stop)
-- **Configuration**: Flexible settings management
-- **Transcoding**: Multiple predefined transcode profiles with h264_mp4toannexb support
-- **Monitoring**: Auto-restart via cron, last IP tracking, stream playback
-- **Import**: Playlist import functionality
-- **Advanced Features**: Multiple streams per channel, user stream limits, IP blocking, User-Agent blocking
+### Core Streaming Features
+- **RTMP/HLS/HTTP-FLV Streaming**: Full streaming protocol support with authentication
+- **M3U8 Playlist Generation**: Automated HLS playlist creation
+- **Transcoding Profiles**: 20+ FFmpeg parameters with multiple predefined profiles
+- **Stream Management**: Complete CRUD operations (create, start, stop, edit, delete)
+- **Mass Operations**: Bulk start/stop/delete streams
+- **Auto-Restart**: Cron-based stream monitoring and restart
+- **Import/Export**: M3U playlist import functionality
+
+### Modern Admin Panel (Vue.js 3 SPA)
+- 🎨 **Dashboard**: Real-time statistics with charts and activity feeds
+- 📺 **Streams Manager**: Full stream lifecycle management
+- 👥 **User Management**: Create, edit, delete users with stream limits
+- 📂 **Category Manager**: Organize streams into categories
+- 🔧 **Transcode Profiles**: Manage FFmpeg transcode configurations
+- 🛡️ **Security Suite**:
+  - IP Blocks management
+  - User-Agent blocking
+  - **Advanced Security** (UFW firewall + fail2ban)
+- 👨‍💼 **Admin Manager**: Multiple administrator accounts
+- 📊 **Activity Monitor**: Track stream usage and user activity
+- ⚙️ **Settings Panel**: System configuration with live FFmpeg testing
 
 ### Security Features
 - **Modern Authentication**: Argon2id password hashing (PHP 8.4)
-- **CSRF Protection**: Token-based request validation
-- **Rate Limiting**: Login attempt limiting and DDoS protection
-- **Security Logging**: Comprehensive audit trail
-- **Input Validation**: Strict input sanitization and validation
-- **Security Headers**: Modern HTTP security headers via nginx
-- **Session Security**: Secure session management with strict cookies
+- **CSRF Protection**: Token-based request validation on all forms
+- **Rate Limiting**: Brute-force protection (5 attempts/15 min)
+- **UFW Firewall Management**: Enable/disable firewall, manage rules via web UI
+- **fail2ban Integration**: Monitor jails, ban/unban IPs directly from admin panel
+- **Security Logging**: Comprehensive audit trail with event tracking
+- **Input Validation**: Strict input sanitization on all endpoints
+- **Security Headers**: X-Frame-Options, X-Content-Type-Options, CSP
+- **Session Security**: Secure session management with httponly cookies
 
 ## System Requirements
 
@@ -40,41 +66,89 @@ A powerful streaming and restreaming platform with advanced transcoding capabili
 ### Quick Install - Debian 12
 
 ```bash
-# 1. Download and run the installation script
-curl -s https://raw.githubusercontent.com/theraw/FOS-Streaming-v70/master/install/debian12 | bash
+# 1. Clone the repository
+git clone https://github.com/CristianCasapu/FOS-Streaming-Reborn.git
+cd FOS-Streaming-Reborn
 
-# 2. Wait for installation to complete (10-20 minutes)
+# 2. Run the unified installation script
+chmod +x install/debian12-installer
+./install/debian12-installer
+
+# 3. Wait for installation to complete (10-20 minutes)
 ```
+
+The installer will automatically set up:
+- Nginx 1.26.x with HTTP-FLV and RTMP modules
+- PHP 8.4 with all required extensions
+- MariaDB 11.4 with UTF8MB4 support
+- Composer 2.x for Laravel components
+- Node.js 20 LTS with NVM
+- FFmpeg latest static build
+- Vue.js 3 admin panel with production build
+
+### What Gets Installed
+
+- **Nginx 1.26.x** - Custom built with HTTP-FLV and RTMP modules from `fospackv69/nginx-builder`
+- **PHP 8.2** - From Debian 12 repositories with all required extensions
+- **MariaDB 10.11** - From Debian 12 repositories
+- **FFmpeg** - From Debian repositories
+- **Node.js 20 LTS** - For frontend build tools
+- **Composer** - For PHP dependency management
+- **All Application Files** - From `fospackv69` directory and current codebase
+
+### Repository Structure
+
+- **`develop` branch** - Active development (default)
+- **`master` branch** - Stable releases only
+- **`fospackv69/`** - Contains all required packages and modules (no external downloads needed)
 
 ### Post-Installation Steps
 
-1. **Access Web Panel**
+1. **Access Modern Admin Panel**
    ```
-   Visit: http://your-server-ip:7777/
+   Visit: http://your-server-ip:7777/admin#/login
    Default credentials: admin / admin
    ```
 
-2. **Configure Web IP**
-   - Navigate to Settings (http://your-server-ip:7777/settings.php)
-   - Change "Web ip: *" to your public IPv4 address
+2. **First Login** ⚠️ **CRITICAL SECURITY STEP**
+   - Navigate to **Admins** page
+   - Click edit on your admin account
+   - **Change the default password immediately!**
+   - Consider enabling two-factor authentication if available
+
+3. **Configure System Settings**
+   - Navigate to **Settings** page (`http://your-server-ip:7777/admin#/settings`)
+   - Update "Web IP" to your public IPv4 address
+   - Test FFmpeg and FFprobe installations
+   - Configure streaming port if needed
    - Save settings
 
-3. **Setup Cron Job** (if not automatically configured)
+4. **Setup UFW Firewall** (Optional but Recommended)
+   - Navigate to **Security → Advanced Security**
+   - Enable UFW firewall
+   - Add rules for required ports:
+     - Port 7777/tcp (Web panel)
+     - Port 8000/tcp (Streaming)
+     - Port 1935/tcp (RTMP)
+     - Port 22/tcp (SSH)
+
+5. **Configure fail2ban** (Optional)
+   - In **Security → Advanced Security**
+   - Monitor fail2ban jails status
+   - Configure IP ban/unban as needed
+
+6. **Verify Cron Job** (Auto-restart streams)
    ```bash
    crontab -e
-   # Add this line:
+   # Verify this line exists:
    */2 * * * * /usr/bin/php /home/fos-streaming/fos/www/cron.php
    ```
 
-4. **Retrieve MySQL Password**
+7. **Database Access** (if needed)
    ```bash
    cat /root/MYSQL_ROOT_PASSWORD
+   mysql -u root -p
    ```
-
-5. **Change Default Password** (Security Critical!)
-   - Login to web panel
-   - Navigate to Admin Management
-   - Change the default 'admin' password immediately
 
 
 ## Configuration
@@ -309,42 +383,160 @@ RTMP Source → Nginx RTMP → FFmpeg Transcode → HLS Output → Nginx HTTP �
 - **HLS Playlist**: `http://your-ip:8000/live/{user}/{pass}/{stream}/index.m3u8`
 - **Direct Stream**: `http://your-ip:8000/live/{user}/{pass}/{stream}`
 
-### Management Panel
+### Management Panel (Vue.js SPA)
 
-- **Login**: `http://your-ip:7777/`
-- **Dashboard**: `http://your-ip:7777/dashboard.php`
-- **Streams**: `http://your-ip:7777/streams.php`
-- **Users**: `http://your-ip:7777/users.php`
-- **Settings**: `http://your-ip:7777/settings.php`
+- **Login**: `http://your-ip:7777/admin#/login`
+- **Dashboard**: `http://your-ip:7777/admin#/dashboard`
+- **Streams**: `http://your-ip:7777/admin#/streams`
+- **Users**: `http://your-ip:7777/admin#/users`
+- **Categories**: `http://your-ip:7777/admin#/categories`
+- **Transcodes**: `http://your-ip:7777/admin#/transcodes`
+- **Security**: `http://your-ip:7777/admin#/security/ipblocks` (with dropdown menu)
+- **Activities**: `http://your-ip:7777/admin#/activities`
+- **Admins**: `http://your-ip:7777/admin#/admins`
+- **Settings**: `http://your-ip:7777/admin#/settings`
 
 
 ## Development
 
 ### Tech Stack
 
-- **Backend**: PHP 8.4 (Laravel Eloquent, Blade)
-- **Frontend**: Bootstrap 3, jQuery, DataTables
-- **Streaming**: Nginx-RTMP, FFmpeg
-- **Database**: MariaDB 11.4
+- **Backend**: PHP 8.4 (Laravel Components)
+  - Eloquent ORM for database operations
+  - Validation, Cache, Queue, Mail, Events
+  - Authentication, Session, Encryption
+  - HTTP Client (Guzzle), Redis, Logging (Monolog)
+  - RESTful API endpoints
+- **Frontend**: Vue.js 3 + Vite 5
+  - Composition API with `<script setup>`
+  - Pinia for state management
+  - Vue Router (hash mode)
+  - TailwindCSS for styling
+  - Axios for HTTP requests
+- **Streaming**: Nginx-HTTP-FLV, FFmpeg
+- **Database**: MariaDB 11.4 (UTF8MB4)
+- **Cache/Queue**: Redis (optional)
+- **Development**: Laravel Sail (Docker), NVM, Node.js 20 LTS
+
+### Docker Development (Laravel Sail)
+
+For a complete Docker-based development environment, see [LARAVEL_SAIL_GUIDE.md](LARAVEL_SAIL_GUIDE.md).
+
+Quick start:
+```bash
+# Copy environment file
+cp .env.example .env
+
+# Start containers
+./vendor/bin/sail up -d
+
+# Access application
+# Web Panel: http://localhost:7777
+# Streaming: http://localhost:8000
+```
+
+### Available Laravel Components
+
+- **Cache**: File, Redis, Database drivers
+- **Queue**: Sync, Database, Redis workers
+- **Mail**: SMTP, Mailgun, SES, Mailpit (development)
+- **Validation**: Form requests, custom rules
+- **Events**: Broadcasting, listeners
+- **Notifications**: Email, SMS, Slack
+- **Logging**: Daily, Single, Syslog channels
+- **HTTP Client**: Guzzle-based API calls
+- **Encryption**: AES-256-CBC
+- **Hashing**: Argon2id, bcrypt
 
 ### Project Structure
 
 ```
-/home/fos-streaming/fos/
-├── nginx/              # Nginx binaries and config
-│   ├── conf/
-│   ├── sbin/
-│   └── logs/
-├── www/                # Web panel application
-│   ├── lib/            # Security libraries (new)
-│   ├── models/         # Eloquent models
-│   ├── views/          # Blade templates
-│   ├── css/            # Stylesheets
-│   ├── js/             # JavaScript
-│   └── *.php           # Controllers
-├── www1/               # Streaming application
-│   └── stream.php
-└── logs/               # Application logs
+FOS-Streaming-v70/
+├── Root (14 PHP files - streaming endpoints + bootstrap)
+│   ├── index.php, server.php, artisan      # Entry points
+│   ├── config.php, helpers.php, functions.php  # Bootstrap
+│   ├── stream.php, playlist.php, retrieve.php  # Streaming
+│   ├── getfile.php, play.php, cron.php        # Utilities
+│   └── not_encrypted_stream.php, api.php, clientsgen.php
+│
+├── public/admin/                   # Modern Vue.js SPA
+│   ├── index.html                  # Vue app entry point
+│   ├── api/                        # 13 Laravel-style API endpoints
+│   │   ├── auth.php                # Authentication
+│   │   ├── dashboard.php           # Stats & charts
+│   │   ├── streams.php             # Stream CRUD
+│   │   ├── users.php               # User management
+│   │   ├── categories.php          # Category management
+│   │   ├── transcodes.php          # Transcode profiles
+│   │   ├── ipblocks.php            # IP blocking
+│   │   ├── useragents.php          # User-agent blocking
+│   │   ├── security.php            # UFW/fail2ban (NEW!)
+│   │   ├── admins.php              # Admin accounts
+│   │   ├── activities.php          # Activity logs
+│   │   ├── settings.php            # System config
+│   │   └── middleware.php          # API middleware
+│   └── build/                      # Vite production builds
+│
+├── resources/js/                   # Vue.js 3 Frontend
+│   ├── app.js                      # Main entry point
+│   ├── views/                      # 16 Vue components
+│   │   ├── Login.vue
+│   │   ├── DashboardEnhanced.vue
+│   │   ├── Streams/StreamsList.vue
+│   │   ├── Users/UsersList.vue
+│   │   ├── Categories/CategoriesList.vue
+│   │   ├── Transcodes/TranscodesList.vue
+│   │   ├── Security/
+│   │   │   ├── IPBlocks.vue
+│   │   │   ├── UserAgentBlocks.vue
+│   │   │   └── AdvancedSecurity.vue  # NEW!
+│   │   ├── Admins/AdminsList.vue
+│   │   ├── Activities/ActivitiesList.vue
+│   │   └── Settings/Settings.vue
+│   ├── components/
+│   │   ├── AppLayout.vue           # Main layout with nav
+│   │   └── subscriber/             # Subscriber components
+│   ├── stores/
+│   │   ├── auth.js                 # Pinia auth store
+│   │   └── dashboard.js            # Dashboard state
+│   ├── services/
+│   │   └── api.js                  # Axios API service
+│   └── router/
+│       └── index.js                # Vue Router config
+│
+├── models/                         # Eloquent ORM Models
+│   ├── Stream.php, User.php
+│   ├── Category.php, Transcode.php
+│   ├── IPBlock.php, UserAgentBlock.php
+│   ├── Admin.php, Activity.php
+│   └── BannedIP.php, SecurityEvent.php
+│
+├── views/                          # Blade Templates (legacy)
+│   ├── main.blade.php
+│   ├── clientsgen.blade.php
+│   ├── play.blade.php
+│   └── stream_importer.blade.php
+│
+├── scripts/                        # Utilities (NEW!)
+│   ├── install_database_tables.php
+│   ├── migrate_passwords.php
+│   └── stream_importer.php
+│
+├── docs/                           # Documentation
+│   ├── guides/                     # 17+ guide documents
+│   ├── database/                   # Database docs
+│   └── install/                    # Installation docs
+│
+├── install/                        # Installation Scripts
+│   └── debian12-installer          # Unified installer
+│
+├── vendor/                         # Composer dependencies
+├── node_modules/                   # Node.js dependencies
+├── package.json, vite.config.js    # Frontend build config
+├── composer.json, composer.lock    # PHP dependencies
+├── .env.example, .env              # Environment config
+├── .gitignore                      # Git ignore rules
+└── README.md                       # This file
 ```
 
 ## Contributing
@@ -375,7 +567,64 @@ All Rights Reserved - FOS-Streaming
 6. MariaDB - https://mariadb.org
 7. PHP - https://www.php.net
 
+## Migration to Vue.js (v70)
+
+FOS-Streaming v70 represents a **complete modernization** of the admin interface from legacy PHP/Blade to Vue.js 3 SPA:
+
+### What Changed
+- ✅ **35 legacy PHP/Blade files** deleted
+- ✅ **13 RESTful API endpoints** created with 60+ actions
+- ✅ **16 Vue.js components** built with Composition API
+- ✅ **13 routes** with authentication guards
+- ✅ **Security dropdown** with 3 organized pages
+- ✅ **Production build:** 196 kB (gzipped: 42.46 kB)
+- ✅ **Zero legacy dependencies** - Pure Vue.js 3 + TailwindCSS
+
+### Architecture Benefits
+- **Separation of Concerns**: Clean API/frontend split
+- **Modern Stack**: Vue.js 3, Vite 5, TailwindCSS, Pinia
+- **Type Safety**: Better code organization with Composition API
+- **Performance**: Lazy loading, code splitting, optimized builds
+- **Maintainability**: Component-based architecture
+- **Developer Experience**: Hot module replacement, fast rebuilds
+
+### Migration Documentation
+See [/docs/guides/MIGRATION_PROGRESS.md](docs/guides/MIGRATION_PROGRESS.md) for complete migration details.
+
+---
+
 ## Changelog
+
+### Version 70.3 - Vue.js SPA Complete (2025-11-22)
+
+**Major Changes:**
+- Complete migration to Vue.js 3 SPA admin interface
+- Added Advanced Security page (UFW + fail2ban integration)
+- Created Security dropdown menu
+- Unified installation script (debian12-installer)
+- Reorganized project structure
+
+**Added:**
+- Vue.js 3 admin panel with 16 components
+- 13 RESTful API endpoints
+- Advanced Security management (UFW/fail2ban)
+- Activity monitoring with statistics
+- FFmpeg testing tools in Settings
+- Security dropdown navigation
+- `/scripts/` directory for utilities
+- Comprehensive documentation in `/docs/`
+
+**Removed:**
+- 35 legacy PHP/Blade admin files
+- 3 duplicate installation scripts
+- index-secure.php (replaced by Vue.js login)
+- 18+ markdown files from root (moved to /docs/)
+
+**Changed:**
+- Moved utilities to `/scripts/` directory
+- Unified installation to `debian12-installer`
+- Updated all documentation references
+- Modernized README with current architecture
 
 ### Version 70.2 - Debian 12 Support (2025-11-21)
 

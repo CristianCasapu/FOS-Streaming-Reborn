@@ -1,3 +1,146 @@
+# Application Cache & Temp Files
 /cache/*
+/hl/*
+*.log
+
+# IDE & Editor Files
 .idea
 /.idea
+.vscode
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Claude AI Assistant
+CLAUDE.md
+.claude/
+
+# Environment & Configuration
+.env
+.env.local
+.env.*.local
+.env.backup
+.env.production
+
+# Composer Dependencies
+/vendor/
+# composer.lock - TRACKED for consistent dependencies across environments
+composer.phar
+
+# Node.js & NPM
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+.pnpm-debug.log
+.yarn/
+.npm/
+
+# Laravel/PHP Framework
+/bootstrap/cache/*
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
+/storage/app/public/*
+/storage/*.key
+/.phpunit.result.cache
+/phpunit.xml
+
+# Laravel Sail / Docker
+docker-compose.override.yml
+/.docker/
+.dockerignore
+
+# Build Artifacts
+/public/hot
+/public/storage
+/public/build
+/public/mix-manifest.json
+/public/css/
+/public/js/
+mix-manifest.json
+
+# Testing
+/coverage/
+.phpunit.cache
+/.phpunit.cache
+_ide_helper.php
+_ide_helper_models.php
+.phpstorm.meta.php
+
+# Logs
+*.log
+/logs/*.log
+/logs/nginx/*.log
+/logs/php/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Session Files
+/sessions/*
+/storage/framework/sessions/*
+
+# Backup Files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+*.tmp
+*~
+
+# Database
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Security & Credentials
+/credentials/
+*.pem
+*.key
+*.crt
+*.p12
+id_rsa*
+*.ppk
+
+# Compiled Files
+*.compiled
+*.min.js.map
+*.min.css.map
+
+# Streaming Files (HLS segments, temp transcodes)
+/www/hl/*
+/www1/hl/*
+*.ts
+*.m3u8
+!/www/hl/.gitkeep
+!/www1/hl/.gitkeep
+
+# FFmpeg temp files
+/tmp/*
+/temp/*
+*.ffmpeg.log
+
+# Uploaded Files
+/public/uploads/logos/*
+!/public/uploads/logos/.gitkeep
+/public/uploads/favicons/*
+!/public/uploads/favicons/.gitkeep

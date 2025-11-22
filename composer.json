@@ -1,6 +1,6 @@
 {
-  "name": "theraw/fos-streaming",
-  "description": "FOS-Streaming v70 - Enterprise-grade streaming and restreaming platform with advanced security",
+  "name": "cristiancasapu/fos-streaming-reborn",
+  "description": "FOS-Streaming Reborn v70 - Enterprise-grade streaming and restreaming platform with advanced security",
   "version": "70.0.0",
   "type": "project",
   "keywords": [
@@ -16,20 +16,27 @@
     "live-streaming",
     "security",
     "fail2ban",
-    "firewall"
+    "firewall",
+    "vue3",
+    "laravel",
+    "php8"
   ],
-  "homepage": "https://github.com/theraw/FOS-Streaming-v70",
-  "license": "proprietary",
+  "homepage": "https://github.com/CristianCasapu/FOS-Streaming-Reborn",
+  "license": "MIT",
   "authors": [
     {
-      "name": "FOS-Streaming Development Team",
-      "email": "dev@fos-streaming.org"
+      "name": "Cristian Casapu",
+      "email": "cristian@casapu.com"
+    },
+    {
+      "name": "FOS-Streaming Development Team (Original)",
+      "role": "Original Authors"
     }
   ],
   "support": {
-    "issues": "https://github.com/theraw/FOS-Streaming-v70/issues",
-    "source": "https://github.com/theraw/FOS-Streaming-v70",
-    "docs": "https://github.com/theraw/FOS-Streaming-v70/blob/master/README.md"
+    "issues": "https://github.com/CristianCasapu/FOS-Streaming-Reborn/issues",
+    "source": "https://github.com/CristianCasapu/FOS-Streaming-Reborn",
+    "docs": "https://github.com/CristianCasapu/FOS-Streaming-Reborn/blob/develop/README.md"
   },
   "require": {
     "php": ">=8.4",
@@ -40,21 +47,49 @@
     "ext-curl": "*",
     "jenssegers/blade": "^2.0",
     "nesbot/carbon": "^2.67",
-    "illuminate/database": "^10.0"
+    "illuminate/database": "^10.0",
+    "illuminate/validation": "^10.0",
+    "illuminate/cache": "^10.0",
+    "illuminate/redis": "^10.0",
+    "illuminate/events": "^10.0",
+    "illuminate/queue": "^10.0",
+    "illuminate/mail": "^10.0",
+    "illuminate/notifications": "^10.0",
+    "illuminate/filesystem": "^10.0",
+    "illuminate/http": "^10.0",
+    "illuminate/routing": "^10.0",
+    "illuminate/session": "^10.0",
+    "illuminate/encryption": "^10.0",
+    "illuminate/hashing": "^10.0",
+    "illuminate/cookie": "^10.0",
+    "illuminate/log": "^10.0",
+    "illuminate/pagination": "^10.0",
+    "illuminate/auth": "^10.0",
+    "illuminate/console": "^10.0",
+    "illuminate/support": "^10.0",
+    "monolog/monolog": "^3.0",
+    "vlucas/phpdotenv": "^5.5",
+    "symfony/var-dumper": "^6.3",
+    "predis/predis": "^2.2",
+    "guzzlehttp/guzzle": "^7.8"
   },
   "require-dev": {
-    "phpunit/phpunit": "^10.0"
+    "phpunit/phpunit": "^10.0",
+    "laravel/sail": "^1.27",
+    "fakerphp/faker": "^1.23",
+    "mockery/mockery": "^1.6",
+    "nunomaduro/collision": "^7.10",
+    "laravel/pint": "^1.13",
+    "phpstan/phpstan": "^1.10",
+    "spatie/laravel-ignition": "^2.4"
   },
   "autoload": {
     "psr-4": {
+      "App\\\\": "app/",
       "FOS\\\\Security\\\\": "lib/"
     },
     "classmap": [
       "models"
-    ],
-    "files": [
-      "config.php",
-      "functions.php"
     ]
   },
   "autoload-dev": {
@@ -85,7 +120,8 @@
   "prefer-stable": true,
   "extra": {
     "branch-alias": {
-      "dev-master": "70.x-dev"
+      "dev-develop": "70.x-dev",
+      "dev-master": "70.0-stable"
     },
     "fos-streaming": {
       "version": "70.0.0",
