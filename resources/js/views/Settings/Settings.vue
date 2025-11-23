@@ -246,6 +246,66 @@
 
                     <hr class="border-gray-200" />
 
+                    <!-- Trial Configuration Section -->
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                            <svg class="h-6 w-6 text-indigo-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Trial Subscriptions Configuration
+                        </h3>
+                        <div class="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
+                            <div class="flex">
+                                <svg class="h-5 w-5 text-blue-400 mr-2 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                </svg>
+                                <div class="text-sm text-blue-800">
+                                    <p class="font-medium">About Trial Subscriptions</p>
+                                    <p>Trial subscriptions allow subscribers to test your service for a limited time before purchasing. Each subscriber can have only one trial.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Default Trial Duration (hours) *
+                                </label>
+                                <input v-model.number="form.trial_duration_hours" type="number" min="1" max="720" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="24" />
+                                <p class="mt-1 text-xs text-gray-500">Default duration for new trials (1-720 hours, recommended: 24-48)</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Max Trials Per User
+                                </label>
+                                <input v-model.number="form.max_trials_per_user" type="number" min="1" max="10" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="1" />
+                                <p class="mt-1 text-xs text-gray-500">Maximum number of trials a user can have (enforced: 1)</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 space-y-3">
+                            <label class="flex items-center">
+                                <input
+                                    v-model="form.trial_enabled"
+                                    type="checkbox"
+                                    class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                />
+                                <span class="ml-2 text-sm text-gray-700">Enable Trial Subscriptions</span>
+                            </label>
+                            <p class="text-xs text-gray-500 ml-6">Allow new trial subscriptions to be created</p>
+
+                            <label class="flex items-center">
+                                <input
+                                    v-model="form.trial_requires_approval"
+                                    type="checkbox"
+                                    class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                />
+                                <span class="ml-2 text-sm text-gray-700">Trial Requires Admin Approval</span>
+                            </label>
+                            <p class="text-xs text-gray-500 ml-6">Trials must be manually activated by an administrator</p>
+                        </div>
+                    </div>
+
+                    <hr class="border-gray-200" />
+
                     <!-- System Commands & Sudo Password Section -->
                     <div>
                         <h3 class="text-lg font-medium text-gray-900 mb-4 flex items-center">
@@ -627,7 +687,11 @@ const form = ref({
     sudo_user: '',
     sudo_password: '',
     system_commands_enabled: false,
-    last_command_at: null
+    last_command_at: null,
+    trial_duration_hours: 24,
+    trial_enabled: true,
+    trial_requires_approval: false,
+    max_trials_per_user: 1
 });
 
 const loadSettings = async () => {
@@ -648,7 +712,11 @@ const loadSettings = async () => {
             sudo_user: data.sudo_user || 'casapu',
             sudo_password: '',
             system_commands_enabled: data.system_commands_enabled || false,
-            last_command_at: data.last_command_at || null
+            last_command_at: data.last_command_at || null,
+            trial_duration_hours: data.trial_duration_hours || 24,
+            trial_enabled: data.trial_enabled !== undefined ? data.trial_enabled : true,
+            trial_requires_approval: data.trial_requires_approval || false,
+            max_trials_per_user: data.max_trials_per_user || 1
         };
 
         // Update favicon if set

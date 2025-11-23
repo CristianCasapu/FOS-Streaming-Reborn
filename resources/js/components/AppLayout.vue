@@ -5,36 +5,67 @@
                 <div class="flex justify-between h-16">
                     <div class="flex">
                         <div class="flex-shrink-0 flex items-center">
-                            <!-- Custom Logo -->
-                            <div v-if="logoUrl" class="flex items-center">
-                                <img :src="logoUrl" alt="FOS Streaming v70" class="h-10 w-auto max-w-xs object-contain">
-                            </div>
-                            <!-- Default Logo -->
-                            <div v-else class="flex items-center">
-                                <div class="h-10 w-10 bg-indigo-600 rounded-lg flex items-center justify-center">
-                                    <svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                    </svg>
-                                </div>
-                                <span class="ml-3 text-xl font-bold text-gray-900">FOS Streaming v70</span>
+                            <!-- Logo (Custom or Default) -->
+                            <div class="flex items-center">
+                                <img :src="logoUrl" alt="FOS Streaming Reborn" class="h-10 w-auto max-w-xs object-contain">
                             </div>
                         </div>
                         <div class="hidden sm:ml-8 sm:flex sm:space-x-4">
                             <router-link to="/dashboard" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium" active-class="!border-indigo-500 !text-gray-900">
                                 Dashboard
                             </router-link>
-                            <router-link to="/streams" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium" active-class="!border-indigo-500 !text-gray-900">
-                                Streams
-                            </router-link>
-                            <router-link to="/subscribers" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium" active-class="!border-indigo-500 !text-gray-900">
-                                Subscribers
-                            </router-link>
-                            <router-link to="/categories" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium" active-class="!border-indigo-500 !text-gray-900">
-                                Categories
-                            </router-link>
-                            <router-link to="/transcodes" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium" active-class="!border-indigo-500 !text-gray-900">
-                                Transcodes
-                            </router-link>
+
+                            <!-- Streams Management Dropdown -->
+                            <div class="relative inline-flex items-center" @mouseenter="showStreamsDropdown = true" @mouseleave="showStreamsDropdown = false">
+                                <button class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium" :class="isStreamsRoute ? '!border-indigo-500 !text-gray-900' : ''">
+                                    Streams
+                                    <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                                <div v-show="showStreamsDropdown" class="absolute left-0 top-full w-64 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                                    <div class="py-1">
+                                        <router-link to="/streams" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            Manage Streams
+                                        </router-link>
+                                        <router-link to="/streams/bouquets" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            Bouquets
+                                        </router-link>
+                                        <router-link to="/streams/categories" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            Categories
+                                        </router-link>
+                                        <router-link to="/streams/packages" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            Packages
+                                        </router-link>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Subscribers Dropdown -->
+                            <div class="relative inline-flex items-center" @mouseenter="showSubscribersDropdown = true" @mouseleave="showSubscribersDropdown = false">
+                                <button class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium" :class="isSubscribersRoute ? '!border-indigo-500 !text-gray-900' : ''">
+                                    Subscribers
+                                    <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                                <div v-show="showSubscribersDropdown" class="absolute left-0 top-full w-64 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                                    <div class="py-1">
+                                        <router-link to="/subscribers" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            Manage Subscribers
+                                        </router-link>
+                                        <router-link to="/subscribers/subscriptions" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            Subscriptions
+                                        </router-link>
+                                        <router-link to="/subscribers/trials" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            Trials
+                                        </router-link>
+                                        <router-link to="/subscribers/activity" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                            Activity
+                                        </router-link>
+                                    </div>
+                                </div>
+                            </div>
 
                             <!-- Security Dropdown -->
                             <div class="relative inline-flex items-center" @mouseenter="showSecurityDropdown = true" @mouseleave="showSecurityDropdown = false">
@@ -97,12 +128,20 @@ const route = useRoute();
 const authStore = useAuthStore();
 const user = computed(() => authStore.currentUser);
 
+// Streams dropdown state
+const showStreamsDropdown = ref(false);
+const isStreamsRoute = computed(() => route.path.startsWith('/streams') || route.path.startsWith('/categories'));
+
 // Security dropdown state
 const showSecurityDropdown = ref(false);
 const isSecurityRoute = computed(() => route.path.startsWith('/security'));
 
-// Branding
-const logoUrl = ref(null);
+// Subscribers dropdown state
+const showSubscribersDropdown = ref(false);
+const isSubscribersRoute = computed(() => route.path.startsWith('/subscribers'));
+
+// Branding - Default logo fallback
+const logoUrl = ref('/assets/logo-default.svg');
 
 // Load logo from settings
 onMounted(async () => {
@@ -113,7 +152,7 @@ onMounted(async () => {
         }
     } catch (error) {
         console.error('Failed to load logo:', error);
-        // Fail silently - use default logo
+        // Fail silently - use default logo already set
     }
 });
 

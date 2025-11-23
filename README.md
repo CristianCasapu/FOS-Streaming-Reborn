@@ -4,6 +4,22 @@ A powerful streaming and restreaming platform with **modern Vue.js 3 admin inter
 
 **GitHub**: [CristianCasapu/FOS-Streaming-Reborn](https://github.com/CristianCasapu/FOS-Streaming-Reborn)
 
+---
+
+## 💬 Support & Contact
+
+<div align="center">
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support%20Development-orange?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/CristianCasapu)
+[![Telegram](https://img.shields.io/badge/Telegram-Contact%20Me-blue?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/CristianCasapu)
+
+**Like this project? [Buy me a coffee!](https://buymeacoffee.com/CristianCasapu) ☕**
+**Need help? [Contact me on Telegram](https://t.me/CristianCasapu) 💬**
+
+</div>
+
+---
+
 ## ✨ What's New in v70
 
 - 🎨 **Modern Vue.js 3 SPA Admin Panel** - Complete rewrite from legacy PHP/Blade to Vue.js with Composition API
@@ -13,6 +29,9 @@ A powerful streaming and restreaming platform with **modern Vue.js 3 admin inter
 - 📊 **Real-time Monitoring** - Activity tracking with statistics dashboard
 - 🛠️ **FFmpeg Testing** - Built-in tools to test FFmpeg/FFprobe
 - 📱 **Mobile Responsive** - Works seamlessly on all devices
+- 🔧 **PM2 Process Manager** - Manage background workers and system services from Settings
+- 👥 **Subscriber Management** - Refactored user management with activity tracking
+- ⚡ **Latest Packages** - Vite 7, Vue 3.5, Laravel 11 components
 
 ## Features
 
@@ -28,7 +47,7 @@ A powerful streaming and restreaming platform with **modern Vue.js 3 admin inter
 ### Modern Admin Panel (Vue.js 3 SPA)
 - 🎨 **Dashboard**: Real-time statistics with charts and activity feeds
 - 📺 **Streams Manager**: Full stream lifecycle management
-- 👥 **User Management**: Create, edit, delete users with stream limits
+- 👥 **Subscriber Management**: Create, edit, delete subscribers with stream limits and activity tracking
 - 📂 **Category Manager**: Organize streams into categories
 - 🔧 **Transcode Profiles**: Manage FFmpeg transcode configurations
 - 🛡️ **Security Suite**:
@@ -36,8 +55,8 @@ A powerful streaming and restreaming platform with **modern Vue.js 3 admin inter
   - User-Agent blocking
   - **Advanced Security** (UFW firewall + fail2ban)
 - 👨‍💼 **Admin Manager**: Multiple administrator accounts
-- 📊 **Activity Monitor**: Track stream usage and user activity
-- ⚙️ **Settings Panel**: System configuration with live FFmpeg testing
+- 📊 **Activity Monitor**: Track stream usage and subscriber activity
+- ⚙️ **Settings Panel**: System configuration with live FFmpeg testing and PM2 process manager
 
 ### Security Features
 - **Modern Authentication**: Argon2id password hashing (PHP 8.4)
@@ -595,6 +614,54 @@ See [/docs/guides/MIGRATION_PROGRESS.md](docs/guides/MIGRATION_PROGRESS.md) for 
 
 ## Changelog
 
+### Version 70.4 - PM2 Workers & Package Upgrades (2025-11-23)
+
+**Major Changes:**
+- Upgraded all packages to latest versions (Vite 7, Vue 3.5, Laravel 11)
+- Added PM2 Process Manager UI in Settings page
+- Refactored Users to Subscribers with enhanced activity tracking
+- Fixed multiple bugs in streams management
+- Implemented background worker architecture with PM2
+
+**Added:**
+- **PM2 Process Manager** - Control workers and system services from Settings
+  - Manage PM2 workers (stream-import, ffprobe)
+  - Control system services (Nginx, MariaDB, PHP-FPM)
+  - Real-time job queue statistics
+  - Auto-refresh every 30 seconds
+- **Background Workers** with PM2
+  - Stream Import Worker (Node.js)
+  - FFprobe Analysis Worker (Node.js Cluster, 2 instances)
+  - Job queue system with status tracking
+- **Enhanced Subscriber Management**
+  - Renamed from "Users" to "Subscribers"
+  - Improved activity tracking
+  - Better UI/UX
+- **Package Upgrades**
+  - Vite 5 → 7.2.4 (major upgrade, ESM-only)
+  - Vue 3.4 → 3.5.13 (56% memory reduction, 10x faster arrays)
+  - Laravel/Illuminate 10 → 11.46.1 (15% faster bootstrap)
+  - Carbon 2.x → 3.10.3 (major upgrade)
+  - PHPUnit 10 → 11.5.44
+  - PHPStan 1.x → 2.1.32
+  - Symfony 6.x → 7.3.x
+  - All other packages to latest stable versions
+
+**Fixed:**
+- Streams management bugs and edge cases
+- Activity tracking for subscribers
+- Vite 7 ESM compatibility (updated vite.config.js)
+- Laravel 11 breaking changes compatibility
+- Node.js version requirements (now 20.19+)
+
+**Documentation:**
+- `docs/PM2_MANAGEMENT_UI.md` - PM2 UI implementation details
+- `docs/PM2_WORKERS_IMPLEMENTATION.md` - Worker architecture
+- `docs/PM2_SUDO_PASSWORD_UPDATE.md` - Sudo configuration guide
+- `docs/guides/PM2_BACKGROUND_WORKERS_GUIDE.md` - Complete PM2 guide
+- `docs/guides/PACKAGE_UPGRADE_2025.md` - Package upgrade documentation
+- `docs/UPGRADE_SUMMARY.txt` - Quick upgrade summary
+
 ### Version 70.3 - Vue.js SPA Complete (2025-11-22)
 
 **Major Changes:**
@@ -676,6 +743,45 @@ See [/docs/guides/MIGRATION_PROGRESS.md](docs/guides/MIGRATION_PROGRESS.md) for 
 - IP and User-Agent blocking
 - Playlist import
 - Auto-restart via cron
+
+---
+
+## 💬 Support & Contact
+
+<div align="center">
+
+### Enjoying FOS-Streaming Reborn?
+
+Your support helps keep this project alive and growing! 🚀
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support%20Development-orange?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/CristianCasapu)
+
+**☕ [Support the project with a coffee!](https://buymeacoffee.com/CristianCasapu)**
+
+---
+
+### Need Help or Have Questions?
+
+I'm available on Telegram for support, feedback, and feature requests!
+
+[![Telegram](https://img.shields.io/badge/Telegram-Contact%20Me-blue?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/CristianCasapu)
+
+**💬 [Contact me on Telegram](https://t.me/CristianCasapu)**
+
+---
+
+### Other Ways to Contribute
+
+- ⭐ **Star this repository** on GitHub
+- 🐛 **Report bugs** via GitHub Issues
+- 💡 **Suggest features** via GitHub Discussions
+- 🔧 **Submit pull requests** to improve the code
+- 📖 **Improve documentation** and tutorials
+- 📢 **Share with others** who might benefit
+
+Every contribution, no matter how small, makes a difference! ❤️
+
+</div>
 
 ---
 

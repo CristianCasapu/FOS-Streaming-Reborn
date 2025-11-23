@@ -98,6 +98,102 @@ export const subscribersAPI = {
 };
 
 /**
+ * Packages API
+ */
+export const packagesAPI = {
+    getAll: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/packages.php?action=list&${queryString}`);
+    },
+    getOne: (id) => api.get(`${ADMIN_API_PREFIX}/packages.php?action=get&id=${id}`),
+    create: (data) => api.post(`${ADMIN_API_PREFIX}/packages.php?action=create`, data),
+    update: (id, data) => api.post(`${ADMIN_API_PREFIX}/packages.php?action=update&id=${id}`, data),
+    delete: (id) => api.get(`${ADMIN_API_PREFIX}/packages.php?action=delete&id=${id}`),
+    toggle: (id) => api.get(`${ADMIN_API_PREFIX}/packages.php?action=toggle&id=${id}`),
+    assignBouquets: (id, bouquetIds) => api.post(`${ADMIN_API_PREFIX}/packages.php?action=assign_bouquets&id=${id}`, { bouquet_ids: bouquetIds }),
+    removeBouquet: (id, bouquetId) => api.get(`${ADMIN_API_PREFIX}/packages.php?action=remove_bouquet&id=${id}&bouquet_id=${bouquetId}`),
+    getStats: (id) => api.get(`${ADMIN_API_PREFIX}/packages.php?action=stats&id=${id}`),
+};
+
+/**
+ * Bouquets API
+ */
+export const bouquetsAPI = {
+    getAll: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=list&${queryString}`);
+    },
+    getOne: (id) => api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=get&id=${id}`),
+    create: (data) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=create`, data),
+    update: (id, data) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=update&id=${id}`, data),
+    delete: (id) => api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=delete&id=${id}`),
+    toggle: (id) => api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=toggle&id=${id}`),
+    assignChannels: (id, channelIds) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=assign_channels&id=${id}`, { channel_ids: channelIds }),
+    removeChannel: (id, channelId) => api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=remove_channel&id=${id}&channel_id=${channelId}`),
+    reorderChannels: (id, channelIds) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=reorder_channels&id=${id}`, { channel_ids: channelIds }),
+    reorderBouquets: (bouquetIds) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=reorder_bouquets`, { bouquet_ids: bouquetIds }),
+};
+
+/**
+ * Channels API
+ */
+export const channelsAPI = {
+    getAll: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/channels.php?action=list&${queryString}`);
+    },
+    getOne: (id) => api.get(`${ADMIN_API_PREFIX}/channels.php?action=get&id=${id}`),
+    create: (data) => api.post(`${ADMIN_API_PREFIX}/channels.php?action=create`, data),
+    update: (id, data) => api.post(`${ADMIN_API_PREFIX}/channels.php?action=update&id=${id}`, data),
+    delete: (id) => api.get(`${ADMIN_API_PREFIX}/channels.php?action=delete&id=${id}`),
+    toggle: (id) => api.get(`${ADMIN_API_PREFIX}/channels.php?action=toggle&id=${id}`),
+    syncFromStreams: () => api.get(`${ADMIN_API_PREFIX}/channels.php?action=sync_from_streams`),
+    createFromStream: (streamId) => api.get(`${ADMIN_API_PREFIX}/channels.php?action=create_from_stream&stream_id=${streamId}`),
+    getAvailableStreams: () => api.get(`${ADMIN_API_PREFIX}/channels.php?action=available_streams`),
+};
+
+/**
+ * Subscriptions API
+ */
+export const subscriptionsAPI = {
+    getAll: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=list&${queryString}`);
+    },
+    getOne: (id) => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=get&id=${id}`),
+    create: (data) => api.post(`${ADMIN_API_PREFIX}/subscriptions.php?action=create`, data),
+    update: (id, data) => api.post(`${ADMIN_API_PREFIX}/subscriptions.php?action=update&id=${id}`, data),
+    delete: (id) => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=delete&id=${id}`),
+    toggle: (id) => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=toggle&id=${id}`),
+    renew: (id, days) => api.post(`${ADMIN_API_PREFIX}/subscriptions.php?action=renew&id=${id}`, { days }),
+    bySubscriber: (subscriberId) => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=by_subscriber&subscriber_id=${subscriberId}`),
+    recordConnection: (id, data) => api.post(`${ADMIN_API_PREFIX}/subscriptions.php?action=record_connection&id=${id}`, data),
+    getStats: () => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=stats`),
+};
+
+/**
+ * Trials API
+ */
+export const trialsAPI = {
+    getAll: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/trials.php?action=list&${queryString}`);
+    },
+    getOne: (id) => api.get(`${ADMIN_API_PREFIX}/trials.php?action=get&id=${id}`),
+    create: (data) => api.post(`${ADMIN_API_PREFIX}/trials.php?action=create`, data),
+    update: (id, data) => api.post(`${ADMIN_API_PREFIX}/trials.php?action=update&id=${id}`, data),
+    delete: (id) => api.get(`${ADMIN_API_PREFIX}/trials.php?action=delete&id=${id}`),
+    activate: (id) => api.get(`${ADMIN_API_PREFIX}/trials.php?action=activate&id=${id}`),
+    deactivate: (id) => api.get(`${ADMIN_API_PREFIX}/trials.php?action=deactivate&id=${id}`),
+    extend: (id, hours) => api.post(`${ADMIN_API_PREFIX}/trials.php?action=extend&id=${id}`, { hours }),
+    convert: (id, data) => api.post(`${ADMIN_API_PREFIX}/trials.php?action=convert&id=${id}`, data),
+    bySubscriber: (subscriberId) => api.get(`${ADMIN_API_PREFIX}/trials.php?action=by_subscriber&subscriber_id=${subscriberId}`),
+    recordConnection: (id, data) => api.post(`${ADMIN_API_PREFIX}/trials.php?action=record_connection&id=${id}`, data),
+    getStats: () => api.get(`${ADMIN_API_PREFIX}/trials.php?action=stats`),
+    getSettings: () => api.get(`${ADMIN_API_PREFIX}/trials.php?action=settings`),
+};
+
+/**
  * Categories API
  */
 export const categoriesAPI = {
@@ -271,10 +367,26 @@ export const dashboardAPI = {
  */
 export const pm2API = {
     getStatus: () => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=status`),
+    install: () => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=install`),
     start: (workerId = 'all') => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=start&worker_id=${workerId}`),
     stop: (workerId = 'all') => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=stop&worker_id=${workerId}`),
     restart: (workerId = 'all') => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=restart&worker_id=${workerId}`),
     getLogs: (worker = 'all', lines = 100) => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=logs&worker=${worker}&lines=${lines}`),
     getQueueStats: () => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=queue_stats`),
+    getConfig: (worker) => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=get_config&worker=${worker}`),
+    updateConfig: (worker, config) => api.post(`${ADMIN_API_PREFIX}/pm2.php?action=update_config`, { worker, config: JSON.stringify(config) }),
     serviceAction: (service, action) => api.post(`${ADMIN_API_PREFIX}/pm2.php?action=service_action`, { service, action }),
+    sync: () => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=sync`),
+};
+
+/**
+ * PM2 Workers CRUD API
+ */
+export const pm2WorkersAPI = {
+    getAll: () => api.get(`${ADMIN_API_PREFIX}/pm2-workers.php?action=list`),
+    getOne: (name) => api.get(`${ADMIN_API_PREFIX}/pm2-workers.php?action=get&name=${encodeURIComponent(name)}`),
+    create: (data) => api.post(`${ADMIN_API_PREFIX}/pm2-workers.php?action=create`, data),
+    update: (name, data) => api.post(`${ADMIN_API_PREFIX}/pm2-workers.php?action=update&name=${encodeURIComponent(name)}`, data),
+    delete: (name) => api.get(`${ADMIN_API_PREFIX}/pm2-workers.php?action=delete&name=${encodeURIComponent(name)}`),
+    toggle: (name) => api.get(`${ADMIN_API_PREFIX}/pm2-workers.php?action=toggle&name=${encodeURIComponent(name)}`),
 };

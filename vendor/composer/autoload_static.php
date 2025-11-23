@@ -172,7 +172,7 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         array (
             'Fruitcake\\Cors\\' => 15,
             'Faker\\' => 6,
-            'FOS\\\\Security\\\\' => 15,
+            'FOS\\Security\\' => 13,
         ),
         'E' => 
         array (
@@ -199,7 +199,6 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         ),
         'A' => 
         array (
-            'App\\\\' => 5,
             'App\\' => 4,
         ),
     );
@@ -584,7 +583,7 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         array (
             0 => __DIR__ . '/..' . '/fakerphp/faker/src/Faker',
         ),
-        'FOS\\\\Security\\\\' => 
+        'FOS\\Security\\' => 
         array (
             0 => __DIR__ . '/../..' . '/lib',
         ),
@@ -632,19 +631,24 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         array (
             0 => __DIR__ . '/..' . '/brick/math/src',
         ),
-        'App\\\\' => 
-        array (
-            0 => __DIR__ . '/../..' . '/app',
-        ),
         'App\\' => 
         array (
-            0 => __DIR__ . '/..' . '/laravel/pint/app',
+            0 => __DIR__ . '/../..' . '/app',
+            1 => __DIR__ . '/..' . '/laravel/pint/app',
         ),
     );
 
     public static $classMap = array (
         'Activity' => __DIR__ . '/../..' . '/models/Activity.php',
         'Admin' => __DIR__ . '/../..' . '/models/Admin.php',
+        'App\\Console\\Commands\\ServeCommand' => __DIR__ . '/../..' . '/app/Console/Commands/ServeCommand.php',
+        'App\\Services\\FFprobeService' => __DIR__ . '/../..' . '/app/Services/FFprobeService.php',
+        'App\\Services\\JobQueueService' => __DIR__ . '/../..' . '/app/Services/JobQueueService.php',
+        'App\\Services\\PM2WorkerService' => __DIR__ . '/../..' . '/app/Services/PM2WorkerService.php',
+        'App\\Services\\StreamManagerService' => __DIR__ . '/../..' . '/app/Services/StreamManagerService.php',
+        'App\\Services\\StreamMonitorService' => __DIR__ . '/../..' . '/app/Services/StreamMonitorService.php',
+        'App\\Services\\WebsiteHealthMonitorService' => __DIR__ . '/../..' . '/app/Services/WebsiteHealthMonitorService.php',
+        'App\\SystemCommands' => __DIR__ . '/../..' . '/app/SystemCommands.php',
         'Attribute' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/Attribute.php',
         'BannedIP' => __DIR__ . '/../..' . '/models/BannedIP.php',
         'BlockedIp' => __DIR__ . '/../..' . '/models/BlockedIp.php',
@@ -977,6 +981,10 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         'Egulias\\EmailValidator\\Warning\\QuotedString' => __DIR__ . '/..' . '/egulias/email-validator/src/Warning/QuotedString.php',
         'Egulias\\EmailValidator\\Warning\\TLD' => __DIR__ . '/..' . '/egulias/email-validator/src/Warning/TLD.php',
         'Egulias\\EmailValidator\\Warning\\Warning' => __DIR__ . '/..' . '/egulias/email-validator/src/Warning/Warning.php',
+        'FOS\\Security\\FirewallManager' => __DIR__ . '/../..' . '/lib/FirewallManager.php',
+        'FOS\\Security\\Security' => __DIR__ . '/../..' . '/lib/Security.php',
+        'FOS\\Security\\SecurityLogger' => __DIR__ . '/../..' . '/lib/SecurityLogger.php',
+        'FOS\\Security\\Validator' => __DIR__ . '/../..' . '/lib/Validator.php',
         'FailedLoginAttempt' => __DIR__ . '/../..' . '/models/FailedLoginAttempt.php',
         'Faker\\Calculator\\Ean' => __DIR__ . '/..' . '/fakerphp/faker/src/Faker/Calculator/Ean.php',
         'Faker\\Calculator\\Iban' => __DIR__ . '/..' . '/fakerphp/faker/src/Faker/Calculator/Iban.php',
@@ -4396,6 +4404,7 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         'PHPUnit\\Util\\Xml' => __DIR__ . '/..' . '/phpunit/phpunit/src/Util/Xml/Xml.php',
         'PHPUnit\\Util\\Xml\\Loader' => __DIR__ . '/..' . '/phpunit/phpunit/src/Util/Xml/Loader.php',
         'PHPUnit\\Util\\Xml\\XmlException' => __DIR__ . '/..' . '/phpunit/phpunit/src/Util/Exception/XmlException.php',
+        'PM2Worker' => __DIR__ . '/../..' . '/models/PM2Worker.php',
         'PharIo\\Manifest\\Application' => __DIR__ . '/..' . '/phar-io/manifest/src/values/Application.php',
         'PharIo\\Manifest\\ApplicationName' => __DIR__ . '/..' . '/phar-io/manifest/src/values/ApplicationName.php',
         'PharIo\\Manifest\\Author' => __DIR__ . '/..' . '/phar-io/manifest/src/values/Author.php',
@@ -5920,6 +5929,7 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         'Spatie\\LaravelIgnition\\Views\\BladeSourceMapCompiler' => __DIR__ . '/..' . '/spatie/laravel-ignition/src/Views/BladeSourceMapCompiler.php',
         'Spatie\\LaravelIgnition\\Views\\ViewExceptionMapper' => __DIR__ . '/..' . '/spatie/laravel-ignition/src/Views/ViewExceptionMapper.php',
         'Stream' => __DIR__ . '/../..' . '/models/Stream.php',
+        'StreamHealthLog' => __DIR__ . '/../..' . '/models/StreamHealthLog.php',
         'Stringable' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/Stringable.php',
         'Subscriber' => __DIR__ . '/../..' . '/models/Subscriber.php',
         'Symfony\\Component\\Clock\\Clock' => __DIR__ . '/..' . '/symfony/clock/Clock.php',
@@ -6949,6 +6959,7 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         'UnhandledMatchError' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/UnhandledMatchError.php',
         'User' => __DIR__ . '/../..' . '/models/User.php',
         'ValueError' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/ValueError.php',
+        'WebsiteHealthLog' => __DIR__ . '/../..' . '/models/WebsiteHealthLog.php',
         'Whoops\\Exception\\ErrorException' => __DIR__ . '/..' . '/filp/whoops/src/Whoops/Exception/ErrorException.php',
         'Whoops\\Exception\\Formatter' => __DIR__ . '/..' . '/filp/whoops/src/Whoops/Exception/Formatter.php',
         'Whoops\\Exception\\Frame' => __DIR__ . '/..' . '/filp/whoops/src/Whoops/Exception/Frame.php',

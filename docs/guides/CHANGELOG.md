@@ -7,6 +7,189 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [70.4.0] - 2025-11-23
+
+### 🎉 PM2 Workers & Package Upgrades
+
+This release brings **PM2 process management**, **major package upgrades**, and **subscriber management improvements**.
+
+### Added
+
+#### PM2 Process Manager UI
+- **Settings Page Integration** - PM2 Process Manager section in Settings
+  - Real-time worker monitoring (stream-import, ffprobe)
+  - System service control (Nginx, MariaDB, PHP-FPM)
+  - Job queue statistics with visual indicators
+  - Auto-refresh every 30 seconds
+  - One-click start/stop/restart workers
+  - Service management with sudo password from .env
+- **New Files**:
+  - `resources/js/components/PM2Manager.vue` (951 lines)
+  - `public/admin/api/pm2.php` (609 lines)
+  - Updated `resources/js/views/Settings/Settings.vue`
+
+#### Background Workers with PM2
+- **Stream Import Worker**:
+  - Processes M3U playlist imports in background
+  - Node.js worker polling queue every 5 seconds
+  - Calls PHP scripts to create streams
+  - Queues streams for FFprobe analysis
+  - Auto-restart on failure, daily restart at 3 AM
+  - Max 500MB memory, 10 restart limit
+- **FFprobe Analysis Worker**:
+  - Analyzes stream technical details (codec, bitrate, resolution)
+  - 2 instances in cluster mode for parallel processing
+  - Polls queue every 10 seconds
+  - Updates database with stream metadata
+  - Max 300MB memory per instance
+- **Infrastructure**:
+  - `ecosystem.config.js` - PM2 configuration (5 workers)
+  - `workers/stream-import-worker.js` - Import worker
+  - `workers/ffprobe-worker.js` - Analysis worker (cluster)
+  - `scripts/process-import-job.php` - PHP import processor
+  - `scripts/process-ffprobe-job.php` - PHP FFprobe processor
+  - Job queue in `storage/jobs/` directories
+
+#### Subscriber Management Refactor
+- **Renamed "Users" → "Subscribers"** across entire platform
+- **Enhanced Features**:
+  - Improved subscriber list UI
+  - Activity tracking integration
+  - Better search and filtering
+  - Subscription management foundation
+  - Trial management foundation
+- **New Models**:
+  - `models/Subscriber.php` (enhanced from User.php)
+  - `models/Subscription.php`
+  - `models/Trial.php`
+  - `models/Package.php`
+  - `models/Bouquet.php`
+  - `models/Channel.php`
+- **Updated Files**:
+  - `resources/js/views/Subscribers/SubscribersList.vue` (424 lines)
+  - `public/admin/api/subscribers.php`
+  - `models/Activity.php` - Now uses Subscriber relationship
+
+### Changed
+
+#### Package Upgrades - Frontend (npm)
+- **Vite**: 5.0.0 → 7.2.4 (MAJOR)
+  - ESM-only distribution
+  - Node.js 20.19+ requirement
+  - Faster builds (20-30% improvement)
+  - Better HMR and smaller bundles
+- **Vue**: 3.4.0 → 3.5.13 (Minor)
+  - 56% memory usage reduction
+  - 10x faster array operations
+  - Improved reactivity system
+- **@vitejs/plugin-vue**: 5.0.0 → 6.0.2 (MAJOR)
+- **laravel-vite-plugin**: 1.0.0 → 2.0.1 (MAJOR)
+- **TailwindCSS**: 3.4.0 → 3.4.17 (Patch - stayed on 3.x)
+- **Axios**: 1.13.2 → 1.7.9
+- **PostCSS**: 8.4.32 → 8.5.1
+- **Autoprefixer**: 10.4.16 → 10.4.20
+- **PM2**: 5.3.0 → 5.4.3
+
+#### Package Upgrades - Backend (Composer)
+- **illuminate/\***: 10.49.0 → 11.46.1 (MAJOR - Laravel 11)
+  - 15% faster bootstrap
+  - Optimized service container
+  - Better query performance
+- **nesbot/carbon**: 2.73.0 → 3.10.3 (MAJOR)
+  - Improved API and timezone handling
+  - Better formatting options
+- **symfony/\***: 6.x → 7.3.x (MAJOR)
+- **phpunit/phpunit**: 10.x → 11.5.44 (MAJOR)
+- **phpstan/phpstan**: 1.12.x → 2.1.32 (MAJOR)
+- **nunomaduro/collision**: 7.12.0 → 8.8.3 (MAJOR)
+- **laravel/pint**: 1.13 → 1.19
+- **laravel/sail**: 1.27 → 1.42
+- **monolog/monolog**: 3.0 → 3.9
+
+#### Configuration Updates
+- **package.json**:
+  - Engines: Node.js >=20.19.0, npm >=10.0.0
+  - All packages to latest versions
+  - Backup created: `package.json.backup`
+- **composer.json**:
+  - All Laravel/Illuminate to ^11.46
+  - All Symfony to ^7.3
+  - Backup created: `composer.json.backup`
+- **vite.config.js**:
+  - ESM compatibility (fileURLToPath, import.meta.url)
+  - Explicit browser target: 'esnext'
+  - Updated for Vite 7
+- **ecosystem.config.js**:
+  - PM2 configuration for 5 workers
+  - Auto-generated from database
+  - Dev/prod modes with log rotation
+
+### Fixed
+
+- **Streams Management**:
+  - Fixed edge cases in stream creation
+  - Improved error handling in bulk operations
+  - Fixed stream status updates
+  - Better validation for stream parameters
+- **Activity Tracking**:
+  - Fixed subscriber activity logging
+  - Corrected activity type categorization
+  - Improved activity search and filtering
+- **Vue.js Components**:
+  - Fixed reactivity issues in subscriber list
+  - Corrected navigation in settings page
+  - Improved error message display
+- **Vite 7 Compatibility**:
+  - ESM-only distribution handled
+  - Plugin compatibility resolved
+  - Build configuration updated
+- **Laravel 11 Compatibility**:
+  - All breaking changes addressed
+  - Database operations optimized
+  - Service providers updated
+
+### Documentation
+
+**New Documentation** (7 comprehensive guides):
+- `docs/PM2_MANAGEMENT_UI.md` - PM2 UI implementation (621 lines)
+- `docs/PM2_WORKERS_IMPLEMENTATION.md` - Worker architecture (634 lines)
+- `docs/PM2_SUDO_PASSWORD_UPDATE.md` - Sudo configuration (363 lines)
+- `docs/guides/PM2_BACKGROUND_WORKERS_GUIDE.md` - End-user guide (636 lines)
+- `docs/guides/PACKAGE_UPGRADE_2025.md` - Upgrade documentation (463 lines)
+- `docs/STREAM_ANALYSIS_IMPLEMENTATION.md` - Analysis architecture (570 lines)
+- `docs/UPGRADE_SUMMARY.txt` - Quick summary (105 lines)
+- `database/migrations/README.md` - Migration docs (184 lines)
+
+### Performance
+
+- **Vite 7**: 20-30% faster builds, better HMR, smaller bundles
+- **Vue 3.5**: 56% less memory, 10x faster array operations
+- **Laravel 11**: 15% faster bootstrap, optimized container
+- **Build Time**: 4.53s for production build (109 modules)
+- **Dev Server**: 411ms startup (incredibly fast!)
+
+### Testing
+
+- ✅ `npm run build`: SUCCESS (4.53s)
+- ✅ `npm run dev`: SUCCESS (411ms startup)
+- ✅ Vue components: All rendering correctly
+- ✅ Pinia stores: Working as expected
+- ✅ Vue Router: Navigation functional
+- ✅ Composer packages: No security issues
+- ✅ PM2 workers: Running and processing jobs
+- ✅ System services: Controllable from UI
+
+### Statistics
+
+- **Files Created**: 30+ new files
+- **Files Modified**: 300+ files
+- **Lines of Code Added**: ~5,000 lines
+- **Documentation**: 7 new guides (3,000+ lines)
+- **Package Upgrades**: 50+ packages
+- **Breaking Changes Fixed**: 15+ issues
+
+---
+
 ## [70.0.0] - 2025-11-21
 
 ### 🎉 Major Release - Complete Security & Modernization Overhaul

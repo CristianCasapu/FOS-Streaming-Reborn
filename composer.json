@@ -85,8 +85,8 @@
   },
   "autoload": {
     "psr-4": {
-      "App\\\\": "app/",
-      "FOS\\\\Security\\\\": "lib/"
+      "App\\": "app/",
+      "FOS\\Security\\": "lib/"
     },
     "classmap": [
       "models"

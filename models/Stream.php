@@ -233,4 +233,200 @@ class Stream extends FosStreaming {
             'health_score' => $this->health_score
         ];
     }
+
+    // ========================================
+    // PM2 Stream Management Methods
+    // ========================================
+
+    /**
+     * Get stream state label with color
+     *
+     * @return array
+     */
+    public function getStateLabelAttribute()
+    {
+        $labels = [
+            'stopped' => ['label' => 'secondary', 'text' => 'Stopped', 'color' => 'gray'],
+            'starting' => ['label' => 'info', 'text' => 'Starting...', 'color' => 'blue'],
+            'running' => ['label' => 'success', 'text' => 'Running', 'color' => 'green'],
+            'stopping' => ['label' => 'warning', 'text' => 'Stopping...', 'color' => 'yellow'],
+            'error' => ['label' => 'danger', 'text' => 'Error', 'color' => 'red'],
+            'crashed' => ['label' => 'danger', 'text' => 'Crashed', 'color' => 'red']
+        ];
+
+        return $labels[$this->state] ?? ['label' => 'secondary', 'text' => 'Unknown', 'color' => 'gray'];
+    }
+
+    /**
+     * Queue a command to be executed by stream-manager worker
+     *
+     * @param string $command Command to queue (start, stop, restart)
+     * @param int|null $queuedBy Admin/user ID who queued the command
+     * @return bool
+     */
+    public function queueCommand(string $command, ?int $queuedBy = null): bool
+    {
+        $validCommands = ['start', 'stop', 'restart'];
+
+        if (!in_array($command, $validCommands)) {
+            return false;
+        }
+
+        $this->scheduled_command = $command;
+        $this->command_queued_at = date('Y-m-d H:i:s');
+        $this->command_queued_by = $queuedBy;
+
+        return $this->save();
+    }
+
+    /**
+     * Clear scheduled command
+     *
+     * @param string $result Result of command execution
+     * @return bool
+     */
+    public function clearScheduledCommand(string $result = 'success'): bool
+    {
+        $this->scheduled_command = 'none';
+        $this->last_command_at = date('Y-m-d H:i:s');
+        $this->last_command_result = $result;
+        $this->command_queued_at = null;
+        $this->command_queued_by = null;
+
+        return $this->save();
+    }
+
+    /**
+     * Update stream state
+     *
+     * @param string $newState New state
+     * @return bool
+     */
+    public function updateState(string $newState): bool
+    {
+        $validStates = ['stopped', 'starting', 'running', 'stopping', 'error', 'crashed'];
+
+        if (!in_array($newState, $validStates)) {
+            return false;
+        }
+
+        $this->state = $newState;
+
+        // Update lifecycle timestamps based on state
+        if ($newState === 'running' && !$this->stream_started_at) {
+            $this->stream_started_at = date('Y-m-d H:i:s');
+        }
+
+        if ($newState === 'stopped' || $newState === 'error' || $newState === 'crashed') {
+            $this->stream_stopped_at = date('Y-m-d H:i:s');
+
+            // Calculate uptime if we have start time
+            if ($this->stream_started_at) {
+                $uptime = strtotime($this->stream_stopped_at) - strtotime($this->stream_started_at);
+                $this->current_uptime = $uptime;
+                $this->total_uptime += $uptime;
+            }
+        }
+
+        return $this->save();
+    }
+
+    /**
+     * Mark stream as crashed and handle auto-restart
+     *
+     * @return bool
+     */
+    public function markAsCrashed(): bool
+    {
+        $this->state = 'crashed';
+        $this->crash_count++;
+        $this->last_crash_at = date('Y-m-d H:i:s');
+        $this->pid = null;
+
+        // Check if we should auto-restart
+        if ($this->auto_restart_enabled && $this->restart_attempts < $this->max_restart_attempts) {
+            $this->scheduled_command = 'start';
+            $this->command_queued_at = date('Y-m-d H:i:s');
+            $this->restart_attempts++;
+        } else {
+            // Max restarts reached, mark as error
+            $this->state = 'error';
+            $this->restart_attempts = 0; // Reset for manual intervention
+        }
+
+        return $this->save();
+    }
+
+    /**
+     * Reset restart attempts counter
+     * Called when stream successfully runs for min_uptime
+     *
+     * @return bool
+     */
+    public function resetRestartAttempts(): bool
+    {
+        $this->restart_attempts = 0;
+        return $this->save();
+    }
+
+    /**
+     * Check if PID is still running
+     *
+     * @return bool
+     */
+    public function isPidAlive(): bool
+    {
+        if (!$this->pid) {
+            return false;
+        }
+
+        // Check if process exists
+        exec("ps -p {$this->pid} > /dev/null 2>&1", $output, $exitCode);
+        return $exitCode === 0;
+    }
+
+    /**
+     * Get current uptime in seconds
+     *
+     * @return int
+     */
+    public function getCurrentUptimeSeconds(): int
+    {
+        if ($this->state !== 'running' || !$this->stream_started_at) {
+            return 0;
+        }
+
+        return time() - strtotime($this->stream_started_at);
+    }
+
+    /**
+     * Update health check timestamp
+     *
+     * @param bool $healthy Is stream healthy?
+     * @return bool
+     */
+    public function recordHealthCheck(bool $healthy): bool
+    {
+        $this->last_health_check = date('Y-m-d H:i:s');
+
+        if (!$healthy) {
+            $this->health_check_failures++;
+        } else {
+            $this->health_check_failures = 0;
+        }
+
+        return $this->save();
+    }
+
+    /**
+     * Check if stream should be auto-restarted
+     *
+     * @return bool
+     */
+    public function shouldAutoRestart(): bool
+    {
+        return $this->auto_restart_enabled
+            && $this->restart_attempts < $this->max_restart_attempts
+            && in_array($this->state, ['crashed', 'error']);
+    }
 }
