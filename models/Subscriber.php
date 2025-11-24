@@ -3,11 +3,12 @@
  * Subscriber Model
  *
  * Represents a subscriber with subscriptions, trials, and activity tracking
+ * Subscribers are customers who can have multiple subscriptions
  */
 
 class Subscriber extends FosStreaming {
 
-    protected $table = 'users';
+    protected $table = 'subscribers';
 
     protected $fillable = [
         'username',
@@ -18,18 +19,12 @@ class Subscriber extends FosStreaming {
         'city',
         'address',
         'postal_code',
-        'isp',
-        'package',
         'notes',
-        'enabled',
-        'is_reseller',
-        'max_connections'
+        'enabled'
     ];
 
     protected $casts = [
         'enabled' => 'boolean',
-        'is_reseller' => 'boolean',
-        'max_connections' => 'integer',
     ];
 
     protected $hidden = [
@@ -66,6 +61,19 @@ class Subscriber extends FosStreaming {
     public function activity()
     {
         return $this->hasMany(Activity::class, 'user_id');
+    }
+
+    /**
+     * Get reseller that manages this subscriber
+     */
+    public function reseller()
+    {
+        return $this->belongsToMany(
+            Reseller::class,
+            'reseller_subscribers',
+            'subscriber_id',
+            'reseller_id'
+        )->withTimestamps();
     }
 
     /**
@@ -227,27 +235,11 @@ class Subscriber extends FosStreaming {
     }
 
     /**
-     * Check if subscriber is a reseller
-     */
-    public function isReseller()
-    {
-        return $this->is_reseller == 1;
-    }
-
-    /**
      * Scope: Only enabled subscribers
      */
     public function scopeEnabled($query)
     {
         return $query->where('enabled', 1);
-    }
-
-    /**
-     * Scope: Only resellers
-     */
-    public function scopeResellers($query)
-    {
-        return $query->where('is_reseller', 1);
     }
 
     /**

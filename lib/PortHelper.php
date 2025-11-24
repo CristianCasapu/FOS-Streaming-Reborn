@@ -1,10 +1,12 @@
 <?php
+
+namespace FOS\Security;
+
 /**
  * FOS-Streaming Port Helper
  *
  * Helper functions for accessing port configuration in PHP application
  */
-
 class PortHelper
 {
     private static $config = null;

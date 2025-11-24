@@ -2,7 +2,8 @@
 /**
  * Bouquet Model
  *
- * Represents a bouquet (group) of TV channels
+ * Represents a bouquet (group) of streams
+ * Directly references streams via stream_ids JSON column
  */
 
 class Bouquet extends FosStreaming {
@@ -12,6 +13,7 @@ class Bouquet extends FosStreaming {
     protected $fillable = [
         'name',
         'description',
+        'stream_ids',
         'is_active',
         'sort_order'
     ];
@@ -19,6 +21,7 @@ class Bouquet extends FosStreaming {
     protected $casts = [
         'is_active' => 'boolean',
         'sort_order' => 'integer',
+        'stream_ids' => 'array', // Automatically cast JSON to array
     ];
 
     /**
@@ -31,22 +34,26 @@ class Bouquet extends FosStreaming {
     }
 
     /**
-     * Get all channels in this bouquet
-     * Many-to-Many relationship through bouquet_channel pivot table
+     * Get all streams in this bouquet
+     * Returns a collection of Stream models based on stream_ids JSON array
      */
-    public function channels()
+    public function streams()
     {
-        return $this->belongsToMany(Channel::class, 'bouquet_channel')
-                    ->withPivot('sort_order')
-                    ->orderBy('bouquet_channel.sort_order');
+        if (empty($this->stream_ids)) {
+            return collect();
+        }
+
+        return Stream::whereIn('id', $this->stream_ids)
+            ->orderByRaw('FIELD(id, ' . implode(',', $this->stream_ids) . ')')
+            ->get();
     }
 
     /**
-     * Get channel count
+     * Get stream count
      */
-    public function getChannelCountAttribute()
+    public function getStreamCountAttribute()
     {
-        return $this->channels()->count();
+        return is_array($this->stream_ids) ? count($this->stream_ids) : 0;
     }
 
     /**
@@ -58,71 +65,118 @@ class Bouquet extends FosStreaming {
     }
 
     /**
-     * Check if bouquet has a specific channel
+     * Check if bouquet has a specific stream
      */
-    public function hasChannel($channelId)
+    public function hasStream($streamId)
     {
-        return $this->channels()->where('channels.id', $channelId)->exists();
+        return is_array($this->stream_ids) && in_array($streamId, $this->stream_ids);
     }
 
     /**
-     * Assign channel to bouquet
+     * Add stream to bouquet
      */
-    public function assignChannel($channelId, $sortOrder = 0)
+    public function addStream($streamId)
     {
-        if (!$this->hasChannel($channelId)) {
-            $this->channels()->attach($channelId, ['sort_order' => $sortOrder]);
-            return true;
+        if (!$this->hasStream($streamId)) {
+            $streamIds = $this->stream_ids ?? [];
+            $streamIds[] = $streamId;
+            $this->stream_ids = $streamIds;
+            return $this->save();
         }
         return false;
     }
 
     /**
-     * Remove channel from bouquet
+     * Remove stream from bouquet
      */
-    public function removeChannel($channelId)
+    public function removeStream($streamId)
     {
-        $this->channels()->detach($channelId);
-    }
-
-    /**
-     * Update channel sort order in bouquet
-     */
-    public function updateChannelOrder($channelId, $sortOrder)
-    {
-        $this->channels()->updateExistingPivot($channelId, ['sort_order' => $sortOrder]);
-    }
-
-    /**
-     * Sync channels (replace all with new set)
-     * $channelsWithOrder = [channelId => ['sort_order' => order], ...]
-     */
-    public function syncChannels($channelsWithOrder)
-    {
-        $this->channels()->sync($channelsWithOrder);
-    }
-
-    /**
-     * Reorder all channels in bouquet
-     * $channelIds = [channelId1, channelId2, ...] in desired order
-     */
-    public function reorderChannels($channelIds)
-    {
-        $order = 0;
-        foreach ($channelIds as $channelId) {
-            $this->channels()->updateExistingPivot($channelId, ['sort_order' => $order]);
-            $order++;
+        if ($this->hasStream($streamId)) {
+            $streamIds = $this->stream_ids ?? [];
+            $streamIds = array_values(array_filter($streamIds, function($id) use ($streamId) {
+                return $id != $streamId;
+            }));
+            $this->stream_ids = $streamIds;
+            return $this->save();
         }
+        return false;
     }
 
     /**
-     * Get all streams from channels in this bouquet
+     * Set streams (replace all with new set)
+     * $streamIds = [streamId1, streamId2, ...]
      */
-    public function getStreamsAttribute()
+    public function setStreams(array $streamIds)
     {
-        return $this->channels->map(function($channel) {
-            return $channel->stream;
-        })->filter();
+        $this->stream_ids = array_values(array_unique($streamIds));
+        return $this->save();
+    }
+
+    /**
+     * Reorder all streams in bouquet
+     * $streamIds = [streamId1, streamId2, ...] in desired order
+     */
+    public function reorderStreams(array $streamIds)
+    {
+        // Only keep stream IDs that are already in the bouquet
+        $existingIds = $this->stream_ids ?? [];
+        $reordered = array_values(array_intersect($streamIds, $existingIds));
+
+        $this->stream_ids = $reordered;
+        return $this->save();
+    }
+
+    /**
+     * Add multiple streams at once
+     * $streamIds = [streamId1, streamId2, ...]
+     */
+    public function addStreams(array $streamIds)
+    {
+        $currentIds = $this->stream_ids ?? [];
+        $newIds = array_unique(array_merge($currentIds, $streamIds));
+        $this->stream_ids = array_values($newIds);
+        return $this->save();
+    }
+
+    /**
+     * Remove multiple streams at once
+     * $streamIds = [streamId1, streamId2, ...]
+     */
+    public function removeStreams(array $streamIds)
+    {
+        $currentIds = $this->stream_ids ?? [];
+        $remaining = array_values(array_diff($currentIds, $streamIds));
+        $this->stream_ids = $remaining;
+        return $this->save();
+    }
+
+    /**
+     * Get active streams only
+     */
+    public function getActiveStreamsAttribute()
+    {
+        if (empty($this->stream_ids)) {
+            return collect();
+        }
+
+        return Stream::whereIn('id', $this->stream_ids)
+            ->where('running', 1)
+            ->orderByRaw('FIELD(id, ' . implode(',', $this->stream_ids) . ')')
+            ->get();
+    }
+
+    /**
+     * Get running stream count
+     */
+    public function getRunningStreamCountAttribute()
+    {
+        if (empty($this->stream_ids)) {
+            return 0;
+        }
+
+        return Stream::whereIn('id', $this->stream_ids)
+            ->where('running', 1)
+            ->count();
     }
 
     /**
@@ -134,11 +188,13 @@ class Bouquet extends FosStreaming {
     }
 
     /**
-     * Scope: Bouquets with at least one channel
+     * Scope: Bouquets with at least one stream
      */
-    public function scopeWithChannels($query)
+    public function scopeWithStreams($query)
     {
-        return $query->has('channels');
+        return $query->whereNotNull('stream_ids')
+            ->where('stream_ids', '!=', '[]')
+            ->where('stream_ids', '!=', 'null');
     }
 
     /**
@@ -147,5 +203,58 @@ class Bouquet extends FosStreaming {
     public function scopeOrdered($query)
     {
         return $query->orderBy('sort_order');
+    }
+
+    /**
+     * Get detailed information about streams in this bouquet
+     */
+    public function getStreamsWithDetailsAttribute()
+    {
+        if (empty($this->stream_ids)) {
+            return collect();
+        }
+
+        $streams = $this->streams();
+
+        return $streams->map(function($stream, $index) {
+            return [
+                'id' => $stream->id,
+                'name' => $stream->stream_display_name ?? $stream->name ?? "Stream {$stream->id}",
+                'running' => $stream->running == 1,
+                'category_id' => $stream->cat_id,
+                'category_name' => $stream->category ? $stream->category->name : null,
+                'sort_order' => $index,
+                'streamurl' => $stream->streamurl,
+            ];
+        });
+    }
+
+    /**
+     * Validate stream IDs before saving
+     */
+    public function validateStreamIds()
+    {
+        if (empty($this->stream_ids)) {
+            return true;
+        }
+
+        // Check if all stream IDs exist
+        $existingCount = Stream::whereIn('id', $this->stream_ids)->count();
+        return $existingCount === count($this->stream_ids);
+    }
+
+    /**
+     * Clean up invalid stream IDs
+     * Removes stream IDs that don't exist in the streams table
+     */
+    public function cleanupInvalidStreamIds()
+    {
+        if (empty($this->stream_ids)) {
+            return true;
+        }
+
+        $validIds = Stream::whereIn('id', $this->stream_ids)->pluck('id')->toArray();
+        $this->stream_ids = array_values($validIds);
+        return $this->save();
     }
 }

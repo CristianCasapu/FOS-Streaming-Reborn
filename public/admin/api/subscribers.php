@@ -89,13 +89,8 @@ try {
             $subscriber->city = $input['city'] ?? '';
             $subscriber->address = $input['address'] ?? '';
             $subscriber->postal_code = $input['postal_code'] ?? '';
-            $subscriber->isp = $input['isp'] ?? '';
-            $subscriber->package = $input['package'] ?? '';
-            $subscriber->max_connections = $input['max_connections'] ?? 5;
-            $subscriber->expiration_date = $input['expiration_date'] ?? null;
             $subscriber->notes = $input['notes'] ?? '';
             $subscriber->enabled = $input['enabled'] ?? 1;
-            $subscriber->is_reseller = $input['is_reseller'] ?? 0;
             $subscriber->save();
 
             echo json_encode([
@@ -120,13 +115,8 @@ try {
             if (isset($input['city'])) $subscriber->city = $input['city'];
             if (isset($input['address'])) $subscriber->address = $input['address'];
             if (isset($input['postal_code'])) $subscriber->postal_code = $input['postal_code'];
-            if (isset($input['isp'])) $subscriber->isp = $input['isp'];
-            if (isset($input['package'])) $subscriber->package = $input['package'];
-            if (isset($input['max_connections'])) $subscriber->max_connections = $input['max_connections'];
-            if (isset($input['expiration_date'])) $subscriber->expiration_date = $input['expiration_date'];
             if (isset($input['notes'])) $subscriber->notes = $input['notes'];
             if (isset($input['enabled'])) $subscriber->enabled = $input['enabled'];
-            if (isset($input['is_reseller'])) $subscriber->is_reseller = $input['is_reseller'];
             if (isset($input['password']) && !empty($input['password'])) {
                 $subscriber->password = password_hash($input['password'], PASSWORD_DEFAULT);
             }

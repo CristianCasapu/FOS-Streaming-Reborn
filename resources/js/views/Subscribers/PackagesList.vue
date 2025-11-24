@@ -1,5 +1,6 @@
 <template>
-    <div class="py-6">
+    <AppLayout>
+        <div class="py-6">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <!-- Header -->
             <div class="md:flex md:items-center md:justify-between mb-6">
@@ -31,7 +32,7 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Status</label>
                         <select v-model="filters.active" @change="fetchPackages" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                            <option value="">All Packages</option>
+                            <option :value="null">All Packages</option>
                             <option value="1">Active Only</option>
                             <option value="0">Inactive Only</option>
                         </select>
@@ -67,24 +68,22 @@
                     <thead class="bg-gray-50">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Connections</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Devices / Quality</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price / Duration</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bouquets / Channels</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subscriptions / Trials</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bouquets / Streams</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
                         <tr v-for="pkg in packages" :key="pkg.id" class="hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap">
+                            <td class="px-6 py-4">
                                 <div class="text-sm font-medium text-gray-900">{{ pkg.name }}</div>
-                                <div class="text-sm text-gray-500">{{ pkg.description || 'No description' }}</div>
+                                <div class="text-sm text-gray-500 truncate max-w-xs">{{ pkg.description || 'No description' }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    {{ pkg.max_connections }} {{ pkg.max_connections === 1 ? 'connection' : 'connections' }}
-                                </span>
+                                <div class="text-sm text-gray-900">{{ pkg.max_concurrent_devices || 'Unlimited' }} devices</div>
+                                <div class="text-sm text-gray-500">{{ pkg.video_quality || 'Any' }} quality</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm text-gray-900">${{ pkg.price || 'N/A' }}</div>
@@ -92,11 +91,7 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm text-gray-900">{{ pkg.bouquet_count }} bouquets</div>
-                                <div class="text-sm text-gray-500">{{ pkg.channel_count }} channels</div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm text-gray-900">{{ pkg.active_subscriptions_count }} active subs</div>
-                                <div class="text-sm text-gray-500">{{ pkg.active_trials_count }} active trials</div>
+                                <div class="text-sm text-gray-500">{{ pkg.stream_count || 0 }} streams</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span v-if="pkg.is_active" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -107,12 +102,6 @@
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button @click="viewPackage(pkg.id)" class="text-indigo-600 hover:text-indigo-900 mr-3" title="View Details">
-                                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                </button>
                                 <button @click="editPackage(pkg)" class="text-yellow-600 hover:text-yellow-900 mr-3" title="Edit">
                                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -138,14 +127,6 @@
 
                 <!-- Pagination -->
                 <div v-if="pagination.total > 0" class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-                    <div class="flex-1 flex justify-between sm:hidden">
-                        <button @click="changePage(pagination.current_page - 1)" :disabled="pagination.current_page === 1" class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                            Previous
-                        </button>
-                        <button @click="changePage(pagination.current_page + 1)" :disabled="pagination.current_page === pagination.last_page" class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                            Next
-                        </button>
-                    </div>
                     <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                         <div>
                             <p class="text-sm text-gray-700">
@@ -156,10 +137,10 @@
                         </div>
                         <div>
                             <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                                <button @click="changePage(pagination.current_page - 1)" :disabled="pagination.current_page === 1" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <button @click="changePage(pagination.current_page - 1)" :disabled="pagination.current_page === 1" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                                     Previous
                                 </button>
-                                <button @click="changePage(pagination.current_page + 1)" :disabled="pagination.current_page === pagination.last_page" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <button @click="changePage(pagination.current_page + 1)" :disabled="pagination.current_page === pagination.last_page" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                                     Next
                                 </button>
                             </nav>
@@ -173,44 +154,152 @@
         <div v-if="showModal" class="fixed z-10 inset-0 overflow-y-auto">
             <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                 <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeModal"></div>
-                <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-visible shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
                     <form @submit.prevent="savePackage">
-                        <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4 max-h-[calc(100vh-10rem)] overflow-y-auto">
                             <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
                                 {{ editingPackage ? 'Edit Package' : 'Create New Package' }}
                             </h3>
-                            <div class="space-y-4">
+
+                            <!-- Basic Info -->
+                            <div class="space-y-4 mb-6">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700">Name</label>
-                                    <input v-model="formData.name" type="text" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Name <span class="text-red-500">*</span></label>
+                                    <input v-model="formData.name" type="text" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700">Description</label>
-                                    <textarea v-model="formData.description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></textarea>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                    <textarea v-model="formData.description" rows="2" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></textarea>
                                 </div>
+
                                 <div class="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700">Max Connections</label>
-                                        <input v-model.number="formData.max_connections" type="number" min="1" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Price ($) <span class="text-red-500">*</span></label>
+                                        <input v-model.number="formData.price" type="number" step="0.01" min="0" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700">Price ($)</label>
-                                        <input v-model.number="formData.price" type="number" step="0.01" min="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Duration (days) <span class="text-red-500">*</span></label>
+                                        <input v-model.number="formData.duration_days" type="number" min="1" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                     </div>
                                 </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700">Duration (days)</label>
-                                    <input v-model.number="formData.duration_days" type="number" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Max Concurrent Devices</label>
+                                        <input v-model.number="formData.max_concurrent_devices" type="number" min="0" placeholder="0 = Unlimited" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <p class="mt-1 text-xs text-gray-500">0 or empty = unlimited</p>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Bandwidth Limit (Mbps)</label>
+                                        <input v-model.number="formData.bandwidth_limit_mbps" type="number" min="0" placeholder="0 = Unlimited" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <p class="mt-1 text-xs text-gray-500">0 or empty = unlimited</p>
+                                    </div>
                                 </div>
+
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Video Quality</label>
+                                    <select v-model="formData.video_quality" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <option value="">Any Quality</option>
+                                        <option value="4K">4K UHD</option>
+                                        <option value="FHD">Full HD (1080p)</option>
+                                        <option value="HD">HD (720p)</option>
+                                        <option value="SD">SD (480p)</option>
+                                    </select>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="flex items-center">
+                                        <input v-model="formData.allow_recording" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                                        <label class="ml-2 block text-sm text-gray-900">Allow Recording</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input v-model="formData.allow_timeshifting" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                                        <label class="ml-2 block text-sm text-gray-900">Allow Timeshifting</label>
+                                    </div>
+                                </div>
+
                                 <div class="flex items-center">
                                     <input v-model="formData.is_active" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
                                     <label class="ml-2 block text-sm text-gray-900">Active</label>
                                 </div>
                             </div>
+
+                            <!-- Bouquet Selection -->
+                            <div class="border-t pt-4">
+                                <h4 class="text-md font-medium text-gray-900 mb-4">Bouquet Selection</h4>
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <!-- Available Bouquets -->
+                                    <div>
+                                        <div class="flex justify-between items-center mb-2">
+                                            <h5 class="text-sm font-medium text-gray-700">Available Bouquets ({{ availableBouquets.length }})</h5>
+                                            <button type="button" @click="addAllBouquets" v-if="availableBouquets.length > 0" class="text-xs text-indigo-600 hover:text-indigo-800">Add All</button>
+                                        </div>
+                                        <div class="border rounded-lg p-2 bg-gray-50 max-h-80 overflow-y-auto">
+                                            <div v-if="loadingBouquets" class="text-center py-8">
+                                                <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+                                                <p class="mt-2 text-xs text-gray-500">Loading bouquets...</p>
+                                            </div>
+                                            <div v-else-if="availableBouquets.length === 0" class="text-sm text-gray-500 text-center py-8">
+                                                No available bouquets
+                                            </div>
+                                            <div v-else class="space-y-1">
+                                                <div
+                                                    v-for="bouquet in availableBouquets"
+                                                    :key="bouquet.id"
+                                                    class="flex items-center justify-between p-2 bg-white hover:bg-indigo-50 rounded border border-gray-200 cursor-pointer transition-colors"
+                                                    @click="addBouquet(bouquet)"
+                                                >
+                                                    <div class="flex-1 min-w-0">
+                                                        <p class="text-sm font-medium text-gray-900 truncate">{{ bouquet.name }}</p>
+                                                        <p class="text-xs text-gray-500 truncate">{{ bouquet.stream_count }} streams</p>
+                                                    </div>
+                                                    <button type="button" class="ml-2 text-green-600 hover:text-green-700 flex-shrink-0">
+                                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Selected Bouquets -->
+                                    <div>
+                                        <div class="flex justify-between items-center mb-2">
+                                            <h5 class="text-sm font-medium text-gray-700">Selected Bouquets ({{ selectedBouquets.length }})</h5>
+                                            <button type="button" @click="removeAllBouquets" v-if="selectedBouquets.length > 0" class="text-xs text-red-600 hover:text-red-800">Remove All</button>
+                                        </div>
+                                        <div class="border rounded-lg p-2 bg-gray-50 max-h-80 overflow-y-auto">
+                                            <div v-if="selectedBouquets.length === 0" class="text-sm text-gray-500 text-center py-8">
+                                                No bouquets selected<br>
+                                                <span class="text-xs">Click bouquets from the left to add them</span>
+                                            </div>
+                                            <div v-else class="space-y-1">
+                                                <div
+                                                    v-for="bouquet in selectedBouquets"
+                                                    :key="bouquet.id"
+                                                    class="flex items-center justify-between p-2 bg-white hover:bg-red-50 rounded border border-gray-200 transition-colors"
+                                                >
+                                                    <div class="flex-1 min-w-0">
+                                                        <p class="text-sm font-medium text-gray-900 truncate">{{ bouquet.name }}</p>
+                                                        <p class="text-xs text-gray-500 truncate">{{ bouquet.stream_count }} streams</p>
+                                                    </div>
+                                                    <button type="button" @click="removeBouquet(bouquet)" class="ml-2 text-red-600 hover:text-red-700 flex-shrink-0">
+                                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                            <button type="submit" :disabled="saving" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm">
-                                {{ saving ? 'Saving...' : 'Save' }}
+                            <button type="submit" :disabled="saving" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                                {{ saving ? 'Saving...' : 'Save Package' }}
                             </button>
                             <button @click="closeModal" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
                                 Cancel
@@ -220,110 +309,27 @@
                 </div>
             </div>
         </div>
-
-        <!-- View Details Modal -->
-        <div v-if="showDetailsModal && selectedPackage" class="fixed z-10 inset-0 overflow-y-auto">
-            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeDetailsModal"></div>
-                <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
-                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6">
-                        <div class="flex justify-between items-start mb-4">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">{{ selectedPackage.name }}</h3>
-                            <button @click="closeDetailsModal" class="text-gray-400 hover:text-gray-500">
-                                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4 mb-6">
-                            <div>
-                                <p class="text-sm font-medium text-gray-500">Max Connections</p>
-                                <p class="mt-1 text-sm text-gray-900">{{ selectedPackage.max_connections }}</p>
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-gray-500">Price</p>
-                                <p class="mt-1 text-sm text-gray-900">${{ selectedPackage.price || 'N/A' }}</p>
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-gray-500">Duration</p>
-                                <p class="mt-1 text-sm text-gray-900">{{ selectedPackage.duration_days }} days</p>
-                            </div>
-                            <div>
-                                <p class="text-sm font-medium text-gray-500">Status</p>
-                                <p class="mt-1">
-                                    <span v-if="selectedPackage.is_active" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
-                                    <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Inactive</span>
-                                </p>
-                            </div>
-                        </div>
-
-                        <div v-if="packageStats" class="mb-6">
-                            <h4 class="text-sm font-medium text-gray-900 mb-3">Statistics</h4>
-                            <div class="grid grid-cols-3 gap-4">
-                                <div class="bg-blue-50 p-3 rounded-lg">
-                                    <p class="text-xs text-blue-600 font-medium">Total Subscriptions</p>
-                                    <p class="text-2xl font-bold text-blue-900">{{ packageStats.total_subscriptions }}</p>
-                                    <p class="text-xs text-blue-600">{{ packageStats.active_subscriptions }} active</p>
-                                </div>
-                                <div class="bg-green-50 p-3 rounded-lg">
-                                    <p class="text-xs text-green-600 font-medium">Total Trials</p>
-                                    <p class="text-2xl font-bold text-green-900">{{ packageStats.total_trials }}</p>
-                                    <p class="text-xs text-green-600">{{ packageStats.active_trials }} active</p>
-                                </div>
-                                <div class="bg-purple-50 p-3 rounded-lg">
-                                    <p class="text-xs text-purple-600 font-medium">Content</p>
-                                    <p class="text-2xl font-bold text-purple-900">{{ packageStats.total_bouquets }}</p>
-                                    <p class="text-xs text-purple-600">{{ packageStats.total_channels }} channels</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div v-if="selectedPackage.bouquets">
-                            <h4 class="text-sm font-medium text-gray-900 mb-3">Assigned Bouquets ({{ selectedPackage.bouquets.length }})</h4>
-                            <div class="max-h-60 overflow-y-auto">
-                                <div v-if="selectedPackage.bouquets.length === 0" class="text-sm text-gray-500 text-center py-4">
-                                    No bouquets assigned
-                                </div>
-                                <div v-else class="space-y-2">
-                                    <div v-for="bouquet in selectedPackage.bouquets" :key="bouquet.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                        <div>
-                                            <p class="text-sm font-medium text-gray-900">{{ bouquet.name }}</p>
-                                            <p class="text-xs text-gray-500">{{ bouquet.description || 'No description' }}</p>
-                                        </div>
-                                        <span class="text-xs text-gray-500">{{ bouquet.channel_count }} channels</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                        <button @click="closeDetailsModal" type="button" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto sm:text-sm">
-                            Close
-                        </button>
-                    </div>
-                </div>
-            </div>
         </div>
-    </div>
+    </AppLayout>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { packagesAPI } from '../../services/api';
+import AppLayout from '../../components/AppLayout.vue';
+import { packagesAPI, bouquetsAPI } from '../../services/api';
 
 const packages = ref([]);
+const allBouquets = ref([]);
 const loading = ref(false);
+const loadingBouquets = ref(false);
 const saving = ref(false);
 const showModal = ref(false);
-const showDetailsModal = ref(false);
 const editingPackage = ref(null);
-const selectedPackage = ref(null);
-const packageStats = ref(null);
+const selectedBouquets = ref([]);
 
 const filters = ref({
     search: '',
-    active: '',
+    active: null, // null = show all, not empty string!
     perPage: 20,
     page: 1
 });
@@ -338,10 +344,19 @@ const pagination = ref({
 const formData = ref({
     name: '',
     description: '',
-    max_connections: 1,
+    max_concurrent_devices: null,
+    bandwidth_limit_mbps: null,
+    video_quality: '',
+    allow_recording: false,
+    allow_timeshifting: false,
     price: null,
     duration_days: 30,
-    is_active: 1
+    is_active: true
+});
+
+const availableBouquets = computed(() => {
+    const selectedIds = new Set(selectedBouquets.value.map(b => b.id));
+    return allBouquets.value.filter(b => !selectedIds.has(b.id) && b.is_active);
 });
 
 let debounceTimer = null;
@@ -356,83 +371,171 @@ const debouncedFetch = () => {
 const fetchPackages = async () => {
     loading.value = true;
     try {
-        const response = await packagesAPI.getAll({
+        const params = {
             search: filters.value.search,
-            active: filters.value.active,
             page: filters.value.page,
             per_page: filters.value.perPage
-        });
+        };
+
+        if (filters.value.active !== null) {
+            params.active = filters.value.active;
+        }
+
+        console.log('Fetching packages with params:', params);
+        const response = await packagesAPI.getAll(params);
+
+        console.log('Packages API Response:', response.data);
+
         if (response.data.success) {
             packages.value = response.data.data;
             pagination.value = response.data.pagination;
+            console.log('Loaded packages:', packages.value);
+        } else {
+            console.error('API returned success=false:', response.data);
+            alert('Failed to load packages: ' + (response.data.message || 'Unknown error'));
         }
     } catch (error) {
         console.error('Error fetching packages:', error);
-        alert('Failed to load packages');
+        alert('Failed to load packages: ' + (error.response?.data?.message || error.message));
     } finally {
         loading.value = false;
     }
 };
 
-const viewPackage = async (id) => {
+const fetchAllBouquets = async () => {
+    loadingBouquets.value = true;
     try {
-        const [detailsResponse, statsResponse] = await Promise.all([
-            packagesAPI.getOne(id),
-            packagesAPI.getStats(id)
-        ]);
+        const response = await bouquetsAPI.getAll({ per_page: 1000, active: 1 });
+        console.log('Bouquets API Response:', response.data);
 
-        if (detailsResponse.data.success) {
-            selectedPackage.value = detailsResponse.data.data;
+        if (response.data.success) {
+            allBouquets.value = response.data.data.map(bouquet => ({
+                id: bouquet.id,
+                name: bouquet.name,
+                description: bouquet.description,
+                stream_count: bouquet.stream_count || 0,
+                is_active: bouquet.is_active
+            }));
+            console.log('Loaded bouquets:', allBouquets.value.length);
         }
-
-        if (statsResponse.data.success) {
-            packageStats.value = statsResponse.data.data;
-        }
-
-        showDetailsModal.value = true;
     } catch (error) {
-        console.error('Error fetching package details:', error);
-        alert('Failed to load package details');
+        console.error('Error fetching bouquets:', error);
+    } finally {
+        loadingBouquets.value = false;
     }
 };
 
-const openCreateModal = () => {
+const openCreateModal = async () => {
     editingPackage.value = null;
     formData.value = {
         name: '',
         description: '',
-        max_connections: 1,
+        max_concurrent_devices: null,
+        bandwidth_limit_mbps: null,
+        video_quality: '',
+        allow_recording: false,
+        allow_timeshifting: false,
         price: null,
         duration_days: 30,
-        is_active: 1
+        is_active: true
     };
+    selectedBouquets.value = [];
+
+    if (allBouquets.value.length === 0) {
+        await fetchAllBouquets();
+    }
+
     showModal.value = true;
 };
 
-const editPackage = (pkg) => {
+const editPackage = async (pkg) => {
     editingPackage.value = pkg;
     formData.value = {
         name: pkg.name,
         description: pkg.description || '',
-        max_connections: pkg.max_connections,
+        max_concurrent_devices: pkg.max_concurrent_devices,
+        bandwidth_limit_mbps: pkg.bandwidth_limit_mbps,
+        video_quality: pkg.video_quality || '',
+        allow_recording: pkg.allow_recording || false,
+        allow_timeshifting: pkg.allow_timeshifting || false,
         price: pkg.price,
         duration_days: pkg.duration_days,
         is_active: pkg.is_active
     };
+
+    if (allBouquets.value.length === 0) {
+        await fetchAllBouquets();
+    }
+
+    // Fetch package details to get bouquets
+    try {
+        const response = await packagesAPI.getOne(pkg.id);
+        if (response.data.success) {
+            const packageData = response.data.data;
+            selectedBouquets.value = packageData.bouquets || [];
+        }
+    } catch (error) {
+        console.error('Error loading package bouquets:', error);
+        selectedBouquets.value = [];
+    }
+
     showModal.value = true;
+};
+
+const addBouquet = (bouquet) => {
+    if (!selectedBouquets.value.find(b => b.id === bouquet.id)) {
+        selectedBouquets.value.push({...bouquet});
+    }
+};
+
+const removeBouquet = (bouquet) => {
+    selectedBouquets.value = selectedBouquets.value.filter(b => b.id !== bouquet.id);
+};
+
+const addAllBouquets = () => {
+    availableBouquets.value.forEach(bouquet => {
+        if (!selectedBouquets.value.find(b => b.id === bouquet.id)) {
+            selectedBouquets.value.push({...bouquet});
+        }
+    });
+};
+
+const removeAllBouquets = () => {
+    if (confirm('Are you sure you want to remove all bouquets from this package?')) {
+        selectedBouquets.value = [];
+    }
 };
 
 const savePackage = async () => {
     saving.value = true;
     try {
+        const data = {
+            ...formData.value,
+            bouquet_ids: selectedBouquets.value.map(b => b.id)
+        };
+
+        console.log('Saving package data:', data);
+
         const response = editingPackage.value
-            ? await packagesAPI.update(editingPackage.value.id, formData.value)
-            : await packagesAPI.create(formData.value);
+            ? await packagesAPI.update(editingPackage.value.id, data)
+            : await packagesAPI.create(data);
 
         if (response.data.success) {
+            // If we have bouquet IDs, sync them
+            if (data.bouquet_ids.length > 0 && response.data.data?.id) {
+                const packageId = editingPackage.value?.id || response.data.data.id;
+                await packagesAPI.assignBouquets(packageId, data.bouquet_ids);
+            }
+
             closeModal();
-            fetchPackages();
-            alert(response.data.message);
+
+            if (!editingPackage.value) {
+                filters.value.page = 1;
+                filters.value.search = '';
+            }
+
+            await fetchPackages();
+            alert(response.data.message || 'Package saved successfully');
         }
     } catch (error) {
         console.error('Error saving package:', error);
@@ -463,7 +566,7 @@ const deletePackage = async (pkg) => {
         const response = await packagesAPI.delete(pkg.id);
         if (response.data.success) {
             fetchPackages();
-            alert(response.data.message);
+            alert(response.data.message || 'Package deleted successfully');
         }
     } catch (error) {
         console.error('Error deleting package:', error);
@@ -481,12 +584,7 @@ const changePage = (page) => {
 const closeModal = () => {
     showModal.value = false;
     editingPackage.value = null;
-};
-
-const closeDetailsModal = () => {
-    showDetailsModal.value = false;
-    selectedPackage.value = null;
-    packageStats.value = null;
+    selectedBouquets.value = [];
 };
 
 onMounted(() => {

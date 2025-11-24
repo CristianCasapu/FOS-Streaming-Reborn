@@ -99,7 +99,7 @@ function handleLogin() {
     checkRateLimit($identifier);
 
     // Find user
-    $user = Admin::where('username', '=', $username)
+    $user = Staff::where('username', '=', $username)
                  ->where('password', '=', md5($password))
                  ->first();
 
@@ -109,7 +109,8 @@ function handleLogin() {
 
         // Set session
         $_SESSION['user_id'] = $username;
-        $_SESSION['admin_id'] = $user->id;
+        $_SESSION['staff_id'] = $user->id;
+        $_SESSION['admin_id'] = $user->id; // Keep for backward compatibility
         $_SESSION['logged_in'] = true;
 
         // Log successful login
@@ -171,7 +172,7 @@ function handleGetUser() {
         ], 401);
     }
 
-    $user = Admin::where('username', '=', $_SESSION['user_id'])->first();
+    $user = Staff::where('username', '=', $_SESSION['user_id'])->first();
 
     if ($user) {
         sendResponse([
@@ -179,7 +180,9 @@ function handleGetUser() {
             'user' => [
                 'id' => $user->id,
                 'username' => $user->username,
-                'email' => $user->email ?? null
+                'email' => $user->email ?? null,
+                'role' => $user->role ?? 'support',
+                'full_name' => $user->full_name ?? null
             ]
         ]);
     } else {

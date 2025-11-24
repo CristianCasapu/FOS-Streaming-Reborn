@@ -305,13 +305,14 @@ class PM2WorkerService
         }
 
         $configFile = 'ecosystem.config.cjs';
+        $projectRoot = base_path();
 
         // Reload PM2 configuration
-        exec("pm2 reload {$configFile} 2>&1", $output, $exitCode);
+        exec("cd {$projectRoot} && pm2 reload {$configFile} 2>&1", $output, $exitCode);
 
         if ($exitCode !== 0) {
             // Try restart if reload failed
-            exec("pm2 restart {$configFile} 2>&1", $restartOutput, $restartExitCode);
+            exec("cd {$projectRoot} && pm2 restart {$configFile} 2>&1", $restartOutput, $restartExitCode);
 
             if ($restartExitCode !== 0) {
                 return [

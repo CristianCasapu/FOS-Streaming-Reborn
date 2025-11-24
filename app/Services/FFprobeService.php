@@ -20,8 +20,9 @@ class FFprobeService
 
     public function __construct()
     {
-        // Get FFprobe path from environment or use default
-        $this->ffprobePath = env('FFPROBE_PATH', '/usr/bin/ffprobe');
+        // Get FFprobe path from database settings
+        $settings = \Setting::first();
+        $this->ffprobePath = $settings ? $settings->ffprobe_path : '/usr/bin/ffprobe';
 
         if (!file_exists($this->ffprobePath)) {
             throw new Exception("FFprobe not found at: {$this->ffprobePath}");

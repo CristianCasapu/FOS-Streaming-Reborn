@@ -128,10 +128,16 @@ export const bouquetsAPI = {
     update: (id, data) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=update&id=${id}`, data),
     delete: (id) => api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=delete&id=${id}`),
     toggle: (id) => api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=toggle&id=${id}`),
-    assignChannels: (id, channelIds) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=assign_channels&id=${id}`, { channel_ids: channelIds }),
-    removeChannel: (id, channelId) => api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=remove_channel&id=${id}&channel_id=${channelId}`),
-    reorderChannels: (id, channelIds) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=reorder_channels&id=${id}`, { channel_ids: channelIds }),
+    assignStreams: (id, streamIds) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=assign_streams&id=${id}`, { stream_ids: streamIds }),
+    addStream: (id, streamId) => api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=add_stream&id=${id}&stream_id=${streamId}`),
+    removeStream: (id, streamId) => api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=remove_stream&id=${id}&stream_id=${streamId}`),
+    reorderStreams: (id, streamIds) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=reorder_streams&id=${id}`, { stream_ids: streamIds }),
     reorderBouquets: (bouquetIds) => api.post(`${ADMIN_API_PREFIX}/bouquets.php?action=reorder_bouquets`, { bouquet_ids: bouquetIds }),
+    availableStreams: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=available_streams&${queryString}`);
+    },
+    cleanupInvalidStreams: (id) => api.get(`${ADMIN_API_PREFIX}/bouquets.php?action=cleanup_invalid_streams&id=${id}`),
 };
 
 /**
@@ -250,18 +256,24 @@ export const useragentsAPI = {
 };
 
 /**
- * Admins API
+ * Staff API (formerly Admins)
  */
-export const adminsAPI = {
+export const staffAPI = {
     getAll: (params = {}) => {
         const queryString = new URLSearchParams(params).toString();
-        return api.get(`${ADMIN_API_PREFIX}/admins.php?action=list&${queryString}`);
+        return api.get(`${ADMIN_API_PREFIX}/staff.php?action=list&${queryString}`);
     },
-    getOne: (id) => api.get(`${ADMIN_API_PREFIX}/admins.php?action=get&id=${id}`),
-    create: (data) => api.post(`${ADMIN_API_PREFIX}/admins.php?action=create`, data),
-    update: (id, data) => api.post(`${ADMIN_API_PREFIX}/admins.php?action=update&id=${id}`, data),
-    delete: (id) => api.get(`${ADMIN_API_PREFIX}/admins.php?action=delete&id=${id}`),
+    getOne: (id) => api.get(`${ADMIN_API_PREFIX}/staff.php?action=get&id=${id}`),
+    create: (data) => api.post(`${ADMIN_API_PREFIX}/staff.php?action=create`, data),
+    update: (id, data) => api.post(`${ADMIN_API_PREFIX}/staff.php?action=update&id=${id}`, data),
+    delete: (id) => api.get(`${ADMIN_API_PREFIX}/staff.php?action=delete&id=${id}`),
+    restore: (id) => api.get(`${ADMIN_API_PREFIX}/staff.php?action=restore&id=${id}`),
+    toggleStatus: (id) => api.get(`${ADMIN_API_PREFIX}/staff.php?action=toggle_status&id=${id}`),
+    changePassword: (id, data) => api.post(`${ADMIN_API_PREFIX}/staff.php?action=change_password&id=${id}`, data),
 };
+
+// Backward compatibility alias
+export const adminsAPI = staffAPI;
 
 /**
  * Activities API
@@ -389,4 +401,138 @@ export const pm2WorkersAPI = {
     update: (name, data) => api.post(`${ADMIN_API_PREFIX}/pm2-workers.php?action=update&name=${encodeURIComponent(name)}`, data),
     delete: (name) => api.get(`${ADMIN_API_PREFIX}/pm2-workers.php?action=delete&name=${encodeURIComponent(name)}`),
     toggle: (name) => api.get(`${ADMIN_API_PREFIX}/pm2-workers.php?action=toggle&name=${encodeURIComponent(name)}`),
+};
+
+/**
+ * V2Ray API
+ */
+export const v2rayAPI = {
+    // Servers
+    getServers: () => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=list_servers`),
+    getServer: (id) => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=get_server&id=${id}`),
+    createServer: (data) => api.post(`${ADMIN_API_PREFIX}/v2ray.php?action=create_server`, data),
+    updateServer: (id, data) => api.post(`${ADMIN_API_PREFIX}/v2ray.php?action=update_server&id=${id}`, data),
+    deleteServer: (id) => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=delete_server&id=${id}`),
+    toggleServer: (id) => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=toggle_server&id=${id}`),
+
+    // Users
+    getUsers: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=list_users&${queryString}`);
+    },
+    createUser: (data) => api.post(`${ADMIN_API_PREFIX}/v2ray.php?action=create_user`, data),
+    toggleUser: (id) => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=toggle_user&id=${id}`),
+    resetTraffic: (id) => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=reset_traffic&id=${id}`),
+    generateConfig: (id) => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=generate_config&id=${id}`),
+
+    // Domain Fronting
+    getDomainFronting: () => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=list_domain_fronting`),
+    createFronting: (data) => api.post(`${ADMIN_API_PREFIX}/v2ray.php?action=create_fronting`, data),
+    testFronting: (id) => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=test_fronting&id=${id}`),
+    deleteFronting: (id) => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=delete_fronting&id=${id}`),
+
+    // Statistics
+    getStats: () => api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=get_stats`),
+    getTrafficStats: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/v2ray.php?action=get_traffic_stats&${queryString}`);
+    },
+};
+
+/**
+ * Audit Logs API
+ */
+export const auditLogsAPI = {
+    list: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/audit_logs.php?action=list&${queryString}`);
+    },
+    get: (id) => api.get(`${ADMIN_API_PREFIX}/audit_logs.php?action=get&id=${id}`),
+    search: (query) => api.get(`${ADMIN_API_PREFIX}/audit_logs.php?action=search&q=${encodeURIComponent(query)}`),
+    stats: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/audit_logs.php?action=stats&${queryString}`);
+    },
+    delete: (id) => api.get(`${ADMIN_API_PREFIX}/audit_logs.php?action=delete&id=${id}`),
+    cleanup: (days) => api.post(`${ADMIN_API_PREFIX}/audit_logs.php?action=cleanup`, { days }),
+};
+
+/**
+ * Resellers API
+ */
+export const resellersAPI = {
+    list: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/resellers.php?action=list&${queryString}`);
+    },
+    get: (id) => api.get(`${ADMIN_API_PREFIX}/resellers.php?action=get&id=${id}`),
+    create: (data) => api.post(`${ADMIN_API_PREFIX}/resellers.php?action=create`, data),
+    update: (id, data) => api.post(`${ADMIN_API_PREFIX}/resellers.php?action=update&id=${id}`, data),
+    delete: (id) => api.get(`${ADMIN_API_PREFIX}/resellers.php?action=delete&id=${id}`),
+    regenerateApiKey: (id) => api.get(`${ADMIN_API_PREFIX}/resellers.php?action=regenerate_api_key&id=${id}`),
+    toggleApi: (id) => api.get(`${ADMIN_API_PREFIX}/resellers.php?action=toggle_api&id=${id}`),
+    transactions: (id, params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/resellers.php?action=transactions&id=${id}&${queryString}`);
+    },
+    addCommission: (id, data) => api.post(`${ADMIN_API_PREFIX}/resellers.php?action=add_commission&id=${id}`, data),
+    withdraw: (id, data) => api.post(`${ADMIN_API_PREFIX}/resellers.php?action=withdraw&id=${id}`, data),
+    stats: () => api.get(`${ADMIN_API_PREFIX}/resellers.php?action=stats`),
+};
+
+/**
+ * Health Check API
+ */
+export const healthAPI = {
+    all: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=all`),
+    summary: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=summary`),
+    database: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=database`),
+    redis: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=redis`),
+    disk: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=disk`),
+    memory: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=memory`),
+    cpu: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=cpu`),
+    services: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=services`),
+    srt: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=srt`),
+    v2ray: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=v2ray`),
+    cdn: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=cdn`),
+    streams: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=streams`),
+    workers: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=workers`),
+    critical: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=critical`),
+    history: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=history`),
+    store: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=store`),
+    metrics: () => api.get(`${ADMIN_API_PREFIX}/health.php?action=metrics`),
+};
+
+/**
+ * Metrics API
+ */
+export const metricsAPI = {
+    dashboard: () => api.get(`${ADMIN_API_PREFIX}/metrics.php?action=dashboard`),
+    streams: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/metrics.php?action=streams&${queryString}`);
+    },
+    subscribers: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/metrics.php?action=subscribers&${queryString}`);
+    },
+    resellers: () => api.get(`${ADMIN_API_PREFIX}/metrics.php?action=resellers`),
+    security: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/metrics.php?action=security&${queryString}`);
+    },
+    v2ray: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/metrics.php?action=v2ray&${queryString}`);
+    },
+    audit: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/metrics.php?action=audit&${queryString}`);
+    },
+    redisStats: () => api.get(`${ADMIN_API_PREFIX}/metrics.php?action=redis_stats`),
+    system: (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/metrics.php?action=system&${queryString}`);
+    },
+    export: (type, format = 'json') => api.get(`${ADMIN_API_PREFIX}/metrics.php?action=export&type=${type}&format=${format}`),
 };

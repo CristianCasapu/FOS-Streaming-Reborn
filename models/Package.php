@@ -12,7 +12,12 @@ class Package extends FosStreaming {
     protected $fillable = [
         'name',
         'description',
-        'max_connections',
+        'max_concurrent_devices',
+        'bandwidth_limit_mbps',
+        'video_quality',
+        'allow_recording',
+        'allow_timeshifting',
+        'features',
         'price',
         'duration_days',
         'is_active'
@@ -20,9 +25,13 @@ class Package extends FosStreaming {
 
     protected $casts = [
         'is_active' => 'boolean',
+        'allow_recording' => 'boolean',
+        'allow_timeshifting' => 'boolean',
         'price' => 'decimal:2',
-        'max_connections' => 'integer',
+        'max_concurrent_devices' => 'integer',
+        'bandwidth_limit_mbps' => 'integer',
         'duration_days' => 'integer',
+        'features' => 'array',
     ];
 
     /**
@@ -51,26 +60,35 @@ class Package extends FosStreaming {
     }
 
     /**
-     * Get all channels available in this package
-     * This aggregates all channels from all bouquets in the package
+     * Get all streams available in this package
+     * This aggregates all streams from all bouquets in the package
      */
-    public function getChannelsAttribute()
+    public function getStreamsAttribute()
     {
-        $channels = collect();
+        $streams = collect();
 
         foreach ($this->bouquets as $bouquet) {
-            $channels = $channels->merge($bouquet->channels);
+            $streams = $streams->merge($bouquet->streams());
         }
 
-        return $channels->unique('id')->sortBy('name');
+        return $streams->unique('id')->sortBy('stream_display_name');
     }
 
     /**
-     * Get total number of channels in this package
+     * Get total number of streams in this package
+     */
+    public function getStreamCountAttribute()
+    {
+        return $this->streams->count();
+    }
+
+    /**
+     * Legacy alias for compatibility
+     * @deprecated Use getStreamCountAttribute instead
      */
     public function getChannelCountAttribute()
     {
-        return $this->channels->count();
+        return $this->stream_count;
     }
 
     /**

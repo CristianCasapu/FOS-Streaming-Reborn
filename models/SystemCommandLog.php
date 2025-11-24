@@ -34,11 +34,19 @@ class SystemCommandLog extends Model
     public $timestamps = true;
 
     /**
-     * Relationship to Admin
+     * Relationship to Staff (admin user)
+     */
+    public function staff()
+    {
+        return $this->belongsTo(Staff::class, 'admin_id');
+    }
+
+    /**
+     * Backwards compatibility alias for admin relationship
      */
     public function admin()
     {
-        return $this->belongsTo(Admin::class, 'admin_id');
+        return $this->staff();
     }
 
     /**

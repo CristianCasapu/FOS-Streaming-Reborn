@@ -2,7 +2,8 @@
 /**
  * Bouquets API Endpoint
  *
- * Manage bouquets (groups) of TV channels
+ * Manage bouquets (groups) of streams
+ * Bouquets now directly reference streams via stream_ids JSON array
  */
 
 require_once __DIR__ . '/../../../config.php';
@@ -18,7 +19,7 @@ try {
             $active = $_GET['active'] ?? null;
             $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
             $perPage = isset($_GET['per_page']) ? (int)$_GET['per_page'] : 20;
-            $withChannels = isset($_GET['with_channels']) && $_GET['with_channels'] == '1';
+            $withStreams = isset($_GET['with_streams']) && $_GET['with_streams'] == '1';
 
             $query = Bouquet::query()->orderBy('sort_order');
 
@@ -36,27 +37,22 @@ try {
             $total = $query->count();
             $bouquets = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
-            $formatted = $bouquets->map(function($bouquet) use ($withChannels) {
+            $formatted = $bouquets->map(function($bouquet) use ($withStreams) {
                 $data = [
                     'id' => $bouquet->id,
                     'name' => $bouquet->name,
                     'description' => $bouquet->description,
                     'is_active' => $bouquet->is_active,
                     'sort_order' => $bouquet->sort_order,
-                    'channel_count' => $bouquet->channels()->count(),
+                    'stream_count' => $bouquet->stream_count,
+                    'running_stream_count' => $bouquet->running_stream_count,
                     'package_count' => $bouquet->packages()->count(),
                     'created_at' => $bouquet->created_at,
                     'updated_at' => $bouquet->updated_at
                 ];
 
-                if ($withChannels) {
-                    $data['channels'] = $bouquet->channels->map(function($channel) {
-                        return [
-                            'id' => $channel->id,
-                            'name' => $channel->name,
-                            'sort_order' => $channel->pivot->sort_order
-                        ];
-                    });
+                if ($withStreams) {
+                    $data['streams'] = $bouquet->streamsWithDetails;
                 }
 
                 return $data;
@@ -81,16 +77,15 @@ try {
             $bouquet = Bouquet::find($id);
             if (!$bouquet) throw new Exception('Bouquet not found');
 
-            $channels = $bouquet->channels->map(function($channel) {
+            $streams = $bouquet->streams()->map(function($stream, $index) {
                 return [
-                    'id' => $channel->id,
-                    'name' => $channel->name,
-                    'description' => $channel->description,
-                    'stream_id' => $channel->stream_id,
-                    'category_id' => $channel->category_id,
-                    'logo_url' => $channel->logo_url,
-                    'is_active' => $channel->is_active,
-                    'sort_order' => $channel->pivot->sort_order
+                    'id' => $stream->id,
+                    'name' => $stream->stream_display_name ?? $stream->name ?? "Stream {$stream->id}",
+                    'category_id' => $stream->cat_id,
+                    'category_name' => $stream->category ? $stream->category->name : null,
+                    'running' => $stream->running == 1,
+                    'streamurl' => $stream->streamurl,
+                    'sort_order' => $index
                 ];
             });
 
@@ -109,9 +104,10 @@ try {
                     'description' => $bouquet->description,
                     'is_active' => $bouquet->is_active,
                     'sort_order' => $bouquet->sort_order,
-                    'channels' => $channels,
+                    'stream_ids' => $bouquet->stream_ids ?? [],
+                    'streams' => $streams,
                     'packages' => $packages,
-                    'channel_count' => $channels->count(),
+                    'stream_count' => $streams->count(),
                     'package_count' => $packages->count(),
                     'created_at' => $bouquet->created_at,
                     'updated_at' => $bouquet->updated_at
@@ -136,17 +132,13 @@ try {
             $bouquet->description = $input['description'] ?? null;
             $bouquet->is_active = $input['is_active'] ?? 1;
             $bouquet->sort_order = $input['sort_order'] ?? 0;
-            $bouquet->save();
 
-            // Assign channels if provided
-            if (isset($input['channel_ids']) && is_array($input['channel_ids'])) {
-                $channelsWithOrder = [];
-                $order = 0;
-                foreach ($input['channel_ids'] as $channelId) {
-                    $channelsWithOrder[$channelId] = ['sort_order' => $order++];
-                }
-                $bouquet->channels()->sync($channelsWithOrder);
+            // Set stream IDs if provided
+            if (isset($input['stream_ids']) && is_array($input['stream_ids'])) {
+                $bouquet->stream_ids = array_values(array_unique($input['stream_ids']));
             }
+
+            $bouquet->save();
 
             echo json_encode([
                 'success' => true,
@@ -175,17 +167,13 @@ try {
             if (isset($input['description'])) $bouquet->description = $input['description'];
             if (isset($input['is_active'])) $bouquet->is_active = $input['is_active'];
             if (isset($input['sort_order'])) $bouquet->sort_order = $input['sort_order'];
-            $bouquet->save();
 
-            // Update channels if provided
-            if (isset($input['channel_ids']) && is_array($input['channel_ids'])) {
-                $channelsWithOrder = [];
-                $order = 0;
-                foreach ($input['channel_ids'] as $channelId) {
-                    $channelsWithOrder[$channelId] = ['sort_order' => $order++];
-                }
-                $bouquet->channels()->sync($channelsWithOrder);
+            // Update stream IDs if provided
+            if (isset($input['stream_ids']) && is_array($input['stream_ids'])) {
+                $bouquet->stream_ids = array_values(array_unique($input['stream_ids']));
             }
+
+            $bouquet->save();
 
             echo json_encode([
                 'success' => true,
@@ -231,7 +219,7 @@ try {
             ]);
             break;
 
-        case 'assign_channels':
+        case 'assign_streams':
             $id = $_GET['id'] ?? null;
             if (!$id) throw new Exception('Bouquet ID required');
 
@@ -239,48 +227,64 @@ try {
             if (!$bouquet) throw new Exception('Bouquet not found');
 
             $input = json_decode(file_get_contents('php://input'), true);
-            $channelIds = $input['channel_ids'] ?? [];
+            $streamIds = $input['stream_ids'] ?? [];
 
-            if (!is_array($channelIds)) {
-                throw new Exception('channel_ids must be an array');
+            if (!is_array($streamIds)) {
+                throw new Exception('stream_ids must be an array');
             }
 
-            $channelsWithOrder = [];
-            $order = 0;
-            foreach ($channelIds as $channelId) {
-                $channelsWithOrder[$channelId] = ['sort_order' => $order++];
-            }
-
-            $bouquet->channels()->sync($channelsWithOrder);
+            $bouquet->setStreams($streamIds);
 
             echo json_encode([
                 'success' => true,
-                'message' => 'Channels assigned successfully',
+                'message' => 'Streams assigned successfully',
                 'data' => [
-                    'channel_count' => $bouquet->channels()->count()
+                    'stream_count' => $bouquet->stream_count
                 ]
             ]);
             break;
 
-        case 'remove_channel':
+        case 'add_stream':
             $id = $_GET['id'] ?? null;
-            $channelId = $_GET['channel_id'] ?? null;
+            $streamId = $_GET['stream_id'] ?? null;
 
             if (!$id) throw new Exception('Bouquet ID required');
-            if (!$channelId) throw new Exception('Channel ID required');
+            if (!$streamId) throw new Exception('Stream ID required');
 
             $bouquet = Bouquet::find($id);
             if (!$bouquet) throw new Exception('Bouquet not found');
 
-            $bouquet->channels()->detach($channelId);
+            // Verify stream exists
+            $stream = Stream::find($streamId);
+            if (!$stream) throw new Exception('Stream not found');
+
+            $bouquet->addStream($streamId);
 
             echo json_encode([
                 'success' => true,
-                'message' => 'Channel removed from bouquet'
+                'message' => 'Stream added to bouquet'
             ]);
             break;
 
-        case 'reorder_channels':
+        case 'remove_stream':
+            $id = $_GET['id'] ?? null;
+            $streamId = $_GET['stream_id'] ?? null;
+
+            if (!$id) throw new Exception('Bouquet ID required');
+            if (!$streamId) throw new Exception('Stream ID required');
+
+            $bouquet = Bouquet::find($id);
+            if (!$bouquet) throw new Exception('Bouquet not found');
+
+            $bouquet->removeStream($streamId);
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Stream removed from bouquet'
+            ]);
+            break;
+
+        case 'reorder_streams':
             $id = $_GET['id'] ?? null;
             if (!$id) throw new Exception('Bouquet ID required');
 
@@ -288,21 +292,17 @@ try {
             if (!$bouquet) throw new Exception('Bouquet not found');
 
             $input = json_decode(file_get_contents('php://input'), true);
-            $channelIds = $input['channel_ids'] ?? [];
+            $streamIds = $input['stream_ids'] ?? [];
 
-            if (!is_array($channelIds)) {
-                throw new Exception('channel_ids must be an array');
+            if (!is_array($streamIds)) {
+                throw new Exception('stream_ids must be an array');
             }
 
-            $order = 0;
-            foreach ($channelIds as $channelId) {
-                $bouquet->channels()->updateExistingPivot($channelId, ['sort_order' => $order]);
-                $order++;
-            }
+            $bouquet->reorderStreams($streamIds);
 
             echo json_encode([
                 'success' => true,
-                'message' => 'Channels reordered successfully'
+                'message' => 'Streams reordered successfully'
             ]);
             break;
 
@@ -328,6 +328,65 @@ try {
             echo json_encode([
                 'success' => true,
                 'message' => 'Bouquets reordered successfully'
+            ]);
+            break;
+
+        case 'cleanup_invalid_streams':
+            $id = $_GET['id'] ?? null;
+            if (!$id) throw new Exception('Bouquet ID required');
+
+            $bouquet = Bouquet::find($id);
+            if (!$bouquet) throw new Exception('Bouquet not found');
+
+            $bouquet->cleanupInvalidStreamIds();
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Invalid stream IDs cleaned up',
+                'data' => [
+                    'stream_count' => $bouquet->stream_count
+                ]
+            ]);
+            break;
+
+        case 'available_streams':
+            // Get all active streams for selection
+            $bouquetId = $_GET['bouquet_id'] ?? null;
+            $search = $_GET['search'] ?? null;
+            $categoryId = $_GET['category_id'] ?? null;
+
+            $query = Stream::query();
+
+            if ($search) {
+                $query->where('stream_display_name', 'LIKE', "%{$search}%");
+            }
+
+            if ($categoryId) {
+                $query->where('cat_id', $categoryId);
+            }
+
+            $streams = $query->get(['id', 'stream_display_name', 'cat_id', 'running']);
+
+            $formatted = $streams->map(function($stream) use ($bouquetId) {
+                $inBouquet = false;
+                if ($bouquetId) {
+                    $bouquet = Bouquet::find($bouquetId);
+                    $inBouquet = $bouquet && $bouquet->hasStream($stream->id);
+                }
+
+                return [
+                    'id' => $stream->id,
+                    'name' => $stream->stream_display_name ?: "Stream {$stream->id}",
+                    'category_id' => $stream->cat_id,
+                    'running' => $stream->running == 1,
+                    'in_bouquet' => $inBouquet
+                ];
+            });
+
+            echo json_encode([
+                'success' => true,
+                'data' => $formatted,
+                'total' => $formatted->count()
             ]);
             break;
 

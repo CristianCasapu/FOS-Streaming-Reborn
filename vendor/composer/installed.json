@@ -4356,6 +4356,93 @@
                         "install-path": "../nunomaduro/termwind"
                 },
                 {
+                        "name": "owen-it/laravel-auditing",
+                        "version": "v14.0.0",
+                        "version_normalized": "14.0.0.0",
+                        "source": {
+                                "type": "git",
+                                "url": "https://github.com/owen-it/laravel-auditing.git",
+                                "reference": "f92602d1b3f53df29ddd577290e9d735ea707c53"
+                        },
+                        "dist": {
+                                "type": "zip",
+                                "url": "https://api.github.com/repos/owen-it/laravel-auditing/zipball/f92602d1b3f53df29ddd577290e9d735ea707c53",
+                                "reference": "f92602d1b3f53df29ddd577290e9d735ea707c53",
+                                "shasum": ""
+                        },
+                        "require": {
+                                "ext-json": "*",
+                                "illuminate/console": "^11.0|^12.0",
+                                "illuminate/database": "^11.0|^12.0",
+                                "illuminate/filesystem": "^11.0|^12.0",
+                                "php": "^8.2"
+                        },
+                        "require-dev": {
+                                "mockery/mockery": "^1.5.1",
+                                "orchestra/testbench": "^9.0|^10.0",
+                                "phpunit/phpunit": "^11.0"
+                        },
+                        "time": "2025-02-26T16:40:54+00:00",
+                        "type": "package",
+                        "extra": {
+                                "laravel": {
+                                        "providers": [
+                                                "OwenIt\\Auditing\\AuditingServiceProvider"
+                                        ]
+                                },
+                                "branch-alias": {
+                                        "dev-master": "v14-dev"
+                                }
+                        },
+                        "installation-source": "dist",
+                        "autoload": {
+                                "psr-4": {
+                                        "OwenIt\\Auditing\\": "src/"
+                                }
+                        },
+                        "notification-url": "https://packagist.org/downloads/",
+                        "license": [
+                                "MIT"
+                        ],
+                        "authors": [
+                                {
+                                        "name": "Antério Vieira",
+                                        "email": "anteriovieira@gmail.com"
+                                },
+                                {
+                                        "name": "Raphael França",
+                                        "email": "raphaelfrancabsb@gmail.com"
+                                },
+                                {
+                                        "name": "Morten D. Hansen",
+                                        "email": "morten@visia.dk"
+                                }
+                        ],
+                        "description": "Audit changes of your Eloquent models in Laravel",
+                        "homepage": "https://laravel-auditing.com",
+                        "keywords": [
+                                "Accountability",
+                                "Audit",
+                                "auditing",
+                                "changes",
+                                "eloquent",
+                                "history",
+                                "laravel",
+                                "log",
+                                "logging",
+                                "lumen",
+                                "observer",
+                                "record",
+                                "revision",
+                                "tracking"
+                        ],
+                        "support": {
+                                "issues": "https://github.com/owen-it/laravel-auditing/issues",
+                                "source": "https://github.com/owen-it/laravel-auditing"
+                        },
+                        "install-path": "../owen-it/laravel-auditing"
+                },
+                {
                         "name": "phar-io/manifest",
                         "version": "2.0.4",
                         "version_normalized": "2.0.4.0",
@@ -7209,6 +7296,92 @@
                                 }
                         ],
                         "install-path": "../spatie/laravel-ignition"
+                },
+                {
+                        "name": "spatie/laravel-permission",
+                        "version": "6.23.0",
+                        "version_normalized": "6.23.0.0",
+                        "source": {
+                                "type": "git",
+                                "url": "https://github.com/spatie/laravel-permission.git",
+                                "reference": "9e41247bd512b1e6c229afbc1eb528f7565ae3bb"
+                        },
+                        "dist": {
+                                "type": "zip",
+                                "url": "https://api.github.com/repos/spatie/laravel-permission/zipball/9e41247bd512b1e6c229afbc1eb528f7565ae3bb",
+                                "reference": "9e41247bd512b1e6c229afbc1eb528f7565ae3bb",
+                                "shasum": ""
+                        },
+                        "require": {
+                                "illuminate/auth": "^8.12|^9.0|^10.0|^11.0|^12.0",
+                                "illuminate/container": "^8.12|^9.0|^10.0|^11.0|^12.0",
+                                "illuminate/contracts": "^8.12|^9.0|^10.0|^11.0|^12.0",
+                                "illuminate/database": "^8.12|^9.0|^10.0|^11.0|^12.0",
+                                "php": "^8.0"
+                        },
+                        "require-dev": {
+                                "laravel/passport": "^11.0|^12.0",
+                                "laravel/pint": "^1.0",
+                                "orchestra/testbench": "^6.23|^7.0|^8.0|^9.0|^10.0",
+                                "phpunit/phpunit": "^9.4|^10.1|^11.5"
+                        },
+                        "time": "2025-11-03T20:16:13+00:00",
+                        "type": "library",
+                        "extra": {
+                                "laravel": {
+                                        "providers": [
+                                                "Spatie\\Permission\\PermissionServiceProvider"
+                                        ]
+                                },
+                                "branch-alias": {
+                                        "dev-main": "6.x-dev",
+                                        "dev-master": "6.x-dev"
+                                }
+                        },
+                        "installation-source": "dist",
+                        "autoload": {
+                                "files": [
+                                        "src/helpers.php"
+                                ],
+                                "psr-4": {
+                                        "Spatie\\Permission\\": "src"
+                                }
+                        },
+                        "notification-url": "https://packagist.org/downloads/",
+                        "license": [
+                                "MIT"
+                        ],
+                        "authors": [
+                                {
+                                        "name": "Freek Van der Herten",
+                                        "email": "freek@spatie.be",
+                                        "homepage": "https://spatie.be",
+                                        "role": "Developer"
+                                }
+                        ],
+                        "description": "Permission handling for Laravel 8.0 and up",
+                        "homepage": "https://github.com/spatie/laravel-permission",
+                        "keywords": [
+                                "acl",
+                                "laravel",
+                                "permission",
+                                "permissions",
+                                "rbac",
+                                "roles",
+                                "security",
+                                "spatie"
+                        ],
+                        "support": {
+                                "issues": "https://github.com/spatie/laravel-permission/issues",
+                                "source": "https://github.com/spatie/laravel-permission/tree/6.23.0"
+                        },
+                        "funding": [
+                                {
+                                        "url": "https://github.com/spatie",
+                                        "type": "github"
+                                }
+                        ],
+                        "install-path": "../spatie/laravel-permission"
                 },
                 {
                         "name": "staabm/side-effects-detector",

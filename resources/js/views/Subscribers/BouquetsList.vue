@@ -1,14 +1,15 @@
 <template>
-    <div class="py-6">
+    <AppLayout>
+        <div class="py-6">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <!-- Header -->
             <div class="md:flex md:items-center md:justify-between mb-6">
                 <div class="flex-1 min-w-0">
                     <h2 class="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">
-                        Channel Bouquets
+                        Stream Bouquets
                     </h2>
                     <p class="mt-1 text-sm text-gray-500">
-                        Manage groups of TV channels and assign them to packages
+                        Manage groups of streams and assign them to packages
                     </p>
                 </div>
                 <div class="mt-4 flex md:mt-0 md:ml-4">
@@ -31,7 +32,7 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Status</label>
                         <select v-model="filters.active" @change="fetchBouquets" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                            <option value="">All Bouquets</option>
+                            <option :value="null">All Bouquets</option>
                             <option value="1">Active Only</option>
                             <option value="0">Inactive Only</option>
                         </select>
@@ -67,7 +68,7 @@
                     <thead class="bg-gray-50">
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Channels</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Streams</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Packages</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sort Order</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -82,7 +83,7 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    {{ bouquet.channel_count }} channels
+                                    {{ bouquet.stream_count }} streams
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
@@ -102,17 +103,6 @@
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                <button @click="viewBouquet(bouquet.id)" class="text-indigo-600 hover:text-indigo-900 mr-3" title="View Details">
-                                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                </button>
-                                <button @click="manageChannels(bouquet)" class="text-green-600 hover:text-green-900 mr-3" title="Manage Channels">
-                                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                    </svg>
-                                </button>
                                 <button @click="editBouquet(bouquet)" class="text-yellow-600 hover:text-yellow-900 mr-3" title="Edit">
                                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -148,10 +138,10 @@
                         </div>
                         <div>
                             <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                                <button @click="changePage(pagination.current_page - 1)" :disabled="pagination.current_page === 1" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <button @click="changePage(pagination.current_page - 1)" :disabled="pagination.current_page === 1" class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                                     Previous
                                 </button>
-                                <button @click="changePage(pagination.current_page + 1)" :disabled="pagination.current_page === pagination.last_page" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                <button @click="changePage(pagination.current_page + 1)" :disabled="pagination.current_page === pagination.last_page" class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
                                     Next
                                 </button>
                             </nav>
@@ -165,34 +155,142 @@
         <div v-if="showModal" class="fixed z-10 inset-0 overflow-y-auto">
             <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                 <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeModal"></div>
-                <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-visible shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full">
                     <form @submit.prevent="saveBouquet">
                         <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                             <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
                                 {{ editingBouquet ? 'Edit Bouquet' : 'Create New Bouquet' }}
                             </h3>
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700">Name</label>
-                                    <input v-model="formData.name" type="text" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+
+                            <!-- Basic Info -->
+                            <div class="grid grid-cols-1 gap-4 mb-6">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Name <span class="text-red-500">*</span></label>
+                                        <input v-model="formData.name" type="text" required class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Sort Order</label>
+                                        <input v-model.number="formData.sort_order" type="number" min="0" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    </div>
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700">Description</label>
-                                    <textarea v-model="formData.description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></textarea>
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700">Sort Order</label>
-                                    <input v-model.number="formData.sort_order" type="number" min="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                    <textarea v-model="formData.description" rows="2" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"></textarea>
                                 </div>
                                 <div class="flex items-center">
                                     <input v-model="formData.is_active" type="checkbox" class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
                                     <label class="ml-2 block text-sm text-gray-900">Active</label>
                                 </div>
                             </div>
+
+                            <!-- Stream Selection -->
+                            <div class="border-t pt-4">
+                                <h4 class="text-md font-medium text-gray-900 mb-4">Stream Selection</h4>
+
+                                <!-- Search and Filter -->
+                                <div class="grid grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Search Streams</label>
+                                        <input v-model="streamSearch" type="text" placeholder="Search by name..." class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Filter by Category</label>
+                                        <select v-model="streamCategoryFilter" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                            <option value="">All Categories</option>
+                                            <option v-for="category in categories" :key="category.id" :value="category.id">
+                                                {{ category.name }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <!-- Available Streams -->
+                                    <div>
+                                        <div class="flex justify-between items-center mb-2">
+                                            <h5 class="text-sm font-medium text-gray-700">Available Streams ({{ filteredAvailableStreams.length }})</h5>
+                                            <button type="button" @click="addAllVisibleStreams" class="text-xs text-indigo-600 hover:text-indigo-800">Add All Visible</button>
+                                        </div>
+                                        <div class="border rounded-lg p-2 bg-gray-50 max-h-96 overflow-y-auto">
+                                            <div v-if="loadingStreams" class="text-center py-8">
+                                                <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+                                                <p class="mt-2 text-xs text-gray-500">Loading streams...</p>
+                                            </div>
+                                            <div v-else-if="filteredAvailableStreams.length === 0" class="text-sm text-gray-500 text-center py-8">
+                                                No available streams
+                                            </div>
+                                            <div v-else class="space-y-1">
+                                                <div
+                                                    v-for="stream in filteredAvailableStreams"
+                                                    :key="stream.id"
+                                                    class="flex items-center justify-between p-2 bg-white hover:bg-indigo-50 rounded border border-gray-200 cursor-pointer transition-colors"
+                                                    @click="addStreamToBouquet(stream)"
+                                                >
+                                                    <div class="flex-1 min-w-0">
+                                                        <p class="text-sm font-medium text-gray-900 truncate">{{ stream.name }}</p>
+                                                        <p class="text-xs text-gray-500 truncate">{{ stream.category_name || 'Uncategorized' }}</p>
+                                                    </div>
+                                                    <button type="button" class="ml-2 text-green-600 hover:text-green-700 flex-shrink-0">
+                                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Selected Streams (Draggable) -->
+                                    <div>
+                                        <div class="flex justify-between items-center mb-2">
+                                            <h5 class="text-sm font-medium text-gray-700">Selected Streams ({{ selectedStreams.length }})</h5>
+                                            <button type="button" @click="removeAllStreams" v-if="selectedStreams.length > 0" class="text-xs text-red-600 hover:text-red-800">Remove All</button>
+                                        </div>
+                                        <div class="border rounded-lg p-2 bg-gray-50 max-h-96 overflow-y-auto">
+                                            <div v-if="selectedStreams.length === 0" class="text-sm text-gray-500 text-center py-8">
+                                                No streams selected<br>
+                                                <span class="text-xs">Click streams from the left to add them</span>
+                                            </div>
+                                            <draggable
+                                                v-else
+                                                v-model="selectedStreams"
+                                                item-key="id"
+                                                :animation="200"
+                                                ghost-class="opacity-50"
+                                                class="space-y-1"
+                                            >
+                                                <template #item="{element: stream, index}">
+                                                    <div class="flex items-center justify-between p-2 bg-white hover:bg-red-50 rounded border border-gray-200 cursor-move transition-colors">
+                                                        <div class="flex items-center flex-1 min-w-0">
+                                                            <svg class="h-5 w-5 text-gray-400 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
+                                                            </svg>
+                                                            <div class="flex-1 min-w-0">
+                                                                <div class="flex items-center">
+                                                                    <span class="text-xs font-medium text-gray-500 mr-2">#{{ index + 1 }}</span>
+                                                                    <p class="text-sm font-medium text-gray-900 truncate">{{ stream.name }}</p>
+                                                                </div>
+                                                                <p class="text-xs text-gray-500 truncate">{{ stream.category_name || 'Uncategorized' }}</p>
+                                                            </div>
+                                                        </div>
+                                                        <button type="button" @click="removeStreamFromBouquet(stream)" class="ml-2 text-red-600 hover:text-red-700 flex-shrink-0">
+                                                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                            </draggable>
+                                        </div>
+                                        <p class="text-xs text-gray-500 mt-2">💡 Drag to reorder streams</p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                            <button type="submit" :disabled="saving" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm">
-                                {{ saving ? 'Saving...' : 'Save' }}
+                            <button type="submit" :disabled="saving" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                                {{ saving ? 'Saving...' : 'Save Bouquet' }}
                             </button>
                             <button @click="closeModal" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
                                 Cancel
@@ -202,168 +300,31 @@
                 </div>
             </div>
         </div>
-
-        <!-- View Details Modal -->
-        <div v-if="showDetailsModal && selectedBouquet" class="fixed z-10 inset-0 overflow-y-auto">
-            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeDetailsModal"></div>
-                <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
-                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6">
-                        <div class="flex justify-between items-start mb-4">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">{{ selectedBouquet.name }}</h3>
-                            <button @click="closeDetailsModal" class="text-gray-400 hover:text-gray-500">
-                                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        <div class="mb-6">
-                            <p class="text-sm text-gray-500">{{ selectedBouquet.description || 'No description' }}</p>
-                        </div>
-
-                        <div class="grid grid-cols-3 gap-4 mb-6">
-                            <div class="bg-blue-50 p-3 rounded-lg">
-                                <p class="text-xs text-blue-600 font-medium">Channels</p>
-                                <p class="text-2xl font-bold text-blue-900">{{ selectedBouquet.channel_count }}</p>
-                            </div>
-                            <div class="bg-purple-50 p-3 rounded-lg">
-                                <p class="text-xs text-purple-600 font-medium">Packages</p>
-                                <p class="text-2xl font-bold text-purple-900">{{ selectedBouquet.package_count }}</p>
-                            </div>
-                            <div class="bg-gray-50 p-3 rounded-lg">
-                                <p class="text-xs text-gray-600 font-medium">Sort Order</p>
-                                <p class="text-2xl font-bold text-gray-900">{{ selectedBouquet.sort_order }}</p>
-                            </div>
-                        </div>
-
-                        <div v-if="selectedBouquet.channels" class="mb-4">
-                            <h4 class="text-sm font-medium text-gray-900 mb-3">Channels ({{ selectedBouquet.channels.length }})</h4>
-                            <div class="max-h-60 overflow-y-auto">
-                                <div v-if="selectedBouquet.channels.length === 0" class="text-sm text-gray-500 text-center py-4">
-                                    No channels assigned
-                                </div>
-                                <div v-else class="space-y-2">
-                                    <div v-for="channel in selectedBouquet.channels" :key="channel.id" class="flex items-center justify-between p-2 bg-gray-50 rounded">
-                                        <span class="text-sm text-gray-900">{{ channel.name }}</span>
-                                        <span class="text-xs text-gray-500">Order: {{ channel.sort_order }}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div v-if="selectedBouquet.packages">
-                            <h4 class="text-sm font-medium text-gray-900 mb-3">Used in Packages ({{ selectedBouquet.packages.length }})</h4>
-                            <div class="flex flex-wrap gap-2">
-                                <span v-for="pkg in selectedBouquet.packages" :key="pkg.id" class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                    {{ pkg.name }}
-                                </span>
-                                <span v-if="selectedBouquet.packages.length === 0" class="text-sm text-gray-500">
-                                    Not used in any packages
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                        <button @click="closeDetailsModal" type="button" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:w-auto sm:text-sm">
-                            Close
-                        </button>
-                    </div>
-                </div>
-            </div>
         </div>
-
-        <!-- Manage Channels Modal -->
-        <div v-if="showChannelsModal && managingBouquet" class="fixed z-10 inset-0 overflow-y-auto">
-            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeChannelsModal"></div>
-                <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
-                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6">
-                        <div class="flex justify-between items-start mb-4">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Manage Channels - {{ managingBouquet.name }}</h3>
-                            <button @click="closeChannelsModal" class="text-gray-400 hover:text-gray-500">
-                                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        <div class="mb-4">
-                            <input v-model="channelSearch" type="text" placeholder="Search channels..." class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4">
-                            <!-- Available Channels -->
-                            <div>
-                                <h4 class="text-sm font-medium text-gray-700 mb-2">Available Channels</h4>
-                                <div class="border rounded-lg p-2 max-h-96 overflow-y-auto">
-                                    <div v-for="channel in filteredAvailableChannels" :key="channel.id" class="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                                        <span class="text-sm">{{ channel.name }}</span>
-                                        <button @click="addChannelToBouquet(channel)" class="text-green-600 hover:text-green-700">
-                                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                    <div v-if="filteredAvailableChannels.length === 0" class="text-sm text-gray-500 text-center py-4">
-                                        No available channels
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Assigned Channels -->
-                            <div>
-                                <h4 class="text-sm font-medium text-gray-700 mb-2">Assigned Channels ({{ selectedChannels.length }})</h4>
-                                <div class="border rounded-lg p-2 max-h-96 overflow-y-auto">
-                                    <div v-for="channel in selectedChannels" :key="channel.id" class="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                                        <span class="text-sm">{{ channel.name }}</span>
-                                        <button @click="removeChannelFromBouquet(channel)" class="text-red-600 hover:text-red-700">
-                                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                    <div v-if="selectedChannels.length === 0" class="text-sm text-gray-500 text-center py-4">
-                                        No channels assigned
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                        <button @click="saveChannelAssignments" :disabled="saving" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm">
-                            {{ saving ? 'Saving...' : 'Save Assignments' }}
-                        </button>
-                        <button @click="closeChannelsModal" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm">
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    </AppLayout>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { bouquetsAPI, channelsAPI } from '../../services/api';
+import draggable from 'vuedraggable';
+import AppLayout from '../../components/AppLayout.vue';
+import { bouquetsAPI, streamsAPI, categoriesAPI } from '../../services/api';
 
 const bouquets = ref([]);
-const allChannels = ref([]);
+const allStreams = ref([]);
+const categories = ref([]);
 const loading = ref(false);
+const loadingStreams = ref(false);
 const saving = ref(false);
 const showModal = ref(false);
-const showDetailsModal = ref(false);
-const showChannelsModal = ref(false);
 const editingBouquet = ref(null);
-const selectedBouquet = ref(null);
-const managingBouquet = ref(null);
-const selectedChannels = ref([]);
-const channelSearch = ref('');
+const selectedStreams = ref([]);
+const streamSearch = ref('');
+const streamCategoryFilter = ref('');
 
 const filters = ref({
     search: '',
-    active: '',
+    active: null, // null = show all, not empty string!
     perPage: 20,
     page: 1
 });
@@ -379,17 +340,23 @@ const formData = ref({
     name: '',
     description: '',
     sort_order: 0,
-    is_active: 1
+    is_active: true,
+    stream_ids: []
 });
 
-const filteredAvailableChannels = computed(() => {
-    const selectedIds = new Set(selectedChannels.value.map(c => c.id));
-    let available = allChannels.value.filter(c => !selectedIds.has(c.id));
+const filteredAvailableStreams = computed(() => {
+    const selectedIds = new Set(selectedStreams.value.map(s => s.id));
+    let available = allStreams.value.filter(s => !selectedIds.has(s.id));
 
-    if (channelSearch.value) {
-        available = available.filter(c =>
-            c.name.toLowerCase().includes(channelSearch.value.toLowerCase())
+    if (streamSearch.value) {
+        const search = streamSearch.value.toLowerCase();
+        available = available.filter(s =>
+            s.name.toLowerCase().includes(search)
         );
+    }
+
+    if (streamCategoryFilter.value) {
+        available = available.filter(s => s.category_id == streamCategoryFilter.value);
     }
 
     return available;
@@ -407,123 +374,204 @@ const debouncedFetch = () => {
 const fetchBouquets = async () => {
     loading.value = true;
     try {
-        const response = await bouquetsAPI.getAll({
+        const params = {
             search: filters.value.search,
-            active: filters.value.active,
             page: filters.value.page,
             per_page: filters.value.perPage
-        });
+        };
+
+        // Only include active filter if it's not null
+        if (filters.value.active !== null) {
+            params.active = filters.value.active;
+        }
+
+        console.log('Fetching bouquets with params:', params);
+        const response = await bouquetsAPI.getAll(params);
+
+        console.log('Bouquets API Response:', response.data);
+
         if (response.data.success) {
             bouquets.value = response.data.data;
             pagination.value = response.data.pagination;
+            console.log('Loaded bouquets:', bouquets.value);
+            console.log('Pagination:', pagination.value);
+        } else {
+            console.error('API returned success=false:', response.data);
+            alert('Failed to load bouquets: ' + (response.data.message || 'Unknown error'));
         }
     } catch (error) {
         console.error('Error fetching bouquets:', error);
-        alert('Failed to load bouquets');
+        console.error('Error details:', error.response?.data);
+        alert('Failed to load bouquets: ' + (error.response?.data?.message || error.message));
     } finally {
         loading.value = false;
     }
 };
 
-const fetchAllChannels = async () => {
+const fetchAllStreams = async () => {
+    loadingStreams.value = true;
     try {
-        const response = await channelsAPI.getAll({ per_page: 1000 });
+        // Ensure categories are loaded first
+        if (categories.value.length === 0) {
+            await fetchCategories();
+        }
+
+        console.log('Categories loaded:', categories.value.length, categories.value);
+
+        const response = await streamsAPI.getAll({ per_page: 1000 });
+        console.log('Streams API Response:', response.data);
+
         if (response.data.success) {
-            allChannels.value = response.data.data;
+            allStreams.value = response.data.data.map(stream => {
+                // Find the category name from the categories array
+                const category = categories.value.find(cat => cat.id == stream.cat_id);
+
+                const mappedStream = {
+                    id: stream.id,
+                    name: stream.stream_display_name || stream.name || `Stream ${stream.id}`,
+                    category_id: stream.cat_id,
+                    category_name: category ? category.name : null,
+                    running: stream.running
+                };
+
+                if (!category && stream.cat_id) {
+                    console.warn('Stream missing category:', stream.id, 'cat_id:', stream.cat_id);
+                }
+
+                return mappedStream;
+            });
+            console.log('Loaded streams:', allStreams.value.length);
         }
     } catch (error) {
-        console.error('Error fetching channels:', error);
-    }
-};
-
-const viewBouquet = async (id) => {
-    try {
-        const response = await bouquetsAPI.getOne(id);
-        if (response.data.success) {
-            selectedBouquet.value = response.data.data;
-            showDetailsModal.value = true;
-        }
-    } catch (error) {
-        console.error('Error fetching bouquet details:', error);
-        alert('Failed to load bouquet details');
-    }
-};
-
-const manageChannels = async (bouquet) => {
-    managingBouquet.value = bouquet;
-    try {
-        const response = await bouquetsAPI.getOne(bouquet.id);
-        if (response.data.success) {
-            selectedChannels.value = response.data.data.channels || [];
-            showChannelsModal.value = true;
-        }
-    } catch (error) {
-        console.error('Error loading bouquet channels:', error);
-        alert('Failed to load channels');
-    }
-};
-
-const addChannelToBouquet = (channel) => {
-    if (!selectedChannels.value.find(c => c.id === channel.id)) {
-        selectedChannels.value.push(channel);
-    }
-};
-
-const removeChannelFromBouquet = (channel) => {
-    selectedChannels.value = selectedChannels.value.filter(c => c.id !== channel.id);
-};
-
-const saveChannelAssignments = async () => {
-    saving.value = true;
-    try {
-        const channelIds = selectedChannels.value.map(c => c.id);
-        const response = await bouquetsAPI.assignChannels(managingBouquet.value.id, channelIds);
-        if (response.data.success) {
-            alert(response.data.message);
-            closeChannelsModal();
-            fetchBouquets();
-        }
-    } catch (error) {
-        console.error('Error saving channel assignments:', error);
-        alert(error.response?.data?.message || 'Failed to save channel assignments');
+        console.error('Error fetching streams:', error);
     } finally {
-        saving.value = false;
+        loadingStreams.value = false;
     }
 };
 
-const openCreateModal = () => {
+const fetchCategories = async () => {
+    try {
+        const response = await categoriesAPI.getAll({ per_page: 1000 });
+        if (response.data.success) {
+            categories.value = response.data.data;
+        }
+    } catch (error) {
+        console.error('Error fetching categories:', error);
+    }
+};
+
+const openCreateModal = async () => {
     editingBouquet.value = null;
+
+    // Calculate next sort order (max + 1, or 1 if no bouquets)
+    const maxSortOrder = bouquets.value.length > 0
+        ? Math.max(...bouquets.value.map(b => b.sort_order || 0))
+        : 0;
+
     formData.value = {
         name: '',
         description: '',
-        sort_order: 0,
-        is_active: 1
+        sort_order: maxSortOrder + 1,
+        is_active: true,
+        stream_ids: []
     };
+    selectedStreams.value = [];
+    streamSearch.value = '';
+    streamCategoryFilter.value = '';
+
+    if (allStreams.value.length === 0) {
+        await fetchAllStreams();
+    }
+    if (categories.value.length === 0) {
+        await fetchCategories();
+    }
+
     showModal.value = true;
 };
 
-const editBouquet = (bouquet) => {
+const editBouquet = async (bouquet) => {
     editingBouquet.value = bouquet;
     formData.value = {
         name: bouquet.name,
         description: bouquet.description || '',
         sort_order: bouquet.sort_order,
-        is_active: bouquet.is_active
+        is_active: bouquet.is_active,
+        stream_ids: []
     };
+
+    streamSearch.value = '';
+    streamCategoryFilter.value = '';
+
+    if (allStreams.value.length === 0) {
+        await fetchAllStreams();
+    }
+    if (categories.value.length === 0) {
+        await fetchCategories();
+    }
+
+    // Fetch full bouquet details to get streams
+    try {
+        const response = await bouquetsAPI.getOne(bouquet.id);
+        if (response.data.success) {
+            const bouquetData = response.data.data;
+            selectedStreams.value = bouquetData.streams || [];
+        }
+    } catch (error) {
+        console.error('Error loading bouquet streams:', error);
+        selectedStreams.value = [];
+    }
+
     showModal.value = true;
+};
+
+const addStreamToBouquet = (stream) => {
+    if (!selectedStreams.value.find(s => s.id === stream.id)) {
+        selectedStreams.value.push({...stream});
+    }
+};
+
+const removeStreamFromBouquet = (stream) => {
+    selectedStreams.value = selectedStreams.value.filter(s => s.id !== stream.id);
+};
+
+const addAllVisibleStreams = () => {
+    filteredAvailableStreams.value.forEach(stream => {
+        if (!selectedStreams.value.find(s => s.id === stream.id)) {
+            selectedStreams.value.push({...stream});
+        }
+    });
+};
+
+const removeAllStreams = () => {
+    if (confirm('Are you sure you want to remove all streams from this bouquet?')) {
+        selectedStreams.value = [];
+    }
 };
 
 const saveBouquet = async () => {
     saving.value = true;
     try {
+        const data = {
+            ...formData.value,
+            stream_ids: selectedStreams.value.map(s => s.id)
+        };
+
         const response = editingBouquet.value
-            ? await bouquetsAPI.update(editingBouquet.value.id, formData.value)
-            : await bouquetsAPI.create(formData.value);
+            ? await bouquetsAPI.update(editingBouquet.value.id, data)
+            : await bouquetsAPI.create(data);
 
         if (response.data.success) {
             closeModal();
-            fetchBouquets();
-            alert(response.data.message);
+
+            // Reset to first page and clear search to ensure new bouquet is visible
+            if (!editingBouquet.value) {
+                filters.value.page = 1;
+                filters.value.search = '';
+                // Keep active filter as is, since we're creating active bouquets by default
+            }
+
+            await fetchBouquets();
+            alert(response.data.message || 'Bouquet saved successfully');
         }
     } catch (error) {
         console.error('Error saving bouquet:', error);
@@ -554,7 +602,7 @@ const deleteBouquet = async (bouquet) => {
         const response = await bouquetsAPI.delete(bouquet.id);
         if (response.data.success) {
             fetchBouquets();
-            alert(response.data.message);
+            alert(response.data.message || 'Bouquet deleted successfully');
         }
     } catch (error) {
         console.error('Error deleting bouquet:', error);
@@ -572,22 +620,12 @@ const changePage = (page) => {
 const closeModal = () => {
     showModal.value = false;
     editingBouquet.value = null;
-};
-
-const closeDetailsModal = () => {
-    showDetailsModal.value = false;
-    selectedBouquet.value = null;
-};
-
-const closeChannelsModal = () => {
-    showChannelsModal.value = false;
-    managingBouquet.value = null;
-    selectedChannels.value = [];
-    channelSearch.value = '';
+    selectedStreams.value = [];
+    streamSearch.value = '';
+    streamCategoryFilter.value = '';
 };
 
 onMounted(() => {
     fetchBouquets();
-    fetchAllChannels();
 });
 </script>

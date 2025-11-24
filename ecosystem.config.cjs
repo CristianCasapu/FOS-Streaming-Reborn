@@ -2,8 +2,8 @@
  * PM2 Ecosystem Configuration
  * 
  * AUTO-GENERATED from database by PM2WorkerService
- * Generated: 2025-11-23 04:09:12
- * Workers: 5
+ * Generated: 2025-11-24 12:21:36
+ * Workers: 8
  * 
  * DO NOT EDIT MANUALLY - Use Admin UI to manage workers
  */
@@ -14,7 +14,7 @@ module.exports = {
   apps: [
     {
       name: 'stream-import-worker',
-      script: './workers/stream-import-worker.js',
+      script: './workers/stream-import-worker.cjs',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -40,7 +40,7 @@ module.exports = {
     },
     {
       name: 'ffprobe-worker',
-      script: './workers/ffprobe-worker.js',
+      script: './workers/ffprobe-worker.cjs',
       instances: 2,
       exec_mode: 'cluster',
       autorestart: true,
@@ -66,7 +66,7 @@ module.exports = {
     },
     {
       name: 'stream-manager-worker',
-      script: './workers/stream-manager-worker.js',
+      script: './workers/stream-manager-worker.cjs',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -92,7 +92,7 @@ module.exports = {
     },
     {
       name: 'stream-monitor-worker',
-      script: './workers/stream-monitor-worker.js',
+      script: './workers/stream-monitor-worker.cjs',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -118,7 +118,7 @@ module.exports = {
     },
     {
       name: 'website-health-worker',
-      script: './workers/website-health-worker.js',
+      script: './workers/website-health-worker.cjs',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -139,6 +139,84 @@ module.exports = {
       watch: false,
       ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
       kill_timeout: 5000,
+      listen_timeout: 3000,
+      shutdown_with_message: true,
+    },
+    {
+      name: 'srt-proxy-worker',
+      script: './workers/srt-proxy-worker.cjs',
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      restart_delay: 5000,
+      max_memory_restart: '400M',
+      cron_restart: '0 3 * * *',
+      error_file: './storage/logs/pm2-srt-proxy-error.log',
+      out_file: './storage/logs/pm2-srt-proxy-out.log',
+      log_file: './storage/logs/pm2-srt-proxy-combined.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      env: {
+        NODE_ENV: 'production',
+        LOG_LEVEL: 'warn'
+      },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
+      kill_timeout: 10000,
+      listen_timeout: 3000,
+      shutdown_with_message: true,
+    },
+    {
+      name: 'v2ray-proxy-worker',
+      script: './workers/v2ray-proxy-worker.cjs',
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      restart_delay: 5000,
+      max_memory_restart: '500M',
+      cron_restart: '0 3 * * *',
+      error_file: './storage/logs/pm2-v2ray-proxy-error.log',
+      out_file: './storage/logs/pm2-v2ray-proxy-out.log',
+      log_file: './storage/logs/pm2-v2ray-proxy-combined.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      env: {
+        NODE_ENV: 'production',
+        LOG_LEVEL: 'warn'
+      },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
+      kill_timeout: 10000,
+      listen_timeout: 3000,
+      shutdown_with_message: true,
+    },
+    {
+      name: 'quic-proxy-worker',
+      script: './workers/quic-proxy-worker.cjs',
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      restart_delay: 5000,
+      max_memory_restart: '400M',
+      cron_restart: '0 3 * * *',
+      error_file: './storage/logs/pm2-quic-proxy-error.log',
+      out_file: './storage/logs/pm2-quic-proxy-out.log',
+      log_file: './storage/logs/pm2-quic-proxy-combined.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      env: {
+        NODE_ENV: 'production',
+        LOG_LEVEL: 'warn'
+      },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
+      kill_timeout: 10000,
       listen_timeout: 3000,
       shutdown_with_message: true,
     }  ]

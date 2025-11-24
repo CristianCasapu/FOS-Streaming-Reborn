@@ -15,9 +15,10 @@ import TranscodesList from '../views/Transcodes/TranscodesList.vue';
 import IPBlocks from '../views/Security/IPBlocks.vue';
 import UserAgentBlocks from '../views/Security/UserAgentBlocks.vue';
 import AdvancedSecurity from '../views/Security/AdvancedSecurity.vue';
-import AdminsList from '../views/Admins/AdminsList.vue';
+import StaffList from '../views/Staff/StaffList.vue';
 import ActivitiesList from '../views/Activities/ActivitiesList.vue';
 import Settings from '../views/Settings/Settings.vue';
+import About from '../views/About.vue';
 
 const routes = [
     {
@@ -103,9 +104,9 @@ const routes = [
         meta: { requiresAuth: true },
     },
     {
-        path: '/admins',
-        name: 'Admins',
-        component: AdminsList,
+        path: '/staff',
+        name: 'Staff',
+        component: StaffList,
         meta: { requiresAuth: true },
     },
     {
@@ -118,6 +119,92 @@ const routes = [
         path: '/settings',
         name: 'Settings',
         component: Settings,
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/about',
+        name: 'About',
+        component: About,
+        meta: { requiresAuth: true },
+    },
+    // Detail Pages
+    {
+        path: '/subscribers/:id',
+        name: 'SubscriberDetail',
+        component: () => import('../views/Subscribers/SubscriberDetail.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/streams/:id',
+        name: 'StreamDetail',
+        component: () => import('../views/Streams/StreamDetail.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/streams/bouquets/:id',
+        name: 'BouquetDetail',
+        component: () => import('../views/Subscribers/BouquetDetail.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/streams/packages/:id',
+        name: 'PackageDetail',
+        component: () => import('../views/Subscribers/PackageDetail.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/subscribers/subscriptions/:id',
+        name: 'SubscriptionDetail',
+        component: () => import('../views/Subscribers/SubscriptionDetail.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/subscribers/trials/:id',
+        name: 'TrialDetail',
+        component: () => import('../views/Subscribers/TrialDetail.vue'),
+        meta: { requiresAuth: true },
+    },
+    // New Routes - Phase 1 Foundation
+    {
+        path: '/audit-logs',
+        name: 'AuditLogs',
+        component: () => import('../views/AuditLogs/AuditLogViewer.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/resellers',
+        name: 'Resellers',
+        component: () => import('../views/Resellers/ResellersManagement.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/resellers/:id',
+        name: 'ResellerDetail',
+        component: () => import('../views/Resellers/ResellerDashboard.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/v2ray/nodes',
+        name: 'V2RayNodes',
+        component: () => import('../views/V2Ray/NodeManagement.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/metrics',
+        name: 'Metrics',
+        component: () => import('../views/Metrics/MetricsDashboard.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/devices',
+        name: 'Devices',
+        component: () => import('../views/Devices/DeviceManagement.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/health',
+        name: 'Health',
+        component: () => import('../views/Health/HealthMonitor.vue'),
         meta: { requiresAuth: true },
     },
 ];

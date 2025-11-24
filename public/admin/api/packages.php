@@ -5,6 +5,11 @@
  * Manage subscription packages with connection limits and bouquet assignments
  */
 
+// Enable error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+
 require_once __DIR__ . '/../../../config.php';
 logincheck();
 header('Content-Type: application/json');
@@ -34,21 +39,26 @@ try {
             }
 
             $total = $query->count();
-            $packages = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
+            $packages = $query->with('bouquets')->skip(($page - 1) * $perPage)->take($perPage)->get();
 
             $formatted = $packages->map(function($package) use ($withBouquets) {
                 $data = [
                     'id' => $package->id,
                     'name' => $package->name,
                     'description' => $package->description,
-                    'max_connections' => $package->max_connections,
+                    'max_concurrent_devices' => $package->max_concurrent_devices,
+                    'bandwidth_limit_mbps' => $package->bandwidth_limit_mbps,
+                    'video_quality' => $package->video_quality,
+                    'allow_recording' => $package->allow_recording,
+                    'allow_timeshifting' => $package->allow_timeshifting,
+                    'features' => $package->features,
                     'price' => $package->price,
                     'duration_days' => $package->duration_days,
                     'is_active' => $package->is_active,
                     'bouquet_count' => $package->bouquets()->count(),
-                    'channel_count' => $package->channels->count(),
-                    'active_subscriptions_count' => $package->subscriptions()->where('is_active', 1)->where('expire_date', '>', now())->count(),
-                    'active_trials_count' => $package->trials()->where('is_active', 1)->where('expires_at', '>', now())->count(),
+                    'stream_count' => $package->stream_count,
+                    'active_subscriptions_count' => $package->subscriptions()->where('is_active', 1)->where('expire_date', '>', date('Y-m-d H:i:s'))->count(),
+                    'active_trials_count' => $package->trials()->where('is_active', 1)->where('expires_at', '>', date('Y-m-d H:i:s'))->count(),
                     'created_at' => $package->created_at,
                     'updated_at' => $package->updated_at
                 ];
@@ -57,7 +67,8 @@ try {
                     $data['bouquets'] = $package->bouquets->map(function($bouquet) {
                         return [
                             'id' => $bouquet->id,
-                            'name' => $bouquet->name
+                            'name' => $bouquet->name,
+                            'stream_count' => $bouquet->stream_count
                         ];
                     });
                 }
@@ -81,7 +92,7 @@ try {
             $id = $_GET['id'] ?? null;
             if (!$id) throw new Exception('Package ID required');
 
-            $package = Package::find($id);
+            $package = Package::with('bouquets')->find($id);
             if (!$package) throw new Exception('Package not found');
 
             $bouquets = $package->bouquets->map(function($bouquet) {
@@ -89,7 +100,7 @@ try {
                     'id' => $bouquet->id,
                     'name' => $bouquet->name,
                     'description' => $bouquet->description,
-                    'channel_count' => $bouquet->channels()->count()
+                    'stream_count' => $bouquet->stream_count
                 ];
             });
 
@@ -99,15 +110,20 @@ try {
                     'id' => $package->id,
                     'name' => $package->name,
                     'description' => $package->description,
-                    'max_connections' => $package->max_connections,
+                    'max_concurrent_devices' => $package->max_concurrent_devices,
+                    'bandwidth_limit_mbps' => $package->bandwidth_limit_mbps,
+                    'video_quality' => $package->video_quality,
+                    'allow_recording' => $package->allow_recording,
+                    'allow_timeshifting' => $package->allow_timeshifting,
+                    'features' => $package->features,
                     'price' => $package->price,
                     'duration_days' => $package->duration_days,
                     'is_active' => $package->is_active,
                     'bouquets' => $bouquets,
                     'bouquet_count' => $bouquets->count(),
-                    'channel_count' => $package->channels->count(),
-                    'active_subscriptions_count' => $package->subscriptions()->where('is_active', 1)->where('expire_date', '>', now())->count(),
-                    'active_trials_count' => $package->trials()->where('is_active', 1)->where('expires_at', '>', now())->count(),
+                    'stream_count' => $package->stream_count,
+                    'active_subscriptions_count' => $package->subscriptions()->where('is_active', 1)->where('expire_date', '>', date('Y-m-d H:i:s'))->count(),
+                    'active_trials_count' => $package->trials()->where('is_active', 1)->where('expires_at', '>', date('Y-m-d H:i:s'))->count(),
                     'created_at' => $package->created_at,
                     'updated_at' => $package->updated_at
                 ]
@@ -128,11 +144,16 @@ try {
 
             $package = new Package();
             $package->name = $input['name'];
-            $package->description = $input['description'] ?? null;
-            $package->max_connections = $input['max_connections'] ?? 1;
-            $package->price = $input['price'] ?? null;
-            $package->duration_days = $input['duration_days'] ?? null;
-            $package->is_active = $input['is_active'] ?? 1;
+            $package->description = !empty($input['description']) ? $input['description'] : null;
+            $package->max_concurrent_devices = !empty($input['max_concurrent_devices']) ? (int)$input['max_concurrent_devices'] : 1;
+            $package->bandwidth_limit_mbps = !empty($input['bandwidth_limit_mbps']) ? (int)$input['bandwidth_limit_mbps'] : null;
+            $package->video_quality = !empty($input['video_quality']) ? $input['video_quality'] : null;
+            $package->allow_recording = isset($input['allow_recording']) ? (bool)$input['allow_recording'] : false;
+            $package->allow_timeshifting = isset($input['allow_timeshifting']) ? (bool)$input['allow_timeshifting'] : false;
+            $package->features = !empty($input['features']) ? $input['features'] : null;
+            $package->price = !empty($input['price']) ? (float)$input['price'] : null;
+            $package->duration_days = !empty($input['duration_days']) ? (int)$input['duration_days'] : null;
+            $package->is_active = isset($input['is_active']) ? (bool)$input['is_active'] : true;
             $package->save();
 
             // Assign bouquets if provided
@@ -164,11 +185,16 @@ try {
             }
 
             if (isset($input['name'])) $package->name = $input['name'];
-            if (isset($input['description'])) $package->description = $input['description'];
-            if (isset($input['max_connections'])) $package->max_connections = $input['max_connections'];
-            if (isset($input['price'])) $package->price = $input['price'];
-            if (isset($input['duration_days'])) $package->duration_days = $input['duration_days'];
-            if (isset($input['is_active'])) $package->is_active = $input['is_active'];
+            if (isset($input['description'])) $package->description = !empty($input['description']) ? $input['description'] : null;
+            if (isset($input['max_concurrent_devices'])) $package->max_concurrent_devices = !empty($input['max_concurrent_devices']) ? (int)$input['max_concurrent_devices'] : 1;
+            if (isset($input['bandwidth_limit_mbps'])) $package->bandwidth_limit_mbps = !empty($input['bandwidth_limit_mbps']) ? (int)$input['bandwidth_limit_mbps'] : null;
+            if (isset($input['video_quality'])) $package->video_quality = !empty($input['video_quality']) ? $input['video_quality'] : null;
+            if (isset($input['allow_recording'])) $package->allow_recording = (bool)$input['allow_recording'];
+            if (isset($input['allow_timeshifting'])) $package->allow_timeshifting = (bool)$input['allow_timeshifting'];
+            if (isset($input['features'])) $package->features = !empty($input['features']) ? $input['features'] : null;
+            if (isset($input['price'])) $package->price = !empty($input['price']) ? (float)$input['price'] : null;
+            if (isset($input['duration_days'])) $package->duration_days = !empty($input['duration_days']) ? (int)$input['duration_days'] : null;
+            if (isset($input['is_active'])) $package->is_active = (bool)$input['is_active'];
             $package->save();
 
             // Update bouquets if provided
@@ -190,8 +216,8 @@ try {
             if (!$package) throw new Exception('Package not found');
 
             // Check if package has active subscriptions or trials
-            $activeSubscriptions = $package->subscriptions()->where('is_active', 1)->where('expire_date', '>', now())->count();
-            $activeTrials = $package->trials()->where('is_active', 1)->where('expires_at', '>', now())->count();
+            $activeSubscriptions = $package->subscriptions()->where('is_active', 1)->where('expire_date', '>', date('Y-m-d H:i:s'))->count();
+            $activeTrials = $package->trials()->where('is_active', 1)->where('expires_at', '>', date('Y-m-d H:i:s'))->count();
 
             if ($activeSubscriptions > 0 || $activeTrials > 0) {
                 throw new Exception("Cannot delete package with active subscriptions ({$activeSubscriptions}) or trials ({$activeTrials})");
@@ -274,14 +300,14 @@ try {
 
             $stats = [
                 'total_subscriptions' => $package->subscriptions()->count(),
-                'active_subscriptions' => $package->subscriptions()->where('is_active', 1)->where('expire_date', '>', now())->count(),
-                'expired_subscriptions' => $package->subscriptions()->where('expire_date', '<=', now())->count(),
+                'active_subscriptions' => $package->subscriptions()->where('is_active', 1)->where('expire_date', '>', date('Y-m-d H:i:s'))->count(),
+                'expired_subscriptions' => $package->subscriptions()->where('expire_date', '<=', date('Y-m-d H:i:s'))->count(),
                 'total_trials' => $package->trials()->count(),
-                'active_trials' => $package->trials()->where('is_active', 1)->where('expires_at', '>', now())->count(),
-                'expired_trials' => $package->trials()->where('expires_at', '<=', now())->count(),
+                'active_trials' => $package->trials()->where('is_active', 1)->where('expires_at', '>', date('Y-m-d H:i:s'))->count(),
+                'expired_trials' => $package->trials()->where('expires_at', '<=', date('Y-m-d H:i:s'))->count(),
                 'converted_trials' => $package->trials()->where('converted_to_subscription', 1)->count(),
                 'total_bouquets' => $package->bouquets()->count(),
-                'total_channels' => $package->channels->count()
+                'total_streams' => $package->stream_count
             ];
 
             echo json_encode([

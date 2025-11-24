@@ -80,6 +80,7 @@
                                 {{ formatDate(subscriber.created_at) }}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                <router-link :to="`/subscribers/${subscriber.id}`" class="text-blue-600 hover:text-blue-900">View</router-link>
                                 <button @click="editSubscriber(subscriber)" class="text-indigo-600 hover:text-indigo-900">Edit</button>
                                 <button @click="confirmDelete(subscriber)" class="text-red-600 hover:text-red-900">Delete</button>
                             </td>

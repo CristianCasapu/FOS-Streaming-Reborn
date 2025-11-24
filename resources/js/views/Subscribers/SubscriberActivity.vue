@@ -1,5 +1,6 @@
 <template>
-    <div class="py-6">
+    <AppLayout>
+        <div class="py-6">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="mb-6">
                 <h2 class="text-2xl font-bold text-gray-900">Subscriber Activity</h2>
@@ -128,11 +129,13 @@
                 </div>
             </div>
         </div>
-    </div>
+        </div>
+    </AppLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import AppLayout from '../../components/AppLayout.vue';
 import { subscriptionsAPI, trialsAPI } from '../../services/api';
 
 const activities = ref([]);

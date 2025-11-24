@@ -1,5 +1,6 @@
 <template>
-    <div class="py-6">
+    <AppLayout>
+        <div class="py-6">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="md:flex md:items-center md:justify-between mb-6">
                 <div class="flex-1 min-w-0">
@@ -108,12 +109,17 @@
                 </div>
             </div>
         </div>
-    </div>
+        </div>
+    </AppLayout>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import AppLayout from '../../components/AppLayout.vue';
 import { trialsAPI } from '../../services/api';
+
+const router = useRouter();
 
 const trials = ref([]);
 const loading = ref(false);
@@ -147,7 +153,7 @@ const openCreateModal = () => {
 };
 
 const viewTrial = (id) => {
-    alert(`View trial ${id} - to be implemented`);
+    router.push(`/subscribers/trials/${id}`);
 };
 
 const extendTrial = async (trial) => {

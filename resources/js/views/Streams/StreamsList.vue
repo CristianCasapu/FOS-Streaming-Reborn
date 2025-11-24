@@ -93,6 +93,12 @@
                                 <td class="px-6 py-4 text-sm">{{ stream.category }}</td>
                                 <td class="px-6 py-4"><span :class="['px-2 py-1 text-xs rounded-full', stream.status === 1 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800']">{{ stream.status === 1 ? 'RUNNING' : 'STOPPED' }}</span></td>
                                 <td class="px-6 py-4 text-right space-x-2">
+                                    <router-link :to="`/streams/${stream.id}`" class="text-blue-600 hover:text-blue-900">View</router-link>
+                                    <button v-if="stream.status === 1" @click="previewStream(stream)" class="text-purple-600 hover:text-purple-900 inline-flex items-center" title="Preview Stream">
+                                        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+                                        </svg>
+                                    </button>
                                     <button v-if="stream.status !== 1" @click="startStream(stream.id)" class="text-green-600 hover:text-green-900">Start</button>
                                     <button v-else @click="stopStream(stream.id)" class="text-yellow-600 hover:text-yellow-900">Stop</button>
                                     <button @click="confirmDelete(stream)" class="text-red-600 hover:text-red-900">Delete</button>
@@ -153,6 +159,48 @@
             @close="showImportWizard = false"
             @imported="handleImported"
         />
+
+        <!-- Preview Modal -->
+        <div v-if="showPreviewModal" class="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50" @click.self="closePreview">
+            <div class="relative w-full max-w-5xl mx-4">
+                <!-- Close Button -->
+                <button @click="closePreview" class="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors">
+                    <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+
+                <!-- Stream Info -->
+                <div class="bg-gray-900 text-white px-6 py-4 rounded-t-lg">
+                    <h3 class="text-xl font-semibold">{{ previewStreamData?.name }}</h3>
+                    <p class="text-sm text-gray-400 mt-1">{{ previewStreamData?.stream_source }}</p>
+                </div>
+
+                <!-- Video Player -->
+                <div class="bg-black rounded-b-lg overflow-hidden">
+                    <video
+                        ref="videoPlayer"
+                        class="w-full h-auto"
+                        controls
+                        autoplay
+                        :key="previewStreamData?.id"
+                    >
+                        <source :src="getPlaybackUrl(previewStreamData)" type="video/mp4">
+                        <source :src="getPlaybackUrl(previewStreamData)" type="application/x-mpegURL">
+                        Your browser does not support video playback.
+                    </video>
+
+                    <!-- Error Message -->
+                    <div v-if="videoError" class="p-8 text-center text-gray-400">
+                        <svg class="h-16 w-16 mx-auto mb-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p class="text-lg font-medium">Unable to play stream</p>
+                        <p class="text-sm mt-2">{{ videoError }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </AppLayout>
 </template>
 
@@ -173,6 +221,12 @@ const selectedStreams = ref([]);
 const showDeleteModal = ref(false);
 const streamToDelete = ref(null);
 const message = ref(null);
+
+// Preview modal
+const showPreviewModal = ref(false);
+const previewStreamData = ref(null);
+const videoPlayer = ref(null);
+const videoError = ref(null);
 
 // Add/Import stream modals
 const showAddModal = ref(false);
@@ -218,6 +272,54 @@ const bulkStart = async () => { if (!confirm('Start selected?')) return; try { a
 const bulkStop = async () => { if (!confirm('Stop selected?')) return; try { await streamsAPI.massStop(selectedStreams.value); showMessage('Stopped'); fetchStreams(); } catch (e) { showMessage('Error', 'error'); } };
 const bulkDelete = async () => { if (!confirm('Delete selected?')) return; try { await streamsAPI.massDelete(selectedStreams.value); showMessage('Deleted'); fetchStreams(); } catch (e) { showMessage('Error', 'error'); } };
 const showMessage = (text, type = 'success') => { message.value = { text, type }; setTimeout(() => message.value = null, 5000); };
+
+// Preview stream functions
+const getPlaybackUrl = (stream) => {
+    if (!stream) return '';
+
+    // If stream has a custom output URL, use that
+    if (stream.stream_output && stream.stream_output !== stream.stream_source) {
+        return stream.stream_output;
+    }
+
+    // For HTTP/HTTPS URLs (HLS .m3u8 or direct MP4), use as-is
+    if (stream.stream_source.startsWith('http://') || stream.stream_source.startsWith('https://')) {
+        return stream.stream_source;
+    }
+
+    // For local streams, construct the playback URL
+    // Assuming streams are served from the streaming port (8000) in HLS format
+    return `http://127.0.0.1:8000/live/${stream.id}/index.m3u8`;
+};
+
+const previewStream = (stream) => {
+    previewStreamData.value = stream;
+    videoError.value = null;
+    showPreviewModal.value = true;
+
+    // Set up error handling for video element
+    setTimeout(() => {
+        if (videoPlayer.value) {
+            videoPlayer.value.addEventListener('error', () => {
+                videoError.value = 'The stream format may not be supported by your browser, or the stream is not accessible.';
+            });
+        }
+    }, 100);
+};
+
+const closePreview = () => {
+    showPreviewModal.value = false;
+
+    // Stop video playback and clean up
+    if (videoPlayer.value) {
+        videoPlayer.value.pause();
+        videoPlayer.value.src = '';
+        videoPlayer.value.load();
+    }
+
+    previewStreamData.value = null;
+    videoError.value = null;
+};
 
 // Fetch categories
 const fetchCategories = async () => {

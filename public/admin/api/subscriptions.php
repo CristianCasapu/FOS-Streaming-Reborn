@@ -42,13 +42,15 @@ try {
             // Filter by status
             if ($status === 'active') {
                 $query->where('is_active', 1)
-                      ->where('expire_date', '>', now());
+                      ->where('expire_date', '>', date('Y-m-d H:i:s'));
             } elseif ($status === 'expired') {
-                $query->where('expire_date', '<=', now());
+                $query->where('expire_date', '<=', date('Y-m-d H:i:s'));
             } elseif ($status === 'expiring') {
                 // Expiring within 7 days
+                $now = date('Y-m-d H:i:s');
+                $future = date('Y-m-d H:i:s', strtotime('+7 days'));
                 $query->where('is_active', 1)
-                      ->whereBetween('expire_date', [now(), now()->addDays(7)]);
+                      ->whereBetween('expire_date', [$now, $future]);
             }
 
             $total = $query->count();
@@ -67,10 +69,14 @@ try {
                     'package_name' => $sub->package ? $sub->package->name : 'Unknown',
                     'device' => $sub->device,
                     'device_mac' => $sub->device_mac,
+                    'device_fingerprint' => $sub->device_fingerprint,
                     'ip_address' => $sub->ip_address,
+                    'last_ip_address' => $sub->last_ip_address,
                     'isp' => $sub->isp,
                     'last_connected' => $sub->last_connected,
                     'connection_count' => $sub->connection_count,
+                    'max_concurrent_connections' => $sub->max_concurrent_connections,
+                    'current_connections' => $sub->current_connections,
                     'expire_date' => $sub->expire_date,
                     'is_active' => $sub->is_active,
                     'auto_renew' => $sub->auto_renew,
@@ -172,9 +178,13 @@ try {
             $subscription->package_id = $input['package_id'];
             $subscription->device = $input['device'] ?? null;
             $subscription->device_mac = $input['device_mac'] ?? null;
+            $subscription->device_fingerprint = $input['device_fingerprint'] ?? null;
             $subscription->ip_address = $input['ip_address'] ?? null;
+            $subscription->last_ip_address = $input['last_ip_address'] ?? null;
             $subscription->isp = $input['isp'] ?? null;
             $subscription->user_agent = $input['user_agent'] ?? null;
+            $subscription->max_concurrent_connections = $input['max_concurrent_connections'] ?? $package->max_concurrent_devices ?? 1;
+            $subscription->current_connections = 0;
             $subscription->expire_date = $input['expire_date'];
             $subscription->is_active = $input['is_active'] ?? 1;
             $subscription->auto_renew = $input['auto_renew'] ?? 0;
@@ -205,9 +215,13 @@ try {
 
             if (isset($input['device'])) $subscription->device = $input['device'];
             if (isset($input['device_mac'])) $subscription->device_mac = $input['device_mac'];
+            if (isset($input['device_fingerprint'])) $subscription->device_fingerprint = $input['device_fingerprint'];
             if (isset($input['ip_address'])) $subscription->ip_address = $input['ip_address'];
+            if (isset($input['last_ip_address'])) $subscription->last_ip_address = $input['last_ip_address'];
             if (isset($input['isp'])) $subscription->isp = $input['isp'];
             if (isset($input['user_agent'])) $subscription->user_agent = $input['user_agent'];
+            if (isset($input['max_concurrent_connections'])) $subscription->max_concurrent_connections = $input['max_concurrent_connections'];
+            if (isset($input['current_connections'])) $subscription->current_connections = $input['current_connections'];
             if (isset($input['expire_date'])) $subscription->expire_date = $input['expire_date'];
             if (isset($input['is_active'])) $subscription->is_active = $input['is_active'];
             if (isset($input['auto_renew'])) $subscription->auto_renew = $input['auto_renew'];

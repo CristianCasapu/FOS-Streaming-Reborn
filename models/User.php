@@ -1,33 +1,13 @@
 <?php
-class User extends FosStreaming {
-
-    protected $table = 'users';
-
-    public function categories()
-    {
-        return $this->belongsToMany(Category::class);
-    }
-    
-    public function getCategoryNamesAttribute()
-    {
-        $return = "";
-        $prefix = '';
-        foreach($this->categories as $category)
-        {
-            $return .= $prefix . ' ' . $category->name . '';
-            $prefix = ', ';
-        }
-
-        return $return;
-    }
-
-    public function activity()
-    {
-        return $this->hasMany(Activity::class);
-    }
-
-    public function laststream()
-    {
-        return $this->hasOne(Stream::class, 'id', 'last_stream');
-    }
+/**
+ * User Model (Deprecated)
+ *
+ * This model is kept for backward compatibility only.
+ * All new code should use the Subscriber model instead.
+ *
+ * @deprecated Use Subscriber model instead
+ */
+class User extends Subscriber {
+    // This class simply extends Subscriber for backward compatibility
+    // The table will be 'subscribers' as defined in the Subscriber model
 }

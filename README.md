@@ -1,8 +1,9 @@
-# FOS-Streaming Reborn v70
+# FOS-Streaming Reborn v70 - Enterprise IPTV SaaS Platform
 
-A powerful streaming and restreaming platform with **modern Vue.js 3 admin interface**, advanced transcoding capabilities, user management, and enterprise-grade security features.
+An **enterprise-grade secured IPTV service platform** designed to provide ISP-resistant streaming through advanced encryption (SRT), traffic obfuscation (V2Ray), and modern protocols (QUIC/HTTP3). Built as a multi-tenant SaaS solution with zero-trust security architecture.
 
 **GitHub**: [CristianCasapu/FOS-Streaming-Reborn](https://github.com/CristianCasapu/FOS-Streaming-Reborn)
+**Architecture Plan**: See [PLATFORM_REFACTORING_MASTER_PLAN.md](docs/guides/PLATFORM_REFACTORING_MASTER_PLAN.md)
 
 ---
 
@@ -32,6 +33,39 @@ A powerful streaming and restreaming platform with **modern Vue.js 3 admin inter
 - 🔧 **PM2 Process Manager** - Manage background workers and system services from Settings
 - 👥 **Subscriber Management** - Refactored user management with activity tracking
 - ⚡ **Latest Packages** - Vite 7, Vue 3.5, Laravel 11 components
+
+## 🎯 Platform Vision & Roadmap
+
+### Core Mission
+Transform FOS-Streaming into a **secured IPTV service platform** that operates as a proxy for streaming content with enterprise-grade security, delivering:
+
+- **ISP-Resistant Streaming**: Undetectable traffic patterns through V2Ray obfuscation
+- **Military-Grade Encryption**: SRT protocol with AES-256 for all streams
+- **Zero-Trust Architecture**: Complete authentication and audit trails
+- **Multi-Tenant SaaS**: Reseller portals with white-label capabilities
+- **DPI Evasion**: Advanced techniques to bypass deep packet inspection
+
+### Upcoming Features (In Development)
+
+#### Phase 1: Advanced Streaming Protocols
+- ✨ **SRT (Secure Reliable Transport)**: Low-latency encrypted streaming
+- ✨ **QUIC/HTTP3**: Next-gen web delivery with TLS 1.3
+- ✨ **ECH (Encrypted Client Hello)**: Hide server names from ISPs
+- ✨ **V2Ray Integration**: VMess/VLESS traffic obfuscation
+
+#### Phase 2: Enhanced Security
+- 🔒 **Traffic Obfuscation**: WebSocket tunneling to disguise streams
+- 🔒 **CDN Integration**: Cloudflare/Sucuri for DDoS protection
+- 🔒 **Auto-Ban System**: Detect and block port scanners instantly
+- 🔒 **Role-Based Access**: Admin, Supervisor, Support roles
+
+#### Phase 3: Enterprise Features
+- 🏢 **VOD System**: MKV containers with multi-track support
+- 🏢 **On-Demand Streaming**: Fast-start standby streams
+- 🏢 **Load Balancing**: Multi-node architecture with failover
+- 🏢 **Reseller Portal**: Complete white-label solution
+
+See [PLATFORM_REFACTORING_MASTER_PLAN.md](docs/guides/PLATFORM_REFACTORING_MASTER_PLAN.md) for detailed implementation timeline.
 
 ## Features
 
@@ -71,12 +105,20 @@ A powerful streaming and restreaming platform with **modern Vue.js 3 admin inter
 
 ## System Requirements
 
-### Debian 12 (Bookworm)
+### Current Requirements (v70)
 - **OS**: Debian 12 (Bookworm)
 - **PHP**: 8.4.x
 - **MariaDB**: 11.4.x
 - **Nginx**: 1.26.x with HTTP-FLV module (includes RTMP + HTTP-FLV streaming)
 - **FFmpeg**: Latest static build
+
+### Future Requirements (v71+)
+Additional components for enterprise features:
+- **SRT Libraries**: libsrt-dev for secure streaming
+- **QUIC Support**: libngtcp2-dev, libnghttp3-dev
+- **V2Ray Core**: For traffic obfuscation
+- **Redis**: Required for caching and queues
+- **PM2**: Extended worker management
 
 > **⚠️ Important**: Only Debian 12 is supported. Debian 11, PHP 7.x, and Nginx 1.19.x are **no longer supported**.
 
@@ -613,6 +655,62 @@ See [/docs/guides/MIGRATION_PROGRESS.md](docs/guides/MIGRATION_PROGRESS.md) for 
 ---
 
 ## Changelog
+
+### Version 70.6 - Architecture Refactoring & Enterprise Foundation (2025-11-24)
+
+**Major Refactoring:**
+- 🔄 **Channels → Streams Simplification** - Removed redundant `channels` table and `bouquet_channel` pivot
+  - Bouquets now directly reference streams via `stream_ids` JSON column
+  - Cleaner data model, improved query performance
+- 🔄 **Users → Subscribers Rename** - Industry-standard terminology throughout platform
+  - Updated navigation, API endpoints, and Vue components
+  - Enhanced activity tracking for subscriber behavior
+- 🔄 **PM2 Workers Modernization** - Converted all workers from .js to .cjs (CommonJS)
+  - 5 core workers converted + 3 new protocol workers added
+  - Better Node.js 20+ compatibility and PM2 integration
+
+**Enterprise Foundation (85% Complete):**
+- ✅ **Reseller System** - Multi-tenant SaaS infrastructure (3 tables)
+- ✅ **Staff Management** - RBAC with Admin/Supervisor/Support roles
+- ✅ **Advanced Security** - Device locking, fingerprinting, audit trails (7 tables)
+- ✅ **V2Ray Integration** - Traffic obfuscation infrastructure (4 tables)
+- ✅ **Enhanced Streams** - 24 new fields for SRT, VOD, proxy-only modes
+
+**New Services:**
+- `SRTService` - SRT protocol with AES-256 encryption
+- `CDNService` - Multi-provider CDN (Cloudflare, Sucuri, Bunny)
+- `HealthCheckService` - Comprehensive system monitoring
+- `V2RayService` - VMess/VLESS traffic obfuscation
+- `DeviceFingerprintService` - Device binding and tracking
+
+**New Models:** 11 enterprise models (AuditLog, Reseller, Staff, V2Ray, Device management)
+
+**API Updates:** New audit_logs.php, enhanced packages/bouquets/subscriptions, removed channels/users
+
+**Frontend:** 15+ new Vue components, reorganized navigation (Streams/Subscribers dropdowns)
+
+**Stats:** 53 files modified, ~5,000 lines of code, 18 new database tables, 20+ documentation guides
+
+**Documentation:** See `docs/guides/FORUM_UPDATE_2025-11-24.md` for comprehensive details
+
+### Version 70.5 - Platform Vision & Refactoring Plan (2025-11-24)
+
+**Documentation & Planning:**
+- Created comprehensive platform refactoring master plan
+- Documented enterprise IPTV SaaS vision and roadmap
+- Analyzed and planned SRT, QUIC/HTTP3, V2Ray integration
+- Updated CLAUDE.md and README.md with platform purpose
+- Established 16-week implementation timeline
+
+**Added:**
+- **Master Refactoring Plan** (`docs/guides/PLATFORM_REFACTORING_MASTER_PLAN.md`)
+  - 8 implementation phases with detailed tasks
+  - Technology stack upgrades and requirements
+  - Security implementation specifications
+  - Performance optimization strategies
+  - Migration and testing strategies
+- **Platform Vision** documentation in README and CLAUDE.md
+- **Roadmap** for enterprise features and security enhancements
 
 ### Version 70.4 - PM2 Workers & Package Upgrades (2025-11-23)
 

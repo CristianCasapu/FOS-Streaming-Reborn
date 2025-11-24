@@ -1,0 +1,58 @@
+{
+    "id": "job_6924aef6959010.95467503",
+    "queue": "ffprobe-analysis",
+    "data": {
+        "stream_ids": [
+            16,
+            17,
+            18,
+            19,
+            20
+        ],
+        "batch_size": 5
+    },
+    "status": "completed",
+    "created_at": "2025-11-24 13:16:06",
+    "updated_at": "2025-11-24 13:16:21",
+    "attempts": 1,
+    "max_attempts": 3,
+    "error": null,
+    "completed_at": "2025-11-24 13:16:21",
+    "result": {
+        "analyzed": 5,
+        "failed": 0,
+        "total": 5,
+        "results": [
+            {
+                "stream_id": 16,
+                "status": "success",
+                "duration": 1.14,
+                "health_score": 90
+            },
+            {
+                "stream_id": 17,
+                "status": "success",
+                "duration": 0.44,
+                "health_score": 90
+            },
+            {
+                "stream_id": 18,
+                "status": "success",
+                "duration": 0.8,
+                "health_score": 90
+            },
+            {
+                "stream_id": 19,
+                "status": "success",
+                "duration": 0.88,
+                "health_score": 90
+            },
+            {
+                "stream_id": 20,
+                "status": "success",
+                "duration": 0.82,
+                "health_score": 90
+            }
+        ]
+    }
+}

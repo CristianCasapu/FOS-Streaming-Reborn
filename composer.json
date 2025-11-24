@@ -40,38 +40,40 @@
   },
   "require": {
     "php": ">=8.4",
+    "ext-curl": "*",
     "ext-json": "*",
-    "ext-pdo": "*",
     "ext-mbstring": "*",
     "ext-openssl": "*",
-    "ext-curl": "*",
-    "jenssegers/blade": "^2.0",
-    "nesbot/carbon": "^3.10",
-    "illuminate/database": "^11.40",
-    "illuminate/validation": "^11.40",
+    "ext-pdo": "*",
+    "guzzlehttp/guzzle": "^7.9",
+    "illuminate/auth": "^11.40",
     "illuminate/cache": "^11.40",
-    "illuminate/redis": "^11.40",
+    "illuminate/console": "^11.40",
+    "illuminate/cookie": "^11.40",
+    "illuminate/database": "^11.40",
+    "illuminate/encryption": "^11.40",
     "illuminate/events": "^11.40",
-    "illuminate/queue": "^11.40",
+    "illuminate/filesystem": "^11.40",
+    "illuminate/hashing": "^11.40",
+    "illuminate/http": "^11.40",
+    "illuminate/log": "^11.40",
     "illuminate/mail": "^11.40",
     "illuminate/notifications": "^11.40",
-    "illuminate/filesystem": "^11.40",
-    "illuminate/http": "^11.40",
+    "illuminate/pagination": "^11.40",
+    "illuminate/queue": "^11.40",
+    "illuminate/redis": "^11.40",
     "illuminate/routing": "^11.40",
     "illuminate/session": "^11.40",
-    "illuminate/encryption": "^11.40",
-    "illuminate/hashing": "^11.40",
-    "illuminate/cookie": "^11.40",
-    "illuminate/log": "^11.40",
-    "illuminate/pagination": "^11.40",
-    "illuminate/auth": "^11.40",
-    "illuminate/console": "^11.40",
     "illuminate/support": "^11.40",
+    "illuminate/validation": "^11.40",
+    "jenssegers/blade": "^2.0",
     "monolog/monolog": "^3.9",
-    "vlucas/phpdotenv": "^5.6",
-    "symfony/var-dumper": "^7.2",
+    "nesbot/carbon": "^3.10",
+    "owen-it/laravel-auditing": "^14.0",
     "predis/predis": "^2.2",
-    "guzzlehttp/guzzle": "^7.9"
+    "spatie/laravel-permission": "^6.23",
+    "symfony/var-dumper": "^7.2",
+    "vlucas/phpdotenv": "^5.6"
   },
   "require-dev": {
     "phpunit/phpunit": "^11.5",
@@ -105,9 +107,67 @@
     "post-update-cmd": [
       "@php -r \"echo 'Update complete. Check CHANGELOG.md for migration notes.\\\\n';\""
     ],
-    "test": "phpunit",
+    "test": [
+      "Composer\\Config::disableProcessTimeout",
+      "@php artisan test"
+    ],
+    "test:unit": "phpunit --testsuite Unit",
+    "test:feature": "phpunit --testsuite Feature",
+    "test:coverage": "phpunit --coverage-html coverage",
+    "lint": "pint",
+    "lint:test": "pint --test",
+    "analyze": "phpstan analyse --memory-limit=2G",
+    "format": "@lint",
+    "check": [
+      "@lint:test",
+      "@analyze",
+      "@test"
+    ],
     "security-check": "bash scripts/security-check.sh",
-    "organize-docs": "@php scripts/organize-docs.php"
+    "organize-docs": "@php scripts/organize-docs.php",
+    "serve": "@php artisan serve",
+    "serve:dev": "@php artisan serve --host=0.0.0.0 --port=8000",
+    "fresh": [
+      "Composer\\Config::disableProcessTimeout",
+      "@php artisan migrate:fresh --seed"
+    ],
+    "migrate": "@php artisan migrate",
+    "migrate:fresh": "@fresh",
+    "migrate:status": "@php artisan migrate:status",
+    "db:seed": "@php artisan db:seed",
+    "db:wipe": "@php artisan db:wipe --force",
+    "clear-cache": [
+      "@php -r \"array_map('unlink', glob('cache/*.php'));\"",
+      "@php artisan optimize:clear"
+    ],
+    "cache:clear": "@clear-cache",
+    "optimize": "@php artisan optimize",
+    "ide-helper": [
+      "@php artisan ide-helper:generate",
+      "@php artisan ide-helper:models --nowrite"
+    ],
+    "check-syntax": [
+      "find app models -name '*.php' -print0 | xargs -0 -n1 php -l",
+      "find database -name '*.php' -print0 | xargs -0 -n1 php -l"
+    ],
+    "phpcs": "phpcs --standard=PSR12 app models",
+    "phpcs:fix": "phpcbf --standard=PSR12 app models",
+    "deploy:check": [
+      "@check-syntax",
+      "@lint:test",
+      "@analyze",
+      "@test"
+    ],
+    "dev": [
+      "@clear-cache",
+      "@migrate",
+      "@serve"
+    ],
+    "prod:deploy": [
+      "@composer install --no-dev --optimize-autoloader",
+      "@migrate --force",
+      "@optimize"
+    ]
   },
   "config": {
     "optimize-autoloader": true,

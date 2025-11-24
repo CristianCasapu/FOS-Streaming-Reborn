@@ -14,11 +14,15 @@ class Subscription extends FosStreaming {
         'package_id',
         'device',
         'device_mac',
+        'device_fingerprint',
         'ip_address',
+        'last_ip_address',
         'isp',
         'user_agent',
         'last_connected',
         'connection_count',
+        'max_concurrent_connections',
+        'current_connections',
         'expire_date',
         'is_active',
         'auto_renew',
@@ -31,6 +35,8 @@ class Subscription extends FosStreaming {
         'is_active' => 'boolean',
         'auto_renew' => 'boolean',
         'connection_count' => 'integer',
+        'max_concurrent_connections' => 'integer',
+        'current_connections' => 'integer',
         'subscriber_id' => 'integer',
         'package_id' => 'integer',
     ];
@@ -63,7 +69,17 @@ class Subscription extends FosStreaming {
      */
     public function isExpired()
     {
-        return $this->expire_date && $this->expire_date->isPast();
+        if (!$this->expire_date) {
+            return false;
+        }
+
+        // Handle both DateTime objects and string dates
+        if ($this->expire_date instanceof \DateTime) {
+            return $this->expire_date < new \DateTime();
+        }
+
+        // If it's a string, compare using strtotime
+        return strtotime($this->expire_date) < time();
     }
 
     /**
@@ -83,7 +99,8 @@ class Subscription extends FosStreaming {
             return 0;
         }
 
-        return now()->diffInDays($this->expire_date);
+        $now = new \DateTime();
+        return $now->diff($this->expire_date)->days;
     }
 
     /**
@@ -95,7 +112,9 @@ class Subscription extends FosStreaming {
             return 0;
         }
 
-        return now()->diffInHours($this->expire_date);
+        $now = new \DateTime();
+        $interval = $now->diff($this->expire_date);
+        return ($interval->days * 24) + $interval->h;
     }
 
     /**
@@ -126,7 +145,7 @@ class Subscription extends FosStreaming {
      */
     public function recordConnection($ipAddress = null, $userAgent = null, $isp = null)
     {
-        $this->last_connected = now();
+        $this->last_connected = date('Y-m-d H:i:s');
         $this->connection_count++;
 
         if ($ipAddress) {
@@ -226,7 +245,7 @@ class Subscription extends FosStreaming {
     public function scopeValid($query)
     {
         return $query->where('is_active', 1)
-                     ->where('expire_date', '>', now());
+                     ->where('expire_date', '>', date('Y-m-d H:i:s'));
     }
 
     /**
@@ -234,7 +253,7 @@ class Subscription extends FosStreaming {
      */
     public function scopeExpired($query)
     {
-        return $query->where('expire_date', '<=', now());
+        return $query->where('expire_date', '<=', date('Y-m-d H:i:s'));
     }
 
     /**
@@ -242,8 +261,10 @@ class Subscription extends FosStreaming {
      */
     public function scopeExpiringSoon($query, $days = 7)
     {
+        $now = date('Y-m-d H:i:s');
+        $future = date('Y-m-d H:i:s', strtotime("+{$days} days"));
         return $query->where('is_active', 1)
-                     ->whereBetween('expire_date', [now(), now()->addDays($days)]);
+                     ->whereBetween('expire_date', [$now, $future]);
     }
 
     /**

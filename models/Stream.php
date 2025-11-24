@@ -1,6 +1,38 @@
 <?php
 class Stream extends FosStreaming {
 
+    protected $fillable = [
+        'name',
+        'streamurl',
+        'streamurl2',
+        'streamurl3',
+        'source_url',
+        'running',
+        'status',
+        'cat_id',
+        'trans_id',
+        'pid',
+        'restream',
+        'video_codec_name',
+        'audio_codec_name',
+        'bitstreamfilter',
+        'checker',
+        'stream_type',
+        'stream_mode',
+        'logo',
+        'tvid',
+        'require_device_lock',
+        'allowed_device_types',
+        'proxy_settings',
+        'encryption_settings',
+        'proxy_status',
+        'proxy_port',
+        'proxy_error',
+        'max_connections',
+        'current_connections',
+        'last_checked'
+    ];
+
     public function category()
     {
         return $this->hasOne(Category::class, 'id', 'cat_id');

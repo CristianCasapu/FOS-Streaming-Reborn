@@ -1,0 +1,124 @@
+{
+    "id": "job_6924ac82d259e9.07147095",
+    "queue": "stream-import",
+    "data": {
+        "streams": [
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "In curand pe EVO!",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/123495"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "EVO: CINEMA PREMIERA #2025",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/132378"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "EVO: CINEMA Romania",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/133975"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "EVO: Filme 2025 #1",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/150913"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "EVO: Filme 2025 #2",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/150914"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "EVO: Filme 2025 #3",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/150915"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Antena 1 SD",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/1"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Antena 1 HD",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/133"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Antena 1 FHD",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/2"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Antena 1 4K EVO",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/68932"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Antena 1 EVO 50fps",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/128879"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Pro TV SD",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/99"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Pro TV HD",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/7688"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Pro TV FHD",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/100"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Pro TV 4K EVO",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/68933"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "PRO TV EVO 50fps",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/128878"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "PRO TV International",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/128877"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Kanal D SD",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/77"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Kanal D HD",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/10459"
+            },
+            {
+                "category_name": "Romania \u2b50 [LIVE] ",
+                "name": "Kanal D FHD",
+                "url": "http:\/\/onlyfans.buzz:8080\/IST_STEFAN\/7DTzyymuxLfU\/78"
+            }
+        ],
+        "import_mode": "live_only",
+        "auto_create_categories": true,
+        "default_status": 0
+    },
+    "status": "completed",
+    "created_at": "2025-11-24 13:05:38",
+    "updated_at": "2025-11-24 13:05:42",
+    "attempts": 1,
+    "max_attempts": 3,
+    "error": null,
+    "completed_at": "2025-11-24 13:05:42",
+    "result": {
+        "imported": 20,
+        "failed": 0,
+        "total": 20,
+        "ffprobe_job_id": "job_6924ac86df5392.27962991"
+    }
+}

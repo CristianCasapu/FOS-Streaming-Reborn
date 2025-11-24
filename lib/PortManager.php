@@ -1,11 +1,13 @@
 <?php
+
+namespace FOS\Security;
+
 /**
  * FOS-Streaming Port Manager
  *
  * Manages random port selection with Cloudflare SSL support
  * and port availability checking.
  */
-
 class PortManager
 {
     /**

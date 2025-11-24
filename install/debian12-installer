@@ -979,9 +979,69 @@ echo "${FOS_USER} ALL = (root) NOPASSWD: ${FFPROBE_BIN}" | sudo tee -a /etc/sudo
 sudo chmod 0440 /etc/sudoers.d/fos-ffmpeg
 
 # ============================================================================
-# STEP 15: Configure Nginx and SSL Certificates
+# STEP 15: Install Streaming Security Tools (SRT, QUIC, V2Ray)
 # ============================================================================
-log_step "Step 15: Configuring Nginx and SSL Certificates"
+log_step "Step 15: Installing Streaming Security Tools"
+
+log_info "Installing SRT (Secure Reliable Transport) libraries..."
+sudo apt-get install -y \
+    libsrt-openssl-dev \
+    srt-tools \
+    pkg-config || log_warn "Some SRT packages may not be available on this system"
+
+log_info "Installing QUIC/HTTP3 libraries..."
+sudo apt-get install -y \
+    libngtcp2-dev \
+    libnghttp3-dev || log_warn "QUIC libraries may need manual installation"
+
+log_info "Installing additional security tools..."
+sudo apt-get install -y \
+    redis-server \
+    fail2ban \
+    ufw \
+    jq \
+    unzip
+
+# Configure Redis for session management
+log_info "Configuring Redis..."
+sudo systemctl enable redis-server
+sudo systemctl start redis-server
+
+# Verify SRT installation
+if command -v srt-live-transmit &> /dev/null; then
+    SRT_VERSION=$(srt-live-transmit -version 2>&1 | head -n1)
+    log_success "SRT tools installed: ${SRT_VERSION}"
+else
+    log_warn "SRT tools installation needs verification"
+fi
+
+# Install V2Ray for traffic obfuscation
+log_info "Installing V2Ray for traffic obfuscation..."
+V2RAY_INSTALL_SCRIPT="${FOS_DIR}/fospackv69/nginx-builder/install-v2ray.sh"
+if [ -f "${V2RAY_INSTALL_SCRIPT}" ]; then
+    log_info "Running V2Ray installation script..."
+    sudo bash "${V2RAY_INSTALL_SCRIPT}"
+
+    # Verify V2Ray installation
+    if [ -f "/usr/local/v2ray/v2ray" ]; then
+        V2RAY_VERSION=$(/usr/local/v2ray/v2ray version | grep V2Ray | cut -d' ' -f2)
+        log_success "V2Ray ${V2RAY_VERSION} installed successfully"
+
+        # Enable V2Ray service
+        sudo systemctl enable v2ray
+        log_info "V2Ray service enabled"
+    else
+        log_warn "V2Ray installation needs verification"
+    fi
+else
+    log_warn "V2Ray installation script not found, skipping V2Ray setup"
+    log_info "You can install V2Ray later by running: bash ${FOS_DIR}/fospackv69/nginx-builder/install-v2ray.sh"
+fi
+
+# ============================================================================
+# STEP 16: Configure Nginx and SSL Certificates
+# ============================================================================
+log_step "Step 16: Configuring Nginx and SSL Certificates"
 
 log_info "Generating self-signed certificate for ${DOMAIN_NAME}..."
 generate_self_signed_cert "${DOMAIN_NAME}" "${CERTS_DIR}"

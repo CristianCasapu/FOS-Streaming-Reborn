@@ -11,7 +11,7 @@
  * - restart: Restart PM2 workers
  * - logs: Get recent logs
  * - queue_stats: Get job queue statistics
- * - sync: Regenerate ecosystem.config.js from database and reload PM2
+ * - sync: Regenerate ecosystem.config.cjs from database and reload PM2
  */
 
 require_once __DIR__ . '/../../../config.php';
@@ -28,6 +28,9 @@ header('Content-Type: application/json');
 
 // Get action from query parameter
 $action = $_GET['action'] ?? 'status';
+
+// Define project root path (3 levels up from /public/admin/api/)
+$projectRoot = realpath(__DIR__ . '/../../..');
 
 try {
     switch ($action) {
@@ -66,7 +69,7 @@ try {
 
             if ($exitCode === 0) {
                 // Start workers after installation
-                exec('pm2 start ecosystem.config.js 2>&1', $startOutput, $startExitCode);
+                exec("cd {$projectRoot} && pm2 start ecosystem.config.cjs 2>&1", $startOutput, $startExitCode);
 
                 echo json_encode([
                     'success' => true,
@@ -78,18 +81,18 @@ try {
             break;
 
         case 'get_config':
-            // Get worker configuration from ecosystem.config.js
+            // Get worker configuration from ecosystem.config.cjs
             $workerName = $_GET['worker'] ?? null;
 
             if (!$workerName) {
                 throw new Exception('Worker name is required');
             }
 
-            // Read ecosystem.config.js
-            $ecosystemPath = __DIR__ . '/../../../ecosystem.config.js';
+            // Read ecosystem.config.cjs
+            $ecosystemPath = __DIR__ . '/../../../ecosystem.config.cjs';
 
             if (!file_exists($ecosystemPath)) {
-                throw new Exception('ecosystem.config.js not found');
+                throw new Exception('ecosystem.config.cjs not found');
             }
 
             $ecosystemContent = file_get_contents($ecosystemPath);
@@ -105,7 +108,7 @@ try {
             break;
 
         case 'update_config':
-            // Update worker configuration in ecosystem.config.js
+            // Update worker configuration in ecosystem.config.cjs
             $workerName = $_POST['worker'] ?? null;
             $configData = $_POST['config'] ?? null;
 
@@ -118,11 +121,11 @@ try {
                 $configData = json_decode($configData, true);
             }
 
-            // Update ecosystem.config.js
-            $ecosystemPath = __DIR__ . '/../../../ecosystem.config.js';
+            // Update ecosystem.config.cjs
+            $ecosystemPath = __DIR__ . '/../../../ecosystem.config.cjs';
 
             if (!file_exists($ecosystemPath)) {
-                throw new Exception('ecosystem.config.js not found');
+                throw new Exception('ecosystem.config.cjs not found');
             }
 
             $ecosystemContent = file_get_contents($ecosystemPath);
@@ -268,9 +271,9 @@ try {
             $workerId = $_GET['worker_id'] ?? 'all';
 
             if ($workerId === 'all') {
-                exec('pm2 start ecosystem.config.js 2>&1', $output, $exitCode);
+                exec("cd {$projectRoot} && pm2 start ecosystem.config.cjs 2>&1", $output, $exitCode);
             } else {
-                exec("pm2 start {$workerId} 2>&1", $output, $exitCode);
+                exec("cd {$projectRoot} && pm2 start {$workerId} 2>&1", $output, $exitCode);
             }
 
             if ($exitCode === 0) {
@@ -288,9 +291,9 @@ try {
             $workerId = $_GET['worker_id'] ?? 'all';
 
             if ($workerId === 'all') {
-                exec('pm2 stop all 2>&1', $output, $exitCode);
+                exec("cd {$projectRoot} && pm2 stop all 2>&1", $output, $exitCode);
             } else {
-                exec("pm2 stop {$workerId} 2>&1", $output, $exitCode);
+                exec("cd {$projectRoot} && pm2 stop {$workerId} 2>&1", $output, $exitCode);
             }
 
             if ($exitCode === 0) {
@@ -308,9 +311,9 @@ try {
             $workerId = $_GET['worker_id'] ?? 'all';
 
             if ($workerId === 'all') {
-                exec('pm2 restart all 2>&1', $output, $exitCode);
+                exec("cd {$projectRoot} && pm2 restart all 2>&1", $output, $exitCode);
             } else {
-                exec("pm2 restart {$workerId} 2>&1", $output, $exitCode);
+                exec("cd {$projectRoot} && pm2 restart {$workerId} 2>&1", $output, $exitCode);
             }
 
             if ($exitCode === 0) {
@@ -329,9 +332,9 @@ try {
             $lines = isset($_GET['lines']) ? (int)$_GET['lines'] : 100;
 
             if ($worker === 'all') {
-                exec("pm2 logs --nostream --lines {$lines} 2>&1", $output, $exitCode);
+                exec("cd {$projectRoot} && pm2 logs --nostream --lines {$lines} 2>&1", $output, $exitCode);
             } else {
-                exec("pm2 logs {$worker} --nostream --lines {$lines} 2>&1", $output, $exitCode);
+                exec("cd {$projectRoot} && pm2 logs {$worker} --nostream --lines {$lines} 2>&1", $output, $exitCode);
             }
 
             echo json_encode([
@@ -401,11 +404,11 @@ try {
             break;
 
         case 'sync':
-            // Regenerate ecosystem.config.js from database and reload PM2
+            // Regenerate ecosystem.config.cjs from database and reload PM2
             $workerService = new PM2WorkerService();
             $isDev = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
 
-            // Generate ecosystem.config.js from database
+            // Generate ecosystem.config.cjs from database
             $result = $workerService->syncWithPM2($isDev);
 
             if ($result['success']) {
@@ -471,7 +474,7 @@ function checkPM2Installed() {
 }
 
 /**
- * Extract worker configuration from ecosystem.config.js
+ * Extract worker configuration from ecosystem.config.cjs
  */
 function extractWorkerConfig($content, $workerName) {
     $config = [
@@ -523,7 +526,7 @@ function extractWorkerConfig($content, $workerName) {
 }
 
 /**
- * Update worker configuration in ecosystem.config.js
+ * Update worker configuration in ecosystem.config.cjs
  */
 function updateWorkerConfig($content, $workerName, $configData) {
     // Find the worker block

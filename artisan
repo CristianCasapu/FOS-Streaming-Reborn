@@ -43,6 +43,19 @@ $artisan->resolve(\Laravel\Sail\Console\PublishCommand::class);
 require_once __DIR__.'/app/Console/Commands/ServeCommand.php';
 $artisan->add(new \App\Console\Commands\ServeCommand);
 
+// Register database commands
+require_once __DIR__.'/app/Console/Commands/MigrateCommand.php';
+require_once __DIR__.'/app/Console/Commands/MigrateFreshCommand.php';
+require_once __DIR__.'/app/Console/Commands/MigrateStatusCommand.php';
+require_once __DIR__.'/app/Console/Commands/DbSeedCommand.php';
+require_once __DIR__.'/app/Console/Commands/DbWipeCommand.php';
+
+$artisan->add(new \App\Console\Commands\MigrateCommand);
+$artisan->add(new \App\Console\Commands\MigrateFreshCommand);
+$artisan->add(new \App\Console\Commands\MigrateStatusCommand);
+$artisan->add(new \App\Console\Commands\DbSeedCommand);
+$artisan->add(new \App\Console\Commands\DbWipeCommand);
+
 // Add custom commands here
 // $artisan->add(new App\Console\Commands\StreamMonitorCommand);
 
