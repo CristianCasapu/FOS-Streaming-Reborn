@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Services\PathDetectionService;
+
 /**
  * StreamManagerService
  *
@@ -17,6 +19,50 @@ class StreamManagerService
     public function __construct()
     {
         $this->logger = new \App\Services\LoggerService('stream-manager');
+
+        // Ensure HLS folder exists on startup
+        $this->ensureHlsFolderExists();
+    }
+
+    /**
+     * Ensure the streaming folders exist
+     * Creates DASH and HLS directories if they don't exist with proper permissions
+     *
+     * @return bool True if folders exist or were created successfully
+     */
+    private function ensureHlsFolderExists(): bool
+    {
+        $setting = \Setting::first();
+        $streamsPath = $setting->streams_path ?: PathDetectionService::detectProjectRoot() . '/fospackv69/fos/streams';
+
+        // Create both DASH and HLS folders
+        $folders = [
+            $streamsPath . '/dash',
+            $streamsPath . '/hls'
+        ];
+
+        $created = false;
+        foreach ($folders as $path) {
+            if (!file_exists($path)) {
+                $this->logger->info("Creating streaming folder: {$path}");
+                if (@mkdir($path, 0755, true)) {
+                    @chmod($path, 0755);
+                    $this->logger->info("Streaming folder created successfully: {$path}");
+                    $created = true;
+                } else {
+                    $this->logger->warning("Failed to create streaming folder: {$path}");
+                }
+            } else {
+                // Folder exists, ensure permissions
+                if (!is_writable($path)) {
+                    @chmod($path, 0755);
+                    $this->logger->info("Fixed permissions for streaming folder: {$path}");
+                }
+                $created = true;
+            }
+        }
+
+        return $created;
     }
 
     /**
@@ -26,6 +72,9 @@ class StreamManagerService
      */
     public function processQueuedCommands(): array
     {
+        // Re-check HLS folder on each run
+        $this->ensureHlsFolderExists();
+
         $stats = [
             'processed' => 0,
             'success' => 0,
@@ -41,6 +90,21 @@ class StreamManagerService
         foreach ($streams as $stream) {
             $command = $stream->scheduled_command;
             $this->logger->info("Processing command '{$command}' for stream ID {$stream->id}");
+
+            // Skip start/restart commands for disabled streams
+            if (in_array($command, ['start', 'restart']) && $stream->isDisabled()) {
+                $this->logger->warning("Skipping {$command} command for disabled stream {$stream->id}");
+                $stream->clearScheduledCommand('skipped: stream is disabled');
+                $stats['processed']++;
+                $stats['failed']++;
+                $stats['commands'][] = [
+                    'stream_id' => $stream->id,
+                    'command' => $command,
+                    'success' => false,
+                    'message' => 'Stream is disabled'
+                ];
+                continue;
+            }
 
             $result = $this->executeCommand($stream, $command);
 
@@ -115,6 +179,15 @@ class StreamManagerService
      */
     private function startStream(\Stream $stream): array
     {
+        // Double-check: disabled streams cannot be started
+        if ($stream->isDisabled()) {
+            $stream->clearScheduledCommand('error: stream is disabled');
+            return [
+                'success' => false,
+                'message' => 'Cannot start disabled stream'
+            ];
+        }
+
         // Update state to starting
         $stream->updateState('starting');
 
@@ -230,13 +303,27 @@ class StreamManagerService
         // Wait for process to die
         sleep(1);
 
-        // Clean up HLS files
+        // Clean up streaming segment files (DASH and HLS)
         $setting = \Setting::first();
-        if ($setting && $setting->hlsfolder) {
-            $hlsPath = base_path("public/{$setting->hlsfolder}/{$stream->id}*");
+        $streamsPath = $setting->streams_path ?: PathDetectionService::detectProjectRoot() . '/fospackv69/fos/streams';
+
+        // Clean DASH segments (nginx-rtmp creates nested directories)
+        $dashPath = "{$streamsPath}/dash/{$stream->id}";
+        if (file_exists($dashPath)) {
+            $this->logger->info("Cleaning up DASH files: {$dashPath}");
+            exec("/bin/rm -rf {$dashPath}");
+        }
+
+        // Clean HLS segments (nginx-rtmp creates nested directories)
+        $hlsPath = "{$streamsPath}/hls/{$stream->id}";
+        if (file_exists($hlsPath)) {
             $this->logger->info("Cleaning up HLS files: {$hlsPath}");
             exec("/bin/rm -rf {$hlsPath}");
         }
+
+        // Clean legacy flat HLS files (for backwards compatibility)
+        exec("/bin/rm -f {$streamsPath}/hls/{$stream->id}_*.m3u8 2>/dev/null");
+        exec("/bin/rm -f {$streamsPath}/hls/{$stream->id}_*.ts 2>/dev/null");
 
         // Update stream
         $stream->pid = null;

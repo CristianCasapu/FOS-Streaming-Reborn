@@ -139,6 +139,15 @@ id_rsa*
 /temp/*
 *.ffmpeg.log
 
+# FOS Pack - Streaming content (keep directories, ignore content)
+fospackv69/fos/streams/dash/*
+!fospackv69/fos/streams/dash/.gitkeep
+fospackv69/fos/streams/hls/*
+!fospackv69/fos/streams/hls/.gitkeep
+
+# FOS Pack - Nginx builder source (varies by version)
+fospackv69/nginx-builder/nginx-*/
+
 # Uploaded Files
 /public/uploads/logos/*
 !/public/uploads/logos/.gitkeep

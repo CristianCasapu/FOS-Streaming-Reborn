@@ -324,6 +324,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { streamsAPI, categoriesAPI } from '../services/api';
+import { useToastStore } from '../stores/toast';
 import {
     categorizeStream,
     detectCountry,
@@ -331,6 +332,8 @@ import {
     autoMapStreams,
     cleanCategoryName
 } from '../utils/channelCategorizer';
+
+const toast = useToastStore();
 
 const props = defineProps({
     show: Boolean,
@@ -421,7 +424,7 @@ const canProceed = computed(() => {
     return false;
 });
 
-// Parse M3U content
+// Parse M3U content - extracts all available attributes from M3U/M3U_Plus format
 const parseM3UContent = (content) => {
     const lines = content.split('\n');
     const streams = [];
@@ -439,15 +442,44 @@ const parseM3UContent = (content) => {
                 url: '',
                 logo: '',
                 group: '',
+                tvg_id: '',
+                xui_id: '',
+                timeshift: null,
                 type: 'live' // default
             };
 
-            // Extract attributes
+            // Extract all M3U_Plus attributes
             const logoMatch = line.match(/tvg-logo="([^"]*)"/);
             if (logoMatch) currentStream.logo = logoMatch[1];
 
             const groupMatch = line.match(/group-title="([^"]*)"/);
             if (groupMatch) currentStream.group = groupMatch[1];
+
+            // Extract tvg-id (channel identifier)
+            const tvgIdMatch = line.match(/tvg-id="([^"]*)"/);
+            if (tvgIdMatch) currentStream.tvg_id = tvgIdMatch[1];
+
+            // Extract tvg-name (can be different from display name)
+            const tvgNameMatch = line.match(/tvg-name="([^"]*)"/);
+            if (tvgNameMatch) currentStream.tvg_name = tvgNameMatch[1];
+
+            // Extract xui-id (external provider ID)
+            const xuiIdMatch = line.match(/xui-id="([^"]*)"/);
+            if (xuiIdMatch) currentStream.xui_id = xuiIdMatch[1];
+
+            // Extract timeshift (catchup/rewind capability in days)
+            const timeshiftMatch = line.match(/timeshift="([^"]*)"/);
+            if (timeshiftMatch) currentStream.timeshift = parseInt(timeshiftMatch[1], 10) || null;
+
+            // Extract catchup-days (alternative timeshift attribute)
+            const catchupDaysMatch = line.match(/catchup-days="([^"]*)"/);
+            if (catchupDaysMatch && !currentStream.timeshift) {
+                currentStream.timeshift = parseInt(catchupDaysMatch[1], 10) || null;
+            }
+
+            // Extract tvg-chno (channel number)
+            const tvgChnoMatch = line.match(/tvg-chno="([^"]*)"/);
+            if (tvgChnoMatch) currentStream.tvg_chno = tvgChnoMatch[1];
 
             // Extract name (after last comma)
             const nameMatch = line.match(/,(.+)$/);
@@ -493,8 +525,10 @@ const fetchPlaylist = async () => {
         const response = await streamsAPI.fetchM3U(playlistUrl.value);
         playlistContent.value = response.data.content;
         parsePlaylist();
+        toast.success('Playlist fetched successfully', { title: 'Fetched' });
     } catch (err) {
         error.value = 'Failed to fetch playlist: ' + (err.response?.data?.message || err.message);
+        toast.error('Failed to fetch playlist', { title: 'Error', details: err.response?.data?.message || err.message });
     } finally {
         loading.value = false;
     }
@@ -509,6 +543,7 @@ const parsePlaylist = () => {
 
         if (rawStreams.length === 0) {
             error.value = 'No valid streams found in playlist';
+            toast.warning('No valid streams found in the playlist', { title: 'Empty Playlist' });
             loading.value = false;
             return;
         }
@@ -529,8 +564,14 @@ const parsePlaylist = () => {
             categories: mappingResult.categories,
             categoryMap: mappingResult.categoryMap
         });
+
+        // Show success toast only for paste method (fetch method has its own toast)
+        if (importMethod.value === 'paste') {
+            toast.success(`Found ${parsedStreams.value.length} streams`, { title: 'Playlist Parsed' });
+        }
     } catch (err) {
         error.value = 'Failed to parse playlist: ' + err.message;
+        toast.error('Failed to parse playlist', { title: 'Parse Error', details: err.message });
     } finally {
         loading.value = false;
     }
@@ -610,7 +651,12 @@ const finishImport = async () => {
             const response = await streamsAPI.create({
                 name: stream.name,
                 stream_source: stream.url,
-                cat_id: parseInt(catId) || 0
+                cat_id: parseInt(catId) || 0,
+                // Include all M3U_Plus fields
+                logo: stream.logo || '',
+                tvid: stream.tvg_id || '',
+                xui_id: stream.xui_id || '',
+                timeshift: stream.timeshift || null
             });
 
             // Collect stream ID for batch analysis
@@ -630,10 +676,12 @@ const finishImport = async () => {
             });
         }
 
+        toast.success(`Successfully imported ${importCount} streams`, { title: 'Import Complete' });
         emit('imported', importCount);
         closeModal();
     } catch (err) {
         error.value = 'Failed to import streams: ' + (err.response?.data?.message || err.message);
+        toast.error('Failed to import streams', { title: 'Import Error', details: err.response?.data?.message || err.message });
     } finally {
         importing.value = false;
     }

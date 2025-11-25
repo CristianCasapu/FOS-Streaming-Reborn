@@ -1,4 +1,12 @@
 <?php
+/**
+ * Legacy Cron Script - Stream Recovery
+ *
+ * Note: This legacy cron is deprecated in favor of PM2 workers (stream-manager-worker, stream-monitor-worker)
+ * It is kept for backward compatibility but the PM2 workers handle stream monitoring now.
+ *
+ * Uses 'state' as single source of truth for stream status.
+ */
 if (isset($_SERVER['SERVER_ADDR'])) {
     if ($_SERVER['REMOTE_ADDR'] != $_SERVER['SERVER_ADDR']) {
         die('access is not permitted');
@@ -6,7 +14,9 @@ if (isset($_SERVER['SERVER_ADDR'])) {
 }
 include('config.php');
 $setting = Setting::first();
-foreach (Stream::where('pid', '!=', 0)->where('running', '=', 1)->get() as $stream) {
+
+// Check streams that should be running but PID died
+foreach (Stream::where('pid', '!=', 0)->whereIn('state', ['running', 'starting'])->get() as $stream) {
     if (!checkPid($stream->pid)) {
         $stream->checker = 0;
         $checkstreamurl = shell_exec('/usr/bin/timeout 15s ' . $setting->ffprobe_path . ' -analyzeduration 10000000 -probesize 9000000 -i "' . $stream->streamurl . '" -v  quiet -print_format json -show_streams 2>&1');
@@ -14,12 +24,10 @@ foreach (Stream::where('pid', '!=', 0)->where('running', '=', 1)->get() as $stre
         if (count($streaminfo) > 0) {
             $pid = shell_exec(getTranscode($stream->id));
             $stream->pid = $pid;
-            $stream->running = 1;
-            $stream->status = 1;
+            $stream->state = 'running';
 
         } else {
-            $stream->running = 1;
-            $stream->status = 2;
+            $stream->state = 'error';
             shell_exec("kill -9 " . $stream->pid);
             shell_exec("/bin/rm -r /home/fos-streaming/fos/www/" . $setting->hlsfolder . "/" . $stream->id . "*");
 
@@ -32,11 +40,9 @@ foreach (Stream::where('pid', '!=', 0)->where('running', '=', 1)->get() as $stre
                     echo getTranscode($stream->id, 2);
                     $pid = shell_exec(getTranscode($stream->id, 2));
                     $stream->pid = $pid;
-                    $stream->running = 1;
-                    $stream->status = 1;
+                    $stream->state = 'running';
                 } else {
-                    $stream->running = 1;
-                    $stream->status = 2;
+                    $stream->state = 'error';
                     shell_exec("kill -9 " . $stream->pid);
                     shell_exec("/bin/rm -r /home/fos-streaming/fos/www/" . $setting->hlsfolder . "/" . $stream->id . "*");
                     if ($stream->streamurl3) {
@@ -46,12 +52,10 @@ foreach (Stream::where('pid', '!=', 0)->where('running', '=', 1)->get() as $stre
                         if (count($streaminfo) > 0) {
                             $pid = shell_exec(getTranscode($stream->id, 3));
                             $stream->pid = $pid;
-                            $stream->running = 1;
-                            $stream->status = 1;
+                            $stream->state = 'running';
 
                         } else {
-                            $stream->running = 1;
-                            $stream->status = 2;
+                            $stream->state = 'error';
                         }
                     }
                 }
@@ -60,7 +64,9 @@ foreach (Stream::where('pid', '!=', 0)->where('running', '=', 1)->get() as $stre
         $stream->save();
     }
 }
-foreach (Stream::where('restream', '=', 1)->where('running', '=', 1)->get() as $stream) {
+
+// Check restream sources
+foreach (Stream::where('restream', '=', 1)->whereIn('state', ['running', 'starting'])->get() as $stream) {
     $stream->checker = 0;
     $checkstreamurl = shell_exec('/usr/bin/timeout 15s ' . $setting->ffprobe_path . ' -analyzeduration 10000000 -probesize 9000000 -i "' . $stream->streamurl . '" -v  quiet -print_format json -show_streams 2>&1');
     $streaminfo = (array)json_decode($checkstreamurl);

@@ -71,16 +71,39 @@ export const streamsAPI = {
     update: (id, data) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=update&id=${id}`, data),
     delete: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=delete&id=${id}`),
     massDelete: (ids) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=mass_delete`, { ids }),
+    // Stream control
     start: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=start&id=${id}`),
     stop: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=stop&id=${id}`),
     massStart: (ids) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=mass_start`, { ids }),
     massStop: (ids) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=mass_stop`, { ids }),
+    massRestart: (ids) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=mass_restart`, { ids }),
+    // Enable/Disable streams
+    enable: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=enable&id=${id}`),
+    disable: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=disable&id=${id}`),
+    massEnable: (ids) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=mass_enable`, { ids }),
+    massDisable: (ids) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=mass_disable`, { ids }),
+    // Bulk operations on all streams
+    enableAll: () => api.get(`${ADMIN_API_PREFIX}/streams.php?action=enable_all`),
+    disableAll: () => api.get(`${ADMIN_API_PREFIX}/streams.php?action=disable_all`),
+    startAll: () => api.get(`${ADMIN_API_PREFIX}/streams.php?action=start_all`),
+    stopAll: () => api.get(`${ADMIN_API_PREFIX}/streams.php?action=stop_all`),
+    restartAll: () => api.get(`${ADMIN_API_PREFIX}/streams.php?action=restart_all`),
+    // Statistics
+    getStats: () => api.get(`${ADMIN_API_PREFIX}/streams.php?action=stats`),
+    // M3U import
     fetchM3U: (url) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=fetch_m3u`, { url }),
     // Stream analysis endpoints
     analyze: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=analyze&id=${id}`),
     analyzeBatch: (ids) => api.post(`${ADMIN_API_PREFIX}/streams.php?action=analyze_batch`, { ids }),
     checkAccessibility: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=check_accessibility&id=${id}`),
     getTechnicalInfo: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=get_technical_info&id=${id}`),
+    // Stream preview
+    getPreviewUrls: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=preview_urls&id=${id}`),
+    // Stream history
+    getHistory: (id, params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`${ADMIN_API_PREFIX}/streams.php?action=history&id=${id}&${queryString}`);
+    },
 };
 
 /**
@@ -310,6 +333,23 @@ export const settingsAPI = {
             'Content-Type': 'multipart/form-data'
         }
     }),
+    // Nginx Streaming Server Management
+    getNginxStatus: () => api.get(`${ADMIN_API_PREFIX}/settings.php?action=nginx_status`),
+    testNginxConfig: () => api.get(`${ADMIN_API_PREFIX}/settings.php?action=test_nginx_config`),
+    startNginxStreaming: () => api.get(`${ADMIN_API_PREFIX}/settings.php?action=start_nginx_streaming`),
+    stopNginxStreaming: () => api.get(`${ADMIN_API_PREFIX}/settings.php?action=stop_nginx_streaming`),
+    restartNginxStreaming: () => api.get(`${ADMIN_API_PREFIX}/settings.php?action=restart_nginx_streaming`),
+    // Auto-detection & Config Generation
+    autoDetectPaths: () => api.get(`${ADMIN_API_PREFIX}/settings.php?action=auto_detect_paths`),
+    applyDetectedPaths: (options) => api.post(`${ADMIN_API_PREFIX}/settings.php?action=apply_detected_paths`, options),
+    generateNginxConfig: () => api.get(`${ADMIN_API_PREFIX}/settings.php?action=generate_nginx_config`),
+    saveNginxConfig: () => api.post(`${ADMIN_API_PREFIX}/settings.php?action=generate_nginx_config`, { write: true }),
+    // Service Management (PHP-FPM, Nginx Admin, etc.)
+    getServiceStatus: (serviceName) => api.get(`${ADMIN_API_PREFIX}/settings.php?action=service_status&service=${serviceName}`),
+    startService: (serviceName) => api.get(`${ADMIN_API_PREFIX}/settings.php?action=start_service&service=${serviceName}`),
+    stopService: (serviceName) => api.get(`${ADMIN_API_PREFIX}/settings.php?action=stop_service&service=${serviceName}`),
+    restartService: (serviceName) => api.get(`${ADMIN_API_PREFIX}/settings.php?action=restart_service&service=${serviceName}`),
+    getAllServicesStatus: () => api.get(`${ADMIN_API_PREFIX}/settings.php?action=all_services_status`),
 };
 
 /**
@@ -386,7 +426,7 @@ export const pm2API = {
     getLogs: (worker = 'all', lines = 100) => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=logs&worker=${worker}&lines=${lines}`),
     getQueueStats: () => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=queue_stats`),
     getConfig: (worker) => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=get_config&worker=${worker}`),
-    updateConfig: (worker, config) => api.post(`${ADMIN_API_PREFIX}/pm2.php?action=update_config`, { worker, config: JSON.stringify(config) }),
+    updateConfig: (worker, config) => api.post(`${ADMIN_API_PREFIX}/pm2.php?action=update_config`, { worker, config }),
     serviceAction: (service, action) => api.post(`${ADMIN_API_PREFIX}/pm2.php?action=service_action`, { service, action }),
     sync: () => api.get(`${ADMIN_API_PREFIX}/pm2.php?action=sync`),
 };

@@ -13,9 +13,9 @@
 const { execSync } = require('child_process');
 const path = require('path');
 
-// Configuration
-const POLL_INTERVAL = 10000; // 10 seconds
-const PHP_CLI = 'php';
+// Configuration (read from environment variables for runtime configurability)
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL, 10) || 10000; // 10 seconds default
+const PHP_CLI = process.env.PHP_CLI || 'php';
 const BASE_PATH = path.resolve(__dirname, '..');
 const WORKER_SCRIPT = path.join(BASE_PATH, 'workers/php/stream-monitor.php');
 
@@ -34,6 +34,20 @@ function log(level, message) {
 }
 
 /**
+ * Extract JSON from output that may contain log lines
+ * The PHP script outputs log lines followed by a JSON object at the end
+ */
+function extractJson(output) {
+    // Try to find JSON object in the output (starts with { and ends with })
+    const jsonMatch = output.match(/\{[\s\S]*\}$/);
+    if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+    }
+    // If no JSON object found, try parsing the whole output
+    return JSON.parse(output);
+}
+
+/**
  * Execute stream monitor PHP script
  */
 function monitorStreams() {
@@ -46,7 +60,7 @@ function monitorStreams() {
             stdio: ['pipe', 'pipe', 'pipe']
         });
 
-        const result = JSON.parse(output);
+        const result = extractJson(output);
 
         if (result.checked > 0) {
             log('info',

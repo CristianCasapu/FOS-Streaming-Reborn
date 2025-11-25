@@ -30,14 +30,23 @@ class StreamMonitorService
             'checked' => 0,
             'healthy' => 0,
             'crashed' => 0,
-            'restarted' => 0
+            'restarted' => 0,
+            'disabled_stopped' => 0
         ];
 
-        // Get all streams that should be running
-        $streams = \Stream::where('state', 'running')
-            ->orWhere(function($query) {
-                $query->whereNotNull('pid')
-                      ->where('pid', '>', 0);
+        // First, stop any disabled streams that are running or have PIDs
+        $stats['disabled_stopped'] = $this->stopDisabledStreams();
+
+        // Get all streams that should be running (only enabled streams)
+        // Use state as single source of truth, also check for orphaned PIDs
+        $streams = \Stream::where('enabled', 1)
+            ->where(function($query) {
+                $query->whereIn('state', ['running', 'starting'])
+                    ->orWhere(function($q) {
+                        // Also check streams with PIDs that might need cleanup
+                        $q->whereNotNull('pid')
+                          ->where('pid', '>', 0);
+                    });
             })
             ->get();
 
@@ -74,6 +83,53 @@ class StreamMonitorService
         }
 
         return $stats;
+    }
+
+    /**
+     * Stop disabled streams that are running or have PIDs
+     * Disabled streams should not be running
+     *
+     * @return int Number of streams stopped
+     */
+    private function stopDisabledStreams(): int
+    {
+        $count = 0;
+
+        // Find disabled streams that are active or have PIDs
+        $streams = \Stream::where('enabled', 0)
+            ->where(function($query) {
+                $query->whereIn('state', ['running', 'starting'])
+                    ->orWhere(function($q) {
+                        $q->whereNotNull('pid')
+                          ->where('pid', '>', 0);
+                    });
+            })
+            ->get();
+
+        foreach ($streams as $stream) {
+            $this->logger->info("Stopping disabled stream {$stream->id} (state: {$stream->state}, PID: {$stream->pid})");
+
+            // Kill the process if it has a PID
+            if ($stream->pid) {
+                exec("ps -p {$stream->pid} > /dev/null 2>&1", $output, $exitCode);
+                if ($exitCode === 0) {
+                    // Process exists, kill it
+                    exec("kill -9 {$stream->pid}");
+                    $this->logger->info("Killed PID {$stream->pid} for disabled stream {$stream->id}");
+                }
+            }
+
+            // Update stream state
+            $stream->pid = null;
+            $stream->state = 'stopped';
+            $stream->scheduled_command = 'none';
+            $stream->stream_stopped_at = date('Y-m-d H:i:s');
+            $stream->save();
+
+            $count++;
+        }
+
+        return $count;
     }
 
     /**

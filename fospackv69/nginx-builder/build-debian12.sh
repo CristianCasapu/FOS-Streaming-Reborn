@@ -1,14 +1,17 @@
 #!/bin/bash
 # FOS-Streaming Nginx Build Script for Debian 12 (Bookworm)
 # Updated for nginx 1.26.x (mainline) with modern security features
-# Date: 2025-11-21
+# Date: 2025-11-25
 
 set -e  # Exit on error
 
 NGINX_VERSION="1.26.2"
 BUILD_DIR="$(pwd)"
 NGINX_DIR="${BUILD_DIR}/nginx-${NGINX_VERSION}"
-INSTALL_PREFIX="/home/fos-streaming/fos/nginx"
+INSTALL_PREFIX="${FOS_NGINX_PREFIX:-/home/fos-streaming/fos/nginx}"
+FOS_USER="${FOS_USER:-fosstreaming}"
+FOS_GROUP="${FOS_GROUP:-fosstreaming}"
+LOG_DIR="${FOS_LOG_DIR:-/home/fos-streaming/fos/logs}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,6 +39,31 @@ fi
 
 log_info "Starting nginx build for Debian 12 (Bookworm)"
 log_info "Nginx version: ${NGINX_VERSION}"
+log_info "Install prefix: ${INSTALL_PREFIX}"
+log_info "User/Group: ${FOS_USER}:${FOS_GROUP}"
+
+# ============================================================================
+# Install Build Dependencies
+# ============================================================================
+log_info "Installing build dependencies..."
+
+apt-get update -y
+
+apt-get install -y \
+    build-essential \
+    libssl-dev \
+    libpcre3 \
+    libpcre3-dev \
+    libxslt1-dev \
+    zlib1g-dev \
+    libgd-dev \
+    libgeoip-dev \
+    libxml2-dev \
+    wget \
+    git \
+    curl
+
+log_info "Build dependencies installed"
 
 # Download nginx if not present
 if [ ! -d "${NGINX_DIR}" ]; then
@@ -71,17 +99,23 @@ cd "${NGINX_DIR}"
 
 log_info "Configuring nginx build..."
 
+# Ensure user and group exist
+if ! id "${FOS_USER}" &>/dev/null; then
+    log_info "Creating user ${FOS_USER}..."
+    useradd -r -s /sbin/nologin -d "${INSTALL_PREFIX%/nginx}" "${FOS_USER}" || true
+fi
+
 # Configure nginx with optimized settings for Debian 12
 ./configure \
---user=fosstreaming \
---group=fosstreaming \
+--user="${FOS_USER}" \
+--group="${FOS_GROUP}" \
 --prefix="${INSTALL_PREFIX}" \
 --sbin-path="${INSTALL_PREFIX}/sbin/nginx" \
 --conf-path="${INSTALL_PREFIX}/conf/nginx.conf" \
 --pid-path="${INSTALL_PREFIX}/pid/nginx.pid" \
 --lock-path=/var/lock/nginx.lock \
---error-log-path=/home/fos-streaming/fos/logs/error.log \
---http-log-path=/home/fos-streaming/fos/logs/access.log \
+--error-log-path="${LOG_DIR}/error.log" \
+--http-log-path="${LOG_DIR}/access.log" \
 --http-client-body-temp-path="${INSTALL_PREFIX}/client_body_temp" \
 --http-fastcgi-temp-path="${INSTALL_PREFIX}/fastcgi_temp" \
 --http-proxy-temp-path="${INSTALL_PREFIX}/proxy_temp" \
@@ -145,18 +179,36 @@ mkdir -p "${INSTALL_PREFIX}/fastcgi_temp"
 mkdir -p "${INSTALL_PREFIX}/proxy_temp"
 mkdir -p "${INSTALL_PREFIX}/scgi_temp"
 mkdir -p "${INSTALL_PREFIX}/uwsgi_temp"
-mkdir -p "/home/fos-streaming/fos/logs"
+mkdir -p "${INSTALL_PREFIX}/pid"
+mkdir -p "${LOG_DIR}"
 
 # Set proper permissions
 log_info "Setting permissions..."
-chown -R fosstreaming:fosstreaming "${INSTALL_PREFIX}"
-chown -R fosstreaming:fosstreaming "/home/fos-streaming/fos/logs"
+chown -R "${FOS_USER}:${FOS_GROUP}" "${INSTALL_PREFIX}"
+chown -R "${FOS_USER}:${FOS_GROUP}" "${LOG_DIR}"
 
 log_info "Nginx build completed successfully!"
 log_info "Nginx binary: ${INSTALL_PREFIX}/sbin/nginx"
+log_info "Nginx symlink: ${INSTALL_PREFIX}/sbin/nginx_fos"
 log_info "Configuration: ${INSTALL_PREFIX}/conf/nginx.conf"
+log_info "Log directory: ${LOG_DIR}"
 
 # Display version
 "${INSTALL_PREFIX}/sbin/nginx" -V
 
 log_info "Build script finished"
+
+# Print usage information
+echo ""
+echo "=============================================="
+echo "  Build Complete!"
+echo "=============================================="
+echo ""
+echo "To use custom paths, set environment variables before running:"
+echo "  export FOS_NGINX_PREFIX=/custom/path/to/nginx"
+echo "  export FOS_USER=myuser"
+echo "  export FOS_GROUP=mygroup"
+echo "  export FOS_LOG_DIR=/custom/path/to/logs"
+echo ""
+echo "Then run: sudo -E bash build-debian12.sh"
+echo "=============================================="

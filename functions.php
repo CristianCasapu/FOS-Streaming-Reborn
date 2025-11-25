@@ -42,15 +42,20 @@ function stop_stream($id)
     $stream = Stream::find($id);
     $setting = Setting::first();
 
+    // Get streams path from settings or auto-detect
+    $streamsPath = $setting->streams_path ?: \App\Services\PathDetectionService::detectProjectRoot() . '/fospackv69/fos/streams';
+
     if (checkPid($stream->pid)) {
         shell_exec("kill -9 " . $stream->pid);
-        shell_exec("/bin/rm -r /home/fos-streaming/fos/www/" . $setting->hlsfolder . "/" . $stream->id . "*");
+        // Clean up DASH segments
+        shell_exec("/bin/rm -rf " . $streamsPath . "/dash/" . $stream->id . " 2>/dev/null");
+        // Clean up HLS segments
+        shell_exec("/bin/rm -rf " . $streamsPath . "/hls/" . $stream->id . " 2>/dev/null");
+        shell_exec("/bin/rm -f " . $streamsPath . "/hls/" . $stream->id . "_*.m3u8 2>/dev/null");
+        shell_exec("/bin/rm -f " . $streamsPath . "/hls/" . $stream->id . "_*.ts 2>/dev/null");
     }
-    $stream->pid = "";
-    $stream->running = 0;
-    $stream->status = 0;
-
-    $stream->save();
+    $stream->pid = null;
+    $stream->updateState('stopped'); // Use state as single source of truth
     sleep(2);
 }
 
@@ -68,10 +73,32 @@ function getTranscode($id, $streamnumber = null)
     if ($streamnumber == 3) {
         $url = $stream->streamurl3;
     }
+
+    // Get streaming protocol settings (use auto-detection for defaults)
+    $streamingProtocol = $setting->streaming_protocol ?? 'both';
+    $rtmpPort = $setting->rtmp_port ?? 1935;
+    $streamsPath = $setting->streams_path ?: \App\Services\PathDetectionService::detectProjectRoot() . '/fospackv69/fos/streams';
+    $hlsFragment = $setting->hls_fragment ?? 3;
+    $hlsPlaylistLength = $setting->hls_playlist_length ?? 60;
+
+    // Build output based on streaming protocol
     $endofffmpeg = "";
     $endofffmpeg .= $stream->bitstreamfilter ? ' -bsf h264_mp4toannexb' : '';
-    $endofffmpeg .= ' -hls_flags delete_segments -hls_time 10';
-    $endofffmpeg .= ' -hls_list_size 8 /home/fos-streaming/fos/www/' . $setting->hlsfolder . '/' . $stream->id . '_.m3u8  > /dev/null 2>/dev/null & echo $! ';
+
+    // Use RTMP push for DASH/Both protocols (nginx-rtmp handles DASH/HLS conversion)
+    // Use direct HLS output only when HLS-only mode is selected
+    if ($streamingProtocol === 'dash' || $streamingProtocol === 'both') {
+        // Push to nginx-rtmp server which handles DASH and HLS output
+        $endofffmpeg .= ' -f flv rtmp://127.0.0.1:' . $rtmpPort . '/live/' . $stream->id;
+        $endofffmpeg .= ' > /dev/null 2>/dev/null & echo $!';
+    } else {
+        // Legacy HLS-only mode: output directly to HLS files
+        $hlsListSize = intval($hlsPlaylistLength / $hlsFragment);
+        $endofffmpeg .= ' -hls_flags delete_segments -hls_time ' . $hlsFragment;
+        $endofffmpeg .= ' -hls_list_size ' . $hlsListSize . ' ' . $streamsPath . '/hls/' . $stream->id . '_.m3u8';
+        $endofffmpeg .= ' > /dev/null 2>/dev/null & echo $!';
+    }
+
     if ($trans) {
         $ffmpeg .= ' -y';
         $ffmpeg .= ' -probesize ' . ($trans->probesize ? $trans->probesize : '15000000');
@@ -146,104 +173,90 @@ function start_stream($id)
 {
     $stream = Stream::find($id);
     $setting = Setting::first();
-    if ($stream->restream) {
-        $stream->checker = 0;
-        $stream->pid = null;
-        $stream->running = 1;
-        $stream->status = 1;
-    } else {
-        $stream->checker = 0;
-        $checkstreamurl = shell_exec('' . $setting->ffprobe_path . ' -analyzeduration 1000000 -probesize 9000000 -i "' . $stream->streamurl . '" -v  quiet -print_format json -show_streams 2>&1');
-        $streaminfo = json_decode($checkstreamurl, true);
-        if ($streaminfo) {
-            $pid = shell_exec(getTranscode($stream->id));
-            $stream->pid = $pid;
-            $stream->running = 1;
-            $stream->status = 1;
-            $video = "";
-            $audio = "";
-            if (is_array($streaminfo)) {
-                foreach ($streaminfo['streams'] as $info) {
-                    if ($video == '') {
-                        $video = ($info['codec_type'] == 'video' ? $info['codec_name'] : '');
-                    }
-                    if ($audio == '') {
-                        $audio = ($info['codec_type'] == 'audio' ? $info['codec_name'] : '');
-                    }
 
+    // Get streams path from settings or auto-detect for cleanup operations
+    $streamsPath = $setting->streams_path ?: \App\Services\PathDetectionService::detectProjectRoot() . '/fospackv69/fos/streams';
+
+    // Helper function to clean up stream segments
+    $cleanupStream = function($streamId) use ($streamsPath) {
+        shell_exec("/bin/rm -rf " . $streamsPath . "/dash/" . $streamId . " 2>/dev/null");
+        shell_exec("/bin/rm -rf " . $streamsPath . "/hls/" . $streamId . " 2>/dev/null");
+        shell_exec("/bin/rm -f " . $streamsPath . "/hls/" . $streamId . "_*.m3u8 2>/dev/null");
+        shell_exec("/bin/rm -f " . $streamsPath . "/hls/" . $streamId . "_*.ts 2>/dev/null");
+    };
+
+    // Helper function to extract codec info from stream info
+    $extractCodecs = function($streaminfo, $stream) {
+        $video = "";
+        $audio = "";
+        if (is_array($streaminfo)) {
+            foreach ($streaminfo['streams'] as $info) {
+                if ($video == '') {
+                    $video = ($info['codec_type'] == 'video' ? $info['codec_name'] : '');
                 }
-                $stream->video_codec_name = $video;
-                $stream->audio_codec_name = $audio;
+                if ($audio == '') {
+                    $audio = ($info['codec_type'] == 'audio' ? $info['codec_name'] : '');
+                }
             }
+            $stream->video_codec_name = $video;
+            $stream->audio_codec_name = $audio;
+        }
+    };
+
+    // Helper function to try starting with a specific URL
+    $tryStartWithUrl = function($url, $urlNumber = null) use ($stream, $setting, $extractCodecs) {
+        $checkstreamurl = shell_exec($setting->ffprobe_path . ' -analyzeduration 1000000 -probesize 9000000 -i "' . $url . '" -v quiet -print_format json -show_streams 2>&1');
+        $streaminfo = json_decode($checkstreamurl, true);
+
+        if ($streaminfo) {
+            $pid = shell_exec(getTranscode($stream->id, $urlNumber));
+            $stream->pid = trim($pid);
+            $stream->state = 'running';
+            $extractCodecs($streaminfo, $stream);
+            return true;
+        }
+        return false;
+    };
+
+    $stream->checker = 0;
+
+    if ($stream->restream) {
+        // Restream mode - no PID, just mark as running
+        $stream->pid = null;
+        $stream->state = 'running';
+    } else {
+        // Try primary URL
+        if ($tryStartWithUrl($stream->streamurl)) {
+            // Success with primary URL
         } else {
-            $stream->running = 1;
-            $stream->status = 2;
+            // Primary URL failed
+            $stream->state = 'error';
             if (checkPid($stream->pid)) {
                 shell_exec("kill -9 " . $stream->pid);
-                shell_exec("/bin/rm -r /home/fos-streaming/fos/www/" . $setting->hlsfolder . "/" . $stream->id . "*");
+                $cleanupStream($stream->id);
             }
 
+            // Try backup URL 2
             if ($stream->streamurl2) {
                 $stream->checker = 2;
-
-                $checkstreamurl = shell_exec('' . $setting->ffprobe_path . ' -analyzeduration 1000000 -probesize 9000000 -i "' . $stream->streamurl . '" -v  quiet -print_format json -show_streams 2>&1');
-                $streaminfo = json_decode($checkstreamurl, true);
-
-                if ($streaminfo) {
-                    $pid = shell_exec(getTranscode($stream->id, 2));
-                    $stream->pid = $pid;
-                    $stream->running = 1;
-                    $stream->status = 1;
-                    $video = "";
-                    $audio = "";
-                    if (is_array($streaminfo)) {
-                        foreach ($streaminfo['streams'] as $info) {
-                            if ($video == '') {
-                                $video = ($info['codec_type'] == 'video' ? $info['codec_name'] : '');
-                            }
-                            if ($audio == '') {
-                                $audio = ($info['codec_type'] == 'audio' ? $info['codec_name'] : '');
-                            }
-                        }
-                        $stream->video_codec_name = $video;
-                        $stream->audio_codec_name = $audio;
-                    }
+                if ($tryStartWithUrl($stream->streamurl2, 2)) {
+                    // Success with backup URL 2
                 } else {
-                    $stream->running = 1;
-                    $stream->status = 2;
+                    // Backup URL 2 failed
+                    $stream->state = 'error';
                     if (checkPid($stream->pid)) {
                         shell_exec("kill -9 " . $stream->pid);
-                        shell_exec("/bin/rm -r /home/fos-streaming/fos/www/" . $setting->hlsfolder . "/" . $stream->id . "*");
+                        $cleanupStream($stream->id);
                     }
+
+                    // Try backup URL 3
                     if ($stream->streamurl3) {
                         $stream->checker = 3;
-                        $checkstreamurl = shell_exec('' . $setting->ffprobe_path . ' -analyzeduration 1000000 -probesize 9000000 -i "' . $stream->streamurl . '" -v  quiet -print_format json -show_streams 2>&1');
-                        $streaminfo = json_decode($checkstreamurl, true);
-                        if ($streaminfo) {
-                            $pid = shell_exec(getTranscode($stream->id, 3));
-
-                            $stream->pid = $pid;
-                            $stream->running = 1;
-                            $stream->status = 1;
-
-                            $video = "";
-                            $audio = "";
-
-                            if (is_array($streaminfo)) {
-                                foreach ($streaminfo['streams'] as $info) {
-                                    if ($video == '') {
-                                        $video = ($info['codec_type'] == 'video' ? $info['codec_name'] : '');
-                                    }
-                                    if ($audio == '') {
-                                        $audio = ($info['codec_type'] == 'audio' ? $info['codec_name'] : '');
-                                    }
-                                }
-                                $stream->video_codec_name = $video;
-                                $stream->audio_codec_name = $audio;
-                            }
+                        if ($tryStartWithUrl($stream->streamurl3, 3)) {
+                            // Success with backup URL 3
                         } else {
-                            $stream->running = 1;
-                            $stream->status = 2;
+                            // All URLs failed
+                            $stream->state = 'error';
                             $stream->pid = null;
                         }
                     }

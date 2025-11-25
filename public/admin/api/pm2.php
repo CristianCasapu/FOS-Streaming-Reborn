@@ -32,6 +32,15 @@ $action = $_GET['action'] ?? 'status';
 // Define project root path (3 levels up from /public/admin/api/)
 $projectRoot = realpath(__DIR__ . '/../../..');
 
+// Parse JSON input for POST requests
+$jsonInput = [];
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $rawInput = file_get_contents('php://input');
+    if (!empty($rawInput)) {
+        $jsonInput = json_decode($rawInput, true) ?? [];
+    }
+}
+
 try {
     switch ($action) {
         case 'install':
@@ -81,25 +90,36 @@ try {
             break;
 
         case 'get_config':
-            // Get worker configuration from ecosystem.config.cjs
+            // Get worker configuration from database (source of truth)
             $workerName = $_GET['worker'] ?? null;
 
             if (!$workerName) {
                 throw new Exception('Worker name is required');
             }
 
-            // Read ecosystem.config.cjs
-            $ecosystemPath = __DIR__ . '/../../../ecosystem.config.cjs';
+            // Get worker from database
+            $worker = PM2Worker::where('name', $workerName)->first();
 
-            if (!file_exists($ecosystemPath)) {
-                throw new Exception('ecosystem.config.cjs not found');
+            if (!$worker) {
+                throw new Exception("Worker '{$workerName}' not found in database");
             }
 
-            $ecosystemContent = file_get_contents($ecosystemPath);
-
-            // Extract configuration for specific worker (basic parsing)
-            // This is a simplified approach - in production, consider using a proper JS parser
-            $config = extractWorkerConfig($ecosystemContent, $workerName);
+            // Return complete configuration
+            $config = [
+                'name' => $worker->name,
+                'script' => $worker->script,
+                'instances' => $worker->instances,
+                'exec_mode' => $worker->exec_mode,
+                'max_memory_restart' => $worker->max_memory_restart,
+                'max_restarts' => $worker->max_restarts,
+                'min_uptime' => $worker->min_uptime,
+                'cron_restart' => $worker->cron_restart ?? '',
+                'log_level' => $worker->env_vars['LOG_LEVEL'] ?? 'warn',
+                'env_vars' => $worker->env_vars ?? [],
+                'description' => $worker->description,
+                'category' => $worker->category,
+                'enabled' => (bool) $worker->enabled
+            ];
 
             echo json_encode([
                 'success' => true,
@@ -108,9 +128,9 @@ try {
             break;
 
         case 'update_config':
-            // Update worker configuration in ecosystem.config.cjs
-            $workerName = $_POST['worker'] ?? null;
-            $configData = $_POST['config'] ?? null;
+            // Update worker configuration in database and regenerate ecosystem.config.cjs
+            $workerName = $jsonInput['worker'] ?? $_POST['worker'] ?? null;
+            $configData = $jsonInput['config'] ?? $_POST['config'] ?? null;
 
             if (!$workerName || !$configData) {
                 throw new Exception('Worker name and configuration are required');
@@ -121,26 +141,62 @@ try {
                 $configData = json_decode($configData, true);
             }
 
-            // Update ecosystem.config.cjs
-            $ecosystemPath = __DIR__ . '/../../../ecosystem.config.cjs';
+            // Get worker from database
+            $worker = PM2Worker::where('name', $workerName)->first();
 
-            if (!file_exists($ecosystemPath)) {
-                throw new Exception('ecosystem.config.cjs not found');
+            if (!$worker) {
+                throw new Exception("Worker '{$workerName}' not found in database");
             }
 
-            $ecosystemContent = file_get_contents($ecosystemPath);
-            $updatedContent = updateWorkerConfig($ecosystemContent, $workerName, $configData);
+            // Update worker configuration in database
+            if (isset($configData['script'])) {
+                $worker->script = $configData['script'];
+            }
+            if (isset($configData['instances'])) {
+                $worker->instances = (int) $configData['instances'];
+            }
+            if (isset($configData['exec_mode'])) {
+                $worker->exec_mode = $configData['exec_mode'];
+            }
+            if (isset($configData['max_memory_restart'])) {
+                $worker->max_memory_restart = $configData['max_memory_restart'];
+            }
+            if (isset($configData['max_restarts'])) {
+                $worker->max_restarts = (int) $configData['max_restarts'];
+            }
+            if (isset($configData['min_uptime'])) {
+                $worker->min_uptime = $configData['min_uptime'];
+            }
+            if (isset($configData['cron_restart'])) {
+                $worker->cron_restart = $configData['cron_restart'] ?: null;
+            }
 
-            // Backup original file
-            $backupPath = $ecosystemPath . '.backup.' . date('Y-m-d_H-i-s');
-            copy($ecosystemPath, $backupPath);
+            // Handle env_vars - merge with existing
+            $envVars = $worker->env_vars ?? [];
+            if (isset($configData['env_vars']) && is_array($configData['env_vars'])) {
+                $envVars = array_merge($envVars, $configData['env_vars']);
+            }
+            // Also handle log_level as an env var
+            if (isset($configData['log_level'])) {
+                $envVars['LOG_LEVEL'] = $configData['log_level'];
+            }
+            $worker->env_vars = $envVars;
 
-            // Write updated configuration
-            file_put_contents($ecosystemPath, $updatedContent);
+            // Save to database
+            $worker->save();
+
+            // Regenerate ecosystem.config.cjs from database
+            $workerService = new PM2WorkerService();
+            $isDev = env('APP_ENV') === 'local' || env('APP_ENV') === 'development';
+            $result = $workerService->generateEcosystemConfig(null, $isDev);
+
+            if (!$result['success']) {
+                throw new Exception('Failed to regenerate ecosystem config: ' . $result['message']);
+            }
 
             echo json_encode([
                 'success' => true,
-                'message' => 'Configuration updated successfully'
+                'message' => 'Configuration updated successfully. Ecosystem config regenerated.'
             ]);
             break;
 
@@ -221,14 +277,23 @@ try {
                 }
             }
 
-            // Get system services status
+            // Get system services status (core platform services only)
+            // Note: Streaming services (fos-nginx-streaming, fos-php-fpm-streaming) are managed
+            // separately in Settings.vue under "Streaming Protocol (MPEG-DASH / HLS)" section
             $services = [
                 [
-                    'name' => 'nginx',
-                    'display_name' => 'Nginx Web Server',
+                    'name' => 'fos-nginx',
+                    'display_name' => 'Nginx Admin Panel',
                     'type' => 'system',
-                    'status' => getServiceStatus('nginx'),
-                    'description' => 'HTTP/RTMP/HLS server'
+                    'status' => getServiceStatus('fos-nginx'),
+                    'description' => 'Admin panel web server'
+                ],
+                [
+                    'name' => 'php-fpm',
+                    'display_name' => 'PHP-FPM Admin',
+                    'type' => 'system',
+                    'status' => getServiceStatus('php8.4-fpm'),
+                    'description' => 'PHP FastCGI for admin panel'
                 ],
                 [
                     'name' => 'mariadb',
@@ -236,13 +301,6 @@ try {
                     'type' => 'system',
                     'status' => getServiceStatus('mariadb'),
                     'description' => 'Database server'
-                ],
-                [
-                    'name' => 'php-fpm',
-                    'display_name' => 'PHP-FPM',
-                    'type' => 'system',
-                    'status' => getServiceStatus('php8.4-fpm'),
-                    'description' => 'PHP FastCGI Process Manager'
                 ]
             ];
 
@@ -347,8 +405,8 @@ try {
 
         case 'service_action':
             // Control system services
-            $service = $_POST['service'] ?? null;
-            $serviceAction = $_POST['action'] ?? null;
+            $service = $jsonInput['service'] ?? $_POST['service'] ?? null;
+            $serviceAction = $jsonInput['action'] ?? $_POST['action'] ?? null;
 
             if (!$service || !$serviceAction) {
                 throw new Exception('Service and action are required');

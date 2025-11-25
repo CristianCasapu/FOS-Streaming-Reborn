@@ -7,8 +7,8 @@ class Stream extends FosStreaming {
         'streamurl2',
         'streamurl3',
         'source_url',
-        'running',
-        'status',
+        'enabled',  // Whether stream can be started/managed (0=disabled, 1=enabled)
+        'state',  // Primary state field: stopped, starting, running, stopping, error, crashed
         'cat_id',
         'trans_id',
         'pid',
@@ -21,6 +21,8 @@ class Stream extends FosStreaming {
         'stream_mode',
         'logo',
         'tvid',
+        'xui_id',
+        'timeshift',
         'require_device_lock',
         'allowed_device_types',
         'proxy_settings',
@@ -32,6 +34,90 @@ class Stream extends FosStreaming {
         'current_connections',
         'last_checked'
     ];
+
+    // ========================================
+    // Computed Accessors (derived from state)
+    // ========================================
+
+    /**
+     * Get legacy status value derived from state
+     * 0 = stopped, 1 = running, 2 = error
+     * @return int
+     */
+    public function getStatusAttribute()
+    {
+        return match($this->state) {
+            'running' => 1,
+            'starting' => 1,
+            'error', 'crashed' => 2,
+            default => 0
+        };
+    }
+
+    /**
+     * Get legacy running flag derived from state
+     * @return int
+     */
+    public function getRunningAttribute()
+    {
+        return in_array($this->state, ['running', 'starting']) ? 1 : 0;
+    }
+
+    /**
+     * Check if stream is currently active (running or starting)
+     * @return bool
+     */
+    public function isActive(): bool
+    {
+        return in_array($this->state, ['running', 'starting']);
+    }
+
+    /**
+     * Check if stream is in a stopped/inactive state
+     * @return bool
+     */
+    public function isStopped(): bool
+    {
+        return in_array($this->state, ['stopped', 'error', 'crashed']);
+    }
+
+    /**
+     * Check if stream is enabled (can be started/managed)
+     * @return bool
+     */
+    public function isEnabled(): bool
+    {
+        return (bool) $this->enabled;
+    }
+
+    /**
+     * Check if stream is disabled (should not be started)
+     * @return bool
+     */
+    public function isDisabled(): bool
+    {
+        return !$this->isEnabled();
+    }
+
+    /**
+     * Enable the stream
+     * @return bool
+     */
+    public function enable(): bool
+    {
+        $this->enabled = 1;
+        return $this->save();
+    }
+
+    /**
+     * Disable the stream (will be stopped by monitor worker)
+     * @return bool
+     */
+    public function disable(): bool
+    {
+        $this->enabled = 0;
+        return $this->save();
+    }
 
     public function category()
     {
@@ -45,19 +131,15 @@ class Stream extends FosStreaming {
 
     public function getStatusLabelAttribute()
     {
-        $return = [];
-        $return['label'] = 'danger';
-        $return['text'] = 'STOPPED';
-
-        if ($this->status == '1') {
-            $return['label'] = 'success';
-            $return['text'] = 'RUNNING';
-        } else if ($this->status == '2') {
-            $return['label'] = 'danger';
-            $return['text'] = 'ERROR';
-        }
-
-        return $return;
+        // Use state as single source of truth
+        return match($this->state) {
+            'running' => ['label' => 'success', 'text' => 'RUNNING'],
+            'starting' => ['label' => 'info', 'text' => 'STARTING'],
+            'stopping' => ['label' => 'warning', 'text' => 'STOPPING'],
+            'error' => ['label' => 'danger', 'text' => 'ERROR'],
+            'crashed' => ['label' => 'danger', 'text' => 'CRASHED'],
+            default => ['label' => 'secondary', 'text' => 'STOPPED']
+        };
     }
 
     /**
@@ -304,6 +386,11 @@ class Stream extends FosStreaming {
             return false;
         }
 
+        // Prevent starting disabled streams
+        if (in_array($command, ['start', 'restart']) && $this->isDisabled()) {
+            return false;
+        }
+
         $this->scheduled_command = $command;
         $this->command_queued_at = date('Y-m-d H:i:s');
         $this->command_queued_by = $queuedBy;
@@ -349,8 +436,9 @@ class Stream extends FosStreaming {
             $this->stream_started_at = date('Y-m-d H:i:s');
         }
 
-        if ($newState === 'stopped' || $newState === 'error' || $newState === 'crashed') {
+        if (in_array($newState, ['stopped', 'error', 'crashed'])) {
             $this->stream_stopped_at = date('Y-m-d H:i:s');
+            $this->pid = null; // Clear PID when stopped
 
             // Calculate uptime if we have start time
             if ($this->stream_started_at) {
@@ -457,7 +545,8 @@ class Stream extends FosStreaming {
      */
     public function shouldAutoRestart(): bool
     {
-        return $this->auto_restart_enabled
+        return $this->isEnabled()  // Must be enabled
+            && $this->auto_restart_enabled
             && $this->restart_attempts < $this->max_restart_attempts
             && in_array($this->state, ['crashed', 'error']);
     }

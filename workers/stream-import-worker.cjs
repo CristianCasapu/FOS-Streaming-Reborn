@@ -17,9 +17,9 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// Configuration
+// Configuration (read from environment variables for runtime configurability)
 const QUEUE_NAME = 'stream-import';
-const POLL_INTERVAL = 5000; // 5 seconds
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL, 10) || 5000; // 5 seconds default
 const PHP_WORKER_SCRIPT = path.join(__dirname, '../scripts/process-import-job.php');
 const LOG_LEVEL = process.env.LOG_LEVEL || 'warn';
 

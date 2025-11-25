@@ -16,9 +16,9 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-// Configuration
+// Configuration (read from environment variables for runtime configurability)
 const QUEUE_NAME = 'ffprobe-analysis';
-const POLL_INTERVAL = 10000; // 10 seconds (FFprobe is slower)
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL, 10) || 10000; // 10 seconds default
 const PHP_WORKER_SCRIPT = path.join(__dirname, '../scripts/process-ffprobe-job.php');
 const LOG_LEVEL = process.env.LOG_LEVEL || 'warn';
 

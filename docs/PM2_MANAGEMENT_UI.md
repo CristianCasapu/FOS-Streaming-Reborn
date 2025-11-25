@@ -37,10 +37,18 @@ The PM2 Management UI provides a comprehensive interface to control and monitor:
 
 ### 2. System Services Management
 
-**Services Monitored:**
-- **Nginx Web Server** - HTTP/RTMP/HLS server
-- **MariaDB Database** - Database server
-- **PHP-FPM** - PHP FastCGI Process Manager
+**Streaming Services (Dedicated High-Performance):**
+- **Nginx Streaming Service** (`fos-nginx-streaming`) - High-performance HLS/HTTP-FLV streaming using `nginx_fos` binary
+- **PHP-FPM Streaming Service** (`fos-php-fpm-streaming`) - PHP FastCGI for stream authentication
+
+**Core Platform Services:**
+- **Nginx Admin Panel** (`fos-nginx`) - Admin panel web server
+- **PHP-FPM Admin** (`php8.4-fpm`) - PHP FastCGI for admin panel
+- **MariaDB Database** (`mariadb`) - Database server
+
+**Service Dependencies:**
+- `fos-nginx-streaming` requires `fos-php-fpm-streaming` to be running
+- If PHP-FPM Streaming Service stops, Nginx Streaming Service will also stop (BindsTo dependency)
 
 **Service Information:**
 - Display name and service name
@@ -366,15 +374,48 @@ npm run pm2:start
     ],
     "system_services": [
       {
-        "name": "nginx",
-        "display_name": "Nginx Web Server",
+        "name": "fos-nginx-streaming",
+        "display_name": "Nginx Streaming Service",
         "type": "system",
         "status": {
           "active": true,
           "status": "active",
           "enabled": true
         },
-        "description": "HTTP/RTMP/HLS server"
+        "description": "High-performance HLS/HTTP-FLV streaming (nginx_fos)"
+      },
+      {
+        "name": "fos-php-fpm-streaming",
+        "display_name": "PHP-FPM Streaming Service",
+        "type": "system",
+        "status": {
+          "active": true,
+          "status": "active",
+          "enabled": true
+        },
+        "description": "PHP FastCGI for stream authentication"
+      },
+      {
+        "name": "fos-nginx",
+        "display_name": "Nginx Admin Panel",
+        "type": "system",
+        "status": {
+          "active": true,
+          "status": "active",
+          "enabled": true
+        },
+        "description": "Admin panel web server"
+      },
+      {
+        "name": "php-fpm",
+        "display_name": "PHP-FPM Admin",
+        "type": "system",
+        "status": {
+          "active": true,
+          "status": "active",
+          "enabled": true
+        },
+        "description": "PHP FastCGI for admin panel"
       },
       {
         "name": "mariadb",
@@ -386,17 +427,6 @@ npm run pm2:start
           "enabled": true
         },
         "description": "Database server"
-      },
-      {
-        "name": "php-fpm",
-        "display_name": "PHP-FPM",
-        "type": "system",
-        "status": {
-          "active": true,
-          "status": "active",
-          "enabled": true
-        },
-        "description": "PHP FastCGI Process Manager"
       }
     ],
     "queue_stats": {

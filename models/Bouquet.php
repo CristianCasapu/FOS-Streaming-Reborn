@@ -160,7 +160,7 @@ class Bouquet extends FosStreaming {
         }
 
         return Stream::whereIn('id', $this->stream_ids)
-            ->where('running', 1)
+            ->whereIn('state', ['running', 'starting'])
             ->orderByRaw('FIELD(id, ' . implode(',', $this->stream_ids) . ')')
             ->get();
     }
@@ -175,7 +175,7 @@ class Bouquet extends FosStreaming {
         }
 
         return Stream::whereIn('id', $this->stream_ids)
-            ->where('running', 1)
+            ->whereIn('state', ['running', 'starting'])
             ->count();
     }
 

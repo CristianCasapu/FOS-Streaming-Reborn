@@ -147,6 +147,9 @@
                                 <button @click="activeTab = 'access'" :class="['py-4 px-1 border-b-2 font-medium text-sm', activeTab === 'access' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']">
                                     Access URLs
                                 </button>
+                                <button @click="activeTab = 'history'; loadHistory()" :class="['py-4 px-1 border-b-2 font-medium text-sm', activeTab === 'history' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300']">
+                                    History & Logs
+                                </button>
                             </nav>
                         </div>
                     </div>
@@ -337,6 +340,159 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- History Tab -->
+                        <div v-show="activeTab === 'history'" class="space-y-6">
+                            <!-- Loading -->
+                            <div v-if="loadingHistory" class="text-center py-12">
+                                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                                <p class="mt-2 text-sm text-gray-500">Loading history...</p>
+                            </div>
+
+                            <template v-else-if="historyData">
+                                <!-- State Info Cards -->
+                                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div class="bg-white rounded-lg shadow p-4">
+                                        <p class="text-sm font-medium text-gray-500">Current State</p>
+                                        <p class="text-xl font-bold" :class="getStateColor(historyData.state_info?.state)">
+                                            {{ historyData.state_info?.state?.toUpperCase() || 'N/A' }}
+                                        </p>
+                                    </div>
+                                    <div class="bg-white rounded-lg shadow p-4">
+                                        <p class="text-sm font-medium text-gray-500">Total Crashes</p>
+                                        <p class="text-xl font-bold text-red-600">{{ historyData.state_info?.crash_count || 0 }}</p>
+                                    </div>
+                                    <div class="bg-white rounded-lg shadow p-4">
+                                        <p class="text-sm font-medium text-gray-500">Crashes (24h)</p>
+                                        <p class="text-xl font-bold text-orange-600">{{ historyData.stats?.crashes_24h || 0 }}</p>
+                                    </div>
+                                    <div class="bg-white rounded-lg shadow p-4">
+                                        <p class="text-sm font-medium text-gray-500">Health Checks (24h)</p>
+                                        <p class="text-xl font-bold text-blue-600">{{ historyData.stats?.checks_24h || 0 }}</p>
+                                    </div>
+                                </div>
+
+                                <!-- State Details -->
+                                <div class="bg-white shadow rounded-lg p-6">
+                                    <h3 class="text-lg font-medium text-gray-900 mb-4">Stream State Details</h3>
+                                    <dl class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        <div>
+                                            <dt class="text-sm font-medium text-gray-500">Enabled</dt>
+                                            <dd class="mt-1">
+                                                <span :class="['px-2 py-1 text-xs rounded-full', historyData.state_info?.enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800']">
+                                                    {{ historyData.state_info?.enabled ? 'Yes' : 'No' }}
+                                                </span>
+                                            </dd>
+                                        </div>
+                                        <div>
+                                            <dt class="text-sm font-medium text-gray-500">PID</dt>
+                                            <dd class="mt-1 text-sm text-gray-900">{{ historyData.state_info?.pid || 'None' }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt class="text-sm font-medium text-gray-500">Restart Attempts</dt>
+                                            <dd class="mt-1 text-sm text-gray-900">{{ historyData.state_info?.restart_attempts || 0 }} / {{ historyData.state_info?.max_restart_attempts || 3 }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt class="text-sm font-medium text-gray-500">Auto-Restart</dt>
+                                            <dd class="mt-1 text-sm text-gray-900">{{ historyData.state_info?.auto_restart_enabled ? 'Enabled' : 'Disabled' }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt class="text-sm font-medium text-gray-500">Last Crash</dt>
+                                            <dd class="mt-1 text-sm text-gray-900">{{ formatDateTime(historyData.state_info?.last_crash_at) }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt class="text-sm font-medium text-gray-500">Last Command</dt>
+                                            <dd class="mt-1 text-sm text-gray-900">{{ historyData.state_info?.last_command_result || 'N/A' }} ({{ formatDateTime(historyData.state_info?.last_command_at) }})</dd>
+                                        </div>
+                                        <div>
+                                            <dt class="text-sm font-medium text-gray-500">Stream Started</dt>
+                                            <dd class="mt-1 text-sm text-gray-900">{{ formatDateTime(historyData.state_info?.stream_started_at) }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt class="text-sm font-medium text-gray-500">Stream Stopped</dt>
+                                            <dd class="mt-1 text-sm text-gray-900">{{ formatDateTime(historyData.state_info?.stream_stopped_at) }}</dd>
+                                        </div>
+                                        <div>
+                                            <dt class="text-sm font-medium text-gray-500">Scheduled Command</dt>
+                                            <dd class="mt-1 text-sm text-gray-900">{{ historyData.state_info?.scheduled_command || 'none' }}</dd>
+                                        </div>
+                                        <div v-if="historyData.state_info?.analysis_error">
+                                            <dt class="text-sm font-medium text-gray-500">Analysis Error</dt>
+                                            <dd class="mt-1 text-sm text-red-600">{{ historyData.state_info?.analysis_error }}</dd>
+                                        </div>
+                                    </dl>
+                                </div>
+
+                                <!-- Health Logs Table -->
+                                <div class="bg-white shadow rounded-lg p-6">
+                                    <div class="flex justify-between items-center mb-4">
+                                        <h3 class="text-lg font-medium text-gray-900">Health Check Logs</h3>
+                                        <button @click="loadHistory()" class="text-sm text-indigo-600 hover:text-indigo-900">Refresh</button>
+                                    </div>
+
+                                    <div v-if="historyData.health_logs?.length > 0" class="overflow-x-auto">
+                                        <table class="min-w-full divide-y divide-gray-200">
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">PID</th>
+                                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Error</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="bg-white divide-y divide-gray-200">
+                                                <tr v-for="log in historyData.health_logs" :key="log.id" :class="log.status === 'failed' ? 'bg-red-50' : ''">
+                                                    <td class="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{{ formatDateTime(log.checked_at) }}</td>
+                                                    <td class="px-4 py-3 text-sm text-gray-900">{{ log.check_type }}</td>
+                                                    <td class="px-4 py-3 text-sm">
+                                                        <span :class="['px-2 py-1 text-xs rounded-full', log.status === 'healthy' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800']">
+                                                            {{ log.status }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="px-4 py-3 text-sm text-gray-900">
+                                                        {{ log.pid || '-' }}
+                                                        <span v-if="log.pid" :class="log.pid_exists ? 'text-green-600' : 'text-red-600'">
+                                                            ({{ log.pid_exists ? 'alive' : 'dead' }})
+                                                        </span>
+                                                    </td>
+                                                    <td class="px-4 py-3 text-sm text-gray-900">{{ log.action_taken || '-' }}</td>
+                                                    <td class="px-4 py-3 text-sm text-red-600 max-w-xs truncate" :title="log.error_message">{{ log.error_message || '-' }}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div v-else class="text-center py-8 text-gray-500">
+                                        No health check logs available
+                                    </div>
+
+                                    <!-- Pagination -->
+                                    <div v-if="historyData.pagination?.total_pages > 1" class="flex justify-between items-center mt-4 pt-4 border-t">
+                                        <p class="text-sm text-gray-700">
+                                            Page {{ historyData.pagination.page }} of {{ historyData.pagination.total_pages }}
+                                            ({{ historyData.pagination.total }} total logs)
+                                        </p>
+                                        <div class="flex space-x-2">
+                                            <button
+                                                @click="loadHistory(historyData.pagination.page - 1)"
+                                                :disabled="historyData.pagination.page <= 1"
+                                                class="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                                            >
+                                                Previous
+                                            </button>
+                                            <button
+                                                @click="loadHistory(historyData.pagination.page + 1)"
+                                                :disabled="historyData.pagination.page >= historyData.pagination.total_pages"
+                                                class="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                                            >
+                                                Next
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -376,9 +532,11 @@ import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '../../components/AppLayout.vue';
 import { streamsAPI } from '../../services/api';
+import { useToastStore } from '../../stores/toast';
 
 const route = useRoute();
 const router = useRouter();
+const toast = useToastStore();
 const streamId = route.params.id;
 
 const stream = ref(null);
@@ -388,6 +546,8 @@ const loadingTechnical = ref(false);
 const analyzing = ref(false);
 const checkingAccess = ref(false);
 const error = ref(null);
+const loadingHistory = ref(false);
+const historyData = ref(null);
 
 const activeTab = ref('overview');
 const showEditModal = ref(false);
@@ -430,7 +590,7 @@ const getTechnicalInfo = async () => {
         }
     } catch (err) {
         console.error('Error fetching technical info:', err);
-        alert('Failed to load technical information');
+        toast.error('Failed to load technical information', { title: 'Error' });
     } finally {
         loadingTechnical.value = false;
     }
@@ -442,11 +602,11 @@ const analyzeStream = async () => {
         const response = await streamsAPI.analyze(streamId);
         if (response.data.success) {
             await getTechnicalInfo();
-            alert('Stream analyzed successfully');
+            toast.success('Stream analyzed successfully', { title: 'Analysis Complete' });
         }
     } catch (err) {
         console.error('Error analyzing stream:', err);
-        alert(err.response?.data?.message || 'Failed to analyze stream');
+        toast.error('Failed to analyze stream', { title: 'Error', details: err.response?.data?.message || err.message });
     } finally {
         analyzing.value = false;
     }
@@ -458,11 +618,15 @@ const checkAccessibility = async () => {
         const response = await streamsAPI.checkAccessibility(streamId);
         if (response.data.success) {
             const result = response.data.data;
-            alert(`Stream is ${result.accessible ? 'accessible' : 'not accessible'}${result.message ? ': ' + result.message : ''}`);
+            if (result.accessible) {
+                toast.success('Stream is accessible', { title: 'Access Check', details: result.message || '' });
+            } else {
+                toast.warning('Stream is not accessible', { title: 'Access Check', details: result.message || '' });
+            }
         }
     } catch (err) {
         console.error('Error checking accessibility:', err);
-        alert('Failed to check stream accessibility');
+        toast.error('Failed to check stream accessibility', { title: 'Error' });
     } finally {
         checkingAccess.value = false;
     }
@@ -473,11 +637,11 @@ const startStream = async () => {
         const response = await streamsAPI.start(streamId);
         if (response.data.success) {
             await fetchStream();
-            alert('Stream started successfully');
+            toast.success('Stream started successfully', { title: 'Started' });
         }
     } catch (err) {
         console.error('Error starting stream:', err);
-        alert(err.response?.data?.message || 'Failed to start stream');
+        toast.error('Failed to start stream', { title: 'Error', details: err.response?.data?.message || err.message });
     }
 };
 
@@ -486,11 +650,11 @@ const stopStream = async () => {
         const response = await streamsAPI.stop(streamId);
         if (response.data.success) {
             await fetchStream();
-            alert('Stream stopped successfully');
+            toast.success('Stream stopped successfully', { title: 'Stopped' });
         }
     } catch (err) {
         console.error('Error stopping stream:', err);
-        alert(err.response?.data?.message || 'Failed to stop stream');
+        toast.error('Failed to stop stream', { title: 'Error', details: err.response?.data?.message || err.message });
     }
 };
 
@@ -513,17 +677,44 @@ const updateStream = async () => {
         if (response.data.success) {
             showEditModal.value = false;
             await fetchStream();
-            alert('Stream updated successfully');
+            toast.success('Stream updated successfully', { title: 'Updated' });
         }
     } catch (err) {
         console.error('Error updating stream:', err);
-        alert(err.response?.data?.message || 'Failed to update stream');
+        toast.error('Failed to update stream', { title: 'Error', details: err.response?.data?.message || err.message });
     }
 };
 
 const refreshTechnical = async () => {
     await fetchStream();
     await getTechnicalInfo();
+};
+
+const loadHistory = async (page = 1) => {
+    loadingHistory.value = true;
+    try {
+        const response = await streamsAPI.getHistory(streamId, { page, limit: 50 });
+        if (response.data.success) {
+            historyData.value = response.data.data;
+        }
+    } catch (err) {
+        console.error('Error loading history:', err);
+        toast.error('Failed to load stream history', { title: 'Error' });
+    } finally {
+        loadingHistory.value = false;
+    }
+};
+
+const getStateColor = (state) => {
+    const colors = {
+        'running': 'text-green-600',
+        'starting': 'text-blue-600',
+        'stopped': 'text-gray-600',
+        'stopping': 'text-yellow-600',
+        'error': 'text-red-600',
+        'crashed': 'text-red-600',
+    };
+    return colors[state] || 'text-gray-600';
 };
 
 const getStreamUrl = (type) => {
@@ -543,10 +734,10 @@ const getStreamUrl = (type) => {
 const copyToClipboard = async (text) => {
     try {
         await navigator.clipboard.writeText(text);
-        alert('Copied to clipboard!');
+        toast.success('Copied to clipboard!', { title: 'Copied' });
     } catch (err) {
         console.error('Failed to copy:', err);
-        alert('Failed to copy to clipboard');
+        toast.error('Failed to copy to clipboard', { title: 'Error' });
     }
 };
 

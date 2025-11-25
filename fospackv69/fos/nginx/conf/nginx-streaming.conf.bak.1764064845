@@ -1,0 +1,483 @@
+#############################################################################
+# FOS-Streaming Nginx Streaming Service Configuration
+#
+# High-performance configuration for MPEG-DASH/HLS/HTTP-FLV streaming
+# Optimized for massive concurrent connections
+#
+# Binary: fospackv69/fos/nginx/sbin/nginx_fos
+# Service: fos-nginx-streaming
+# Ports: 8000 (HTTP streaming), 1935 (RTMP ingest)
+#
+# Streaming Protocol: MPEG-DASH (primary) + HLS (fallback)
+# Updated: 2025-11-25
+#############################################################################
+
+# Run as current user (casapu)
+user casapu casapu;
+
+# Auto-detect CPU cores for optimal worker count
+worker_processes auto;
+
+# Bind workers to CPU cores for better cache locality
+worker_cpu_affinity auto;
+
+# File descriptor limit per worker (must match system limits)
+worker_rlimit_nofile 1000000;
+
+# Error log - minimal logging for performance
+error_log /home/casapu/projects/FOS-Streaming-v69/fospackv69/fos/logs/nginx-streaming-error.log warn;
+
+# PID file location
+pid /tmp/fos-streaming-nginx.pid;
+
+#############################################################################
+# Events Configuration - Optimized for high concurrency
+#############################################################################
+events {
+    # Maximum simultaneous connections per worker
+    # Total capacity = worker_processes * worker_connections
+    worker_connections 100000;
+
+    # Use epoll for Linux (most efficient)
+    use epoll;
+
+    # Accept multiple connections at once
+    multi_accept on;
+
+    # Disable mutex for better performance under high load
+    accept_mutex off;
+}
+
+#############################################################################
+# HTTP Configuration
+#############################################################################
+http {
+    # MIME types
+    include mime.types;
+    default_type application/octet-stream;
+
+    #########################################################################
+    # Additional MIME Types for Streaming (only add missing types)
+    # Note: Most types are already in mime.types, only add DASH-specific
+    #########################################################################
+    types {
+        # MPEG-DASH specific (not in default mime.types)
+        application/dash+xml mpd;
+        video/mp4 m4s;
+    }
+
+    #########################################################################
+    # Logging Configuration
+    #########################################################################
+
+    # Custom log format for streaming analytics
+    log_format streaming '$remote_addr - $remote_user [$time_local] '
+                         '"$request" $status $body_bytes_sent '
+                         '"$http_referer" "$http_user_agent" '
+                         'rt=$request_time uct=$upstream_connect_time '
+                         'uht=$upstream_header_time urt=$upstream_response_time';
+
+    # Buffered logging for performance
+    access_log /home/casapu/projects/FOS-Streaming-v69/fospackv69/fos/logs/nginx-streaming-access.log streaming buffer=256k flush=5m;
+
+    #########################################################################
+    # Performance Optimizations
+    #########################################################################
+
+    # Efficient file transfer
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+
+    # Connection keep-alive
+    keepalive_timeout 65;
+    keepalive_requests 10000;
+
+    # Reset timed out connections
+    reset_timedout_connection on;
+
+    # Client timeouts
+    client_body_timeout 60;
+    client_header_timeout 60;
+    send_timeout 60;
+
+    #########################################################################
+    # Buffer Configuration for Streaming
+    #########################################################################
+
+    # Client body buffer
+    client_body_buffer_size 128k;
+    client_max_body_size 10m;
+
+    # Header buffers
+    client_header_buffer_size 1k;
+    large_client_header_buffers 4 8k;
+
+    # Output buffers for streaming
+    output_buffers 2 512k;
+    postpone_output 1460;
+
+    # Disable chunked transfer encoding for segments
+    chunked_transfer_encoding off;
+
+    #########################################################################
+    # Compression - Disabled for streaming performance
+    #########################################################################
+    gzip off;
+
+    #########################################################################
+    # Security Headers
+    #########################################################################
+    server_tokens off;
+
+    # Hide upstream errors
+    proxy_intercept_errors off;
+
+    #########################################################################
+    # Connection & Rate Limiting
+    #########################################################################
+
+    # Connection limit zone (per IP)
+    limit_conn_zone $binary_remote_addr zone=stream_conn:50m;
+
+    # Request rate limit zone (per IP)
+    limit_req_zone $binary_remote_addr zone=stream_req:50m rate=100r/s;
+
+    # Limit connection log level
+    limit_conn_log_level warn;
+    limit_req_log_level warn;
+
+    #########################################################################
+    # Upstream PHP-FPM Streaming Pool
+    #########################################################################
+    upstream php_fpm_streaming {
+        server unix:/tmp/fos-streaming-php-fpm.sock;
+
+        # Keep connections alive to reduce overhead
+        keepalive 128;
+        keepalive_requests 10000;
+        keepalive_timeout 60s;
+    }
+
+    #########################################################################
+    # Streaming Server Configuration
+    #########################################################################
+    server {
+        # Listen on streaming port with SO_REUSEPORT for load distribution
+        listen 8000 reuseport;
+        listen [::]:8000 reuseport;
+
+        # Accept any hostname
+        server_name _;
+
+        # Hide nginx version
+        server_tokens off;
+
+        # Document root - project public directory
+        root /home/casapu/projects/FOS-Streaming-v69/public;
+        index index.php;
+
+        #####################################################################
+        # Connection Limits
+        #####################################################################
+
+        # Max 50 concurrent connections per IP
+        limit_conn stream_conn 50;
+
+        # Request rate limiting with burst
+        limit_req zone=stream_req burst=200 nodelay;
+
+        #####################################################################
+        # Stream URL Rewriting
+        #####################################################################
+
+        # Rewrite stream URLs: /live/{username}/{password}/{stream}
+        rewrite ^/live/(.*)/(.*)/(.*)$ /stream.php?username=$1&password=$2&stream=$3 break;
+
+        # Alternative format: /live/{username}/{password}/{stream}.m3u8
+        rewrite ^/live/(.*)/(.*)/(.*)\.(m3u8|mpd|ts|m4s)$ /stream.php?username=$1&password=$2&stream=$3&format=$4 break;
+
+        #####################################################################
+        # MPEG-DASH Streaming Location (Primary)
+        #####################################################################
+        location /dash {
+            alias /home/casapu/projects/FOS-Streaming-v69/fospackv69/fos/streams/dash;
+
+            # DASH MIME types
+            types {
+                application/dash+xml mpd;
+                video/mp4 m4s mp4;
+                audio/mp4 m4a;
+            }
+
+            # Cache control - no caching for live streams
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Pragma "no-cache";
+            add_header Expires "0";
+
+            # CORS headers for web players
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+            add_header Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Range" always;
+            add_header Access-Control-Expose-Headers "Content-Length, Content-Range" always;
+
+            # Handle OPTIONS preflight requests
+            if ($request_method = OPTIONS) {
+                add_header Access-Control-Allow-Origin * always;
+                add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Range" always;
+                add_header Access-Control-Max-Age 1728000;
+                add_header Content-Type "text/plain charset=UTF-8";
+                add_header Content-Length 0;
+                return 204;
+            }
+
+            # Performance optimizations for segment delivery
+            aio on;
+            directio 512;
+            output_buffers 2 1m;
+
+            # Sendfile for efficient file transfer
+            sendfile on;
+            tcp_nopush on;
+            tcp_nodelay on;
+
+            # Disable access log for segments (too noisy)
+            access_log off;
+        }
+
+        #####################################################################
+        # HLS Streaming Location (Fallback for Safari/legacy)
+        #####################################################################
+        location /hls {
+            alias /home/casapu/projects/FOS-Streaming-v69/fospackv69/fos/streams/hls;
+
+            # HLS MIME types (use standard types from mime.types)
+            default_type application/vnd.apple.mpegurl;
+
+            # Cache control - no caching for live streams
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Pragma "no-cache";
+            add_header Expires "0";
+
+            # CORS headers for web players
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+            add_header Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept" always;
+
+            # Performance optimizations for segment delivery
+            aio on;
+            directio 512;
+            output_buffers 2 1m;
+
+            # Sendfile for efficient file transfer
+            sendfile on;
+            tcp_nopush on;
+            tcp_nodelay on;
+
+            # Disable access log for segments (too noisy)
+            access_log off;
+        }
+
+        #####################################################################
+        # Legacy HLS Location (backwards compatibility)
+        #####################################################################
+        location /hl/ {
+            alias /home/casapu/projects/FOS-Streaming-v69/fospackv69/fos/streams/hls/;
+
+            types {
+                application/vnd.apple.mpegurl m3u8;
+                video/mp2t ts;
+            }
+
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Access-Control-Allow-Origin * always;
+
+            aio on;
+            directio 512;
+            sendfile on;
+            tcp_nopush on;
+            tcp_nodelay on;
+            access_log off;
+        }
+
+        #####################################################################
+        # HTTP-FLV Streaming Location (low latency)
+        #####################################################################
+        location /live {
+            flv_live on;
+            chunked_transfer_encoding on;
+
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Allow-Credentials true always;
+        }
+
+        #####################################################################
+        # RTMP Statistics Page
+        #####################################################################
+        location /stat {
+            rtmp_stat all;
+            rtmp_stat_stylesheet stat.xsl;
+            add_header Access-Control-Allow-Origin * always;
+        }
+
+        location /stat.xsl {
+            root /home/casapu/projects/FOS-Streaming-v69/fospackv69/nginx-builder/mods/nginx-http-flv-module;
+        }
+
+        #####################################################################
+        # PHP Processing
+        #####################################################################
+        location ~ \.php$ {
+            # Security - only process existing files
+            try_files $uri =404;
+
+            # FastCGI path info
+            fastcgi_split_path_info ^(.+\.php)(/.+)$;
+
+            # FastCGI upstream
+            fastcgi_pass php_fpm_streaming;
+            fastcgi_index index.php;
+
+            # FastCGI parameters
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include fastcgi_params;
+
+            # FastCGI performance optimizations
+            fastcgi_keep_conn on;
+            fastcgi_buffers 256 16k;
+            fastcgi_buffer_size 128k;
+            fastcgi_busy_buffers_size 256k;
+            fastcgi_temp_file_write_size 256k;
+
+            # FastCGI timeouts
+            fastcgi_connect_timeout 30;
+            fastcgi_send_timeout 300;
+            fastcgi_read_timeout 300;
+
+            # Hide PHP version
+            fastcgi_hide_header X-Powered-By;
+        }
+
+        #####################################################################
+        # Health Check Endpoint
+        #####################################################################
+        location /health {
+            access_log off;
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+
+        #####################################################################
+        # Status Page (internal only)
+        #####################################################################
+        location /nginx_status {
+            stub_status on;
+            access_log off;
+            allow 127.0.0.1;
+            allow ::1;
+            deny all;
+        }
+
+        #####################################################################
+        # Error Pages
+        #####################################################################
+        error_page 500 502 503 504 /50x.html;
+        location = /50x.html {
+            root html;
+            internal;
+        }
+
+        #####################################################################
+        # Deny Hidden Files
+        #####################################################################
+        location ~ /\. {
+            deny all;
+            access_log off;
+            log_not_found off;
+        }
+    }
+}
+
+#############################################################################
+# RTMP Configuration - For FFmpeg stream ingest
+#############################################################################
+rtmp {
+    server {
+        listen 1935;
+        chunk_size 4096;
+        max_streams 128;
+
+        # Ping clients every 30s
+        ping 30s;
+        ping_timeout 15s;
+
+        # Drop idle connections after 30s
+        drop_idle_publisher 30s;
+
+        #####################################################################
+        # Live Streaming Application
+        #####################################################################
+        application live {
+            live on;
+            record off;
+
+            # GOP cache for faster client startup (reduces time to first frame)
+            gop_cache on;
+
+            # Allow publish from localhost only (FFmpeg runs locally)
+            allow publish 127.0.0.1;
+            allow publish ::1;
+            deny publish all;
+
+            # Allow play from anywhere
+            allow play all;
+
+            #################################################################
+            # MPEG-DASH Output (Primary - Modern browsers)
+            #################################################################
+            dash on;
+            dash_path /home/casapu/projects/FOS-Streaming-v69/fospackv69/fos/streams/dash;
+            dash_fragment 4s;
+            dash_playlist_length 30s;
+            dash_nested on;
+            dash_cleanup on;
+
+            #################################################################
+            # HLS Output (Fallback - Safari and legacy devices)
+            #################################################################
+            hls on;
+            hls_path /home/casapu/projects/FOS-Streaming-v69/fospackv69/fos/streams/hls;
+            hls_fragment 3s;
+            hls_playlist_length 60s;
+            hls_nested on;
+            hls_cleanup on;
+
+            # HLS variant playlist for adaptive bitrate (future use)
+            # hls_variant _low BANDWIDTH=500000;
+            # hls_variant _mid BANDWIDTH=1500000;
+            # hls_variant _high BANDWIDTH=4000000;
+        }
+
+        #####################################################################
+        # Transcoded Application (for adaptive bitrate)
+        #####################################################################
+        application transcode {
+            live on;
+            record off;
+
+            # Allow publish from localhost only
+            allow publish 127.0.0.1;
+            deny publish all;
+
+            # Push to live application after transcoding
+            # exec_push ffmpeg -i rtmp://localhost:1935/transcode/$name
+            #     -c:v libx264 -b:v 2000k -preset fast -c:a aac -b:a 128k
+            #     -f flv rtmp://localhost:1935/live/$name_high
+            #     -c:v libx264 -b:v 1000k -preset fast -c:a aac -b:a 96k
+            #     -f flv rtmp://localhost:1935/live/$name_mid
+            #     -c:v libx264 -b:v 500k -preset fast -c:a aac -b:a 64k
+            #     -f flv rtmp://localhost:1935/live/$name_low;
+        }
+    }
+}

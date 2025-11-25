@@ -75,9 +75,19 @@ try {
             $stream->streamurl3 = '';
             $stream->cat_id = $catId;
             $stream->trans_id = 0;
-            $stream->status = 0;
-            $stream->running = 0;
+            $stream->enabled = 0; // Disabled by default - admin must enable manually
+            $stream->state = 'stopped'; // Use state as single source of truth
+            $stream->scheduled_command = 'none'; // No scheduled command
             $stream->analysis_status = 'pending'; // Will be analyzed by FFprobe worker
+
+            // M3U_Plus fields
+            $stream->logo = $streamData['logo'] ?? '';
+            $stream->tvid = $streamData['tvg_id'] ?? '';
+            $stream->xui_id = $streamData['xui_id'] ?? '';
+            $stream->timeshift = isset($streamData['timeshift']) && $streamData['timeshift'] !== null
+                ? (int)$streamData['timeshift']
+                : null;
+
             $stream->save();
 
             $streamIds[] = $stream->id;

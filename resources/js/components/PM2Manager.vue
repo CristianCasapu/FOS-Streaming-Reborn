@@ -270,15 +270,15 @@
 
                                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <!-- Worker Configuration -->
-                                            <div class="col-span-2">
+                                            <div>
                                                 <h4 class="text-sm font-semibold text-gray-900 mb-3 flex items-center">
                                                     <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                                     </svg>
-                                                    Configuration
+                                                    PM2 Configuration
                                                 </h4>
-                                                <div v-if="workerDetails[worker.name]" class="grid grid-cols-2 gap-3 text-sm">
+                                                <div v-if="workerDetails[worker.name]" class="space-y-2 text-sm">
                                                     <div>
                                                         <span class="text-gray-500">Script:</span>
                                                         <span class="ml-2 text-gray-900 font-mono text-xs">{{ workerDetails[worker.name].script || 'N/A' }}</span>
@@ -295,16 +295,8 @@
                                                         <span class="text-gray-500">Max Restarts:</span>
                                                         <span class="ml-2 text-gray-900">{{ workerDetails[worker.name].max_restarts || 'N/A' }}</span>
                                                     </div>
-                                                    <div>
-                                                        <span class="text-gray-500">Min Uptime:</span>
-                                                        <span class="ml-2 text-gray-900">{{ workerDetails[worker.name].min_uptime || 'N/A' }}</span>
-                                                    </div>
-                                                    <div>
-                                                        <span class="text-gray-500">Log Level:</span>
-                                                        <span class="ml-2 text-gray-900">{{ workerDetails[worker.name].log_level || 'warn' }}</span>
-                                                    </div>
-                                                    <div v-if="workerDetails[worker.name].cron_restart" class="col-span-2">
-                                                        <span class="text-gray-500">Cron Schedule:</span>
+                                                    <div v-if="workerDetails[worker.name].cron_restart">
+                                                        <span class="text-gray-500">Cron:</span>
                                                         <span class="ml-2 text-gray-900 font-mono text-xs">{{ workerDetails[worker.name].cron_restart }}</span>
                                                     </div>
                                                 </div>
@@ -313,56 +305,105 @@
                                                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                                                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                                     </svg>
-                                                    Loading configuration...
+                                                    Loading...
                                                 </div>
                                             </div>
 
-                                            <!-- Available Commands -->
+                                            <!-- Worker Parameters (Configurable) -->
+                                            <div v-if="Object.keys(getWorkerSchema(worker.name)).length > 0">
+                                                <h4 class="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                                                    <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                                    </svg>
+                                                    Worker Parameters
+                                                </h4>
+                                                <div v-if="editingWorkerParams[worker.name]" class="space-y-3">
+                                                    <div v-for="(config, paramKey) in getWorkerSchema(worker.name)" :key="paramKey">
+                                                        <label class="block text-xs font-medium text-gray-600 mb-1">
+                                                            {{ config.label }}
+                                                        </label>
+                                                        <input
+                                                            v-model.number="editingWorkerParams[worker.name][paramKey]"
+                                                            :type="config.type"
+                                                            :min="config.min"
+                                                            :max="config.max"
+                                                            class="block w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                                                        />
+                                                        <p class="text-xs text-gray-500 mt-0.5">{{ config.description }}</p>
+                                                    </div>
+                                                    <button
+                                                        @click="saveWorkerParams(worker.name)"
+                                                        :disabled="savingWorkerParams[worker.name]"
+                                                        class="mt-2 w-full px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center"
+                                                    >
+                                                        <svg v-if="savingWorkerParams[worker.name]" class="animate-spin h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24">
+                                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                                        </svg>
+                                                        {{ savingWorkerParams[worker.name] ? 'Saving...' : 'Save & Restart' }}
+                                                    </button>
+                                                </div>
+                                                <div v-else class="text-sm text-gray-500">
+                                                    <svg class="animate-spin h-4 w-4 inline mr-2" fill="none" viewBox="0 0 24 24">
+                                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                                    </svg>
+                                                    Loading...
+                                                </div>
+                                            </div>
+
+                                            <!-- Quick Actions -->
                                             <div>
                                                 <h4 class="text-sm font-semibold text-gray-900 mb-3 flex items-center">
                                                     <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                                                     </svg>
-                                                    Available Commands
+                                                    Quick Actions
                                                 </h4>
-                                                <div class="space-y-2 text-sm">
-                                                    <div class="flex items-start">
-                                                        <svg class="h-4 w-4 mr-2 mt-0.5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 1.414L10.586 9H7a1 1 0 100 2h3.586l-1.293 1.293a1 1 0 101.414 1.414l3-3a1 1 0 000-1.414z" clip-rule="evenodd" />
+                                                <div class="space-y-2">
+                                                    <button
+                                                        v-if="worker.status !== 'online'"
+                                                        @click="controlWorker(worker.name, 'start')"
+                                                        :disabled="processing"
+                                                        class="w-full px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center justify-center"
+                                                    >
+                                                        <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                                                         </svg>
-                                                        <div>
-                                                            <span class="font-medium text-gray-900">Start</span>
-                                                            <p class="text-xs text-gray-500">Launch the worker process</p>
-                                                        </div>
-                                                    </div>
-                                                    <div class="flex items-start">
-                                                        <svg class="h-4 w-4 mr-2 mt-0.5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clip-rule="evenodd" />
+                                                        Start Worker
+                                                    </button>
+                                                    <button
+                                                        v-if="worker.status === 'online'"
+                                                        @click="controlWorker(worker.name, 'stop')"
+                                                        :disabled="processing"
+                                                        class="w-full px-3 py-1.5 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 disabled:opacity-50 flex items-center justify-center"
+                                                    >
+                                                        <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
                                                         </svg>
-                                                        <div>
-                                                            <span class="font-medium text-gray-900">Stop</span>
-                                                            <p class="text-xs text-gray-500">Gracefully stop the worker</p>
-                                                        </div>
-                                                    </div>
-                                                    <div class="flex items-start">
-                                                        <svg class="h-4 w-4 mr-2 mt-0.5 text-indigo-600" fill="currentColor" viewBox="0 0 20 20">
-                                                            <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                                                        Stop Worker
+                                                    </button>
+                                                    <button
+                                                        @click="controlWorker(worker.name, 'restart')"
+                                                        :disabled="processing"
+                                                        class="w-full px-3 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center"
+                                                    >
+                                                        <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                                         </svg>
-                                                        <div>
-                                                            <span class="font-medium text-gray-900">Restart</span>
-                                                            <p class="text-xs text-gray-500">Zero-downtime restart</p>
-                                                        </div>
-                                                    </div>
-                                                    <div class="flex items-start">
-                                                        <svg class="h-4 w-4 mr-2 mt-0.5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                                                            <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
-                                                            <path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" />
+                                                        Restart Worker
+                                                    </button>
+                                                    <button
+                                                        @click="editWorker(worker.name)"
+                                                        :disabled="processing"
+                                                        class="w-full px-3 py-1.5 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-700 disabled:opacity-50 flex items-center justify-center"
+                                                    >
+                                                        <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                                         </svg>
-                                                        <div>
-                                                            <span class="font-medium text-gray-900">Edit</span>
-                                                            <p class="text-xs text-gray-500">Modify configuration</p>
-                                                        </div>
-                                                    </div>
+                                                        Advanced Settings
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -661,6 +702,92 @@ const queueStats = ref(null);
 // Worker details expansion
 const expandedWorker = ref(null);
 const workerDetails = ref({});
+
+// Worker-specific configurable parameters schema
+const workerParameterSchemas = {
+    'stream-manager-worker': {
+        POLL_INTERVAL: { type: 'number', label: 'Poll Interval (ms)', default: 5000, min: 1000, max: 60000, description: 'How often to check for stream commands' },
+    },
+    'stream-monitor-worker': {
+        POLL_INTERVAL: { type: 'number', label: 'Poll Interval (ms)', default: 10000, min: 1000, max: 60000, description: 'How often to check stream health' },
+    },
+    'stream-import-worker': {
+        POLL_INTERVAL: { type: 'number', label: 'Poll Interval (ms)', default: 5000, min: 1000, max: 60000, description: 'How often to poll the import queue' },
+    },
+    'ffprobe-worker': {
+        POLL_INTERVAL: { type: 'number', label: 'Poll Interval (ms)', default: 10000, min: 1000, max: 60000, description: 'How often to poll for analysis jobs' },
+    },
+    'website-health-worker': {
+        POLL_INTERVAL: { type: 'number', label: 'Poll Interval (ms)', default: 30000, min: 5000, max: 300000, description: 'How often to check system health' },
+    },
+    'srt-proxy-worker': {
+        SRT_PORT: { type: 'number', label: 'SRT Port', default: 9000, min: 1024, max: 65535, description: 'Port for SRT connections' },
+    },
+    'quic-proxy-worker': {
+        QUIC_PORT: { type: 'number', label: 'QUIC Port', default: 443, min: 1, max: 65535, description: 'Port for QUIC connections' },
+    },
+    'v2ray-proxy-worker': {
+        V2RAY_PORT: { type: 'number', label: 'V2Ray Port', default: 10086, min: 1024, max: 65535, description: 'Port for V2Ray connections' },
+    }
+};
+
+// Inline editing state for worker parameters
+const editingWorkerParams = ref({});
+const savingWorkerParams = ref({});
+
+// Get parameter schema for a worker
+const getWorkerSchema = (workerName) => {
+    return workerParameterSchemas[workerName] || {};
+};
+
+// Initialize editing parameters when expanding a worker
+const initializeWorkerParams = (workerName, currentEnvVars) => {
+    const schema = getWorkerSchema(workerName);
+    const params = {};
+    for (const [key, config] of Object.entries(schema)) {
+        params[key] = currentEnvVars?.[key] ?? config.default;
+    }
+    editingWorkerParams.value[workerName] = params;
+};
+
+// Save worker parameters
+const saveWorkerParams = async (workerName) => {
+    savingWorkerParams.value[workerName] = true;
+    try {
+        const params = editingWorkerParams.value[workerName];
+        const details = workerDetails.value[workerName];
+
+        // Merge with existing config
+        const config = {
+            ...details,
+            env_vars: {
+                ...(details.env_vars || {}),
+                ...params
+            }
+        };
+
+        const response = await pm2API.updateConfig(workerName, config);
+
+        if (response.data.success) {
+            showMessage(`Parameters saved for ${workerName}. Restarting worker...`, 'success');
+            // Update local details
+            workerDetails.value[workerName] = {
+                ...details,
+                env_vars: config.env_vars
+            };
+            // Restart worker to apply changes
+            setTimeout(async () => {
+                await controlWorker(workerName, 'restart');
+            }, 500);
+        } else {
+            showMessage('Error saving parameters: ' + response.data.message, 'error');
+        }
+    } catch (error) {
+        showMessage('Error saving parameters: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        savingWorkerParams.value[workerName] = false;
+    }
+};
 
 // Edit modal state
 const showEditModal = ref(false);
@@ -969,9 +1096,16 @@ const toggleWorkerDetails = async (workerName) => {
                 const response = await pm2API.getConfig(workerName);
                 if (response.data.success) {
                     workerDetails.value[workerName] = response.data.data;
+                    // Initialize editable parameters from loaded config
+                    initializeWorkerParams(workerName, response.data.data.env_vars);
                 }
             } catch (error) {
                 console.error('Error loading worker details:', error);
+            }
+        } else {
+            // Details already loaded, just initialize parameters if not already done
+            if (!editingWorkerParams.value[workerName]) {
+                initializeWorkerParams(workerName, workerDetails.value[workerName].env_vars);
             }
         }
     }

@@ -1112,6 +1112,146 @@ sleep 2
 sudo systemctl start fos-nginx
 
 # ============================================================================
+# STEP 16.5: Configure Streaming Services
+# ============================================================================
+log_step "Step 16.5: Configuring Dedicated Streaming Services"
+
+log_info "Installing required shared libraries for streaming binaries..."
+sudo apt-get install -y libpcre3 libpq5 libxml2 libzip4 libonig5 libargon2-1 libsodium23 libgd3 libgeoip1 libxslt1.1 libcurl4 libssl3 || true
+
+log_info "Configuring system kernel parameters for high concurrency..."
+sudo tee /etc/sysctl.d/99-fos-streaming.conf > /dev/null <<'SYSCTL_EOF'
+# FOS-Streaming Network Performance Tuning
+net.core.somaxconn = 65535
+net.core.netdev_max_backlog = 65535
+net.ipv4.tcp_max_syn_backlog = 65535
+net.ipv4.ip_local_port_range = 1024 65535
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+
+# File Descriptors
+fs.file-max = 2000000
+fs.nr_open = 2000000
+SYSCTL_EOF
+sudo sysctl -p /etc/sysctl.d/99-fos-streaming.conf 2>/dev/null || true
+
+log_info "Configuring user limits for high concurrency..."
+sudo tee /etc/security/limits.d/99-fos-streaming.conf > /dev/null <<'LIMITS_EOF'
+# FOS-Streaming User Limits
+fosstreaming soft nofile 1000000
+fosstreaming hard nofile 1000000
+fosstreaming soft nproc 65535
+fosstreaming hard nproc 65535
+nginx soft nofile 1000000
+nginx hard nofile 1000000
+nginx soft nproc 65535
+nginx hard nproc 65535
+* soft nofile 65535
+* hard nofile 65535
+LIMITS_EOF
+
+log_info "Creating PHP-FPM Streaming Service..."
+sudo tee /etc/systemd/system/fos-php-fpm-streaming.service > /dev/null <<EOF
+[Unit]
+Description=FOS Streaming PHP-FPM Service
+Documentation=https://github.com/CristianCasapu/FOS-Streaming-Reborn
+After=network.target
+Before=fos-nginx-streaming.service
+
+[Service]
+Type=notify
+User=root
+Group=root
+PIDFile=/tmp/fos-streaming-php-fpm.pid
+ExecStartPre=/usr/sbin/php-fpm${PHP_VERSION} -t -y ${FOS_DIR}/php/etc/php-fpm-streaming.conf
+ExecStart=/usr/sbin/php-fpm${PHP_VERSION} -y ${FOS_DIR}/php/etc/php-fpm-streaming.conf --nodaemonize
+ExecReload=/bin/kill -USR2 \$MAINPID
+ExecStop=/bin/kill -QUIT \$MAINPID
+TimeoutStopSec=10
+KillMode=mixed
+KillSignal=SIGQUIT
+PrivateTmp=false
+RuntimeDirectory=fos-streaming-php
+RuntimeDirectoryMode=0755
+
+# Resource Limits
+LimitNOFILE=1000000
+LimitNPROC=65535
+LimitCORE=infinity
+
+# Restart Policy
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+log_info "Creating Nginx Streaming Service..."
+sudo tee /etc/systemd/system/fos-nginx-streaming.service > /dev/null <<EOF
+[Unit]
+Description=FOS Nginx Streaming Service
+Documentation=https://github.com/CristianCasapu/FOS-Streaming-Reborn
+After=network.target fos-php-fpm-streaming.service
+Requires=fos-php-fpm-streaming.service
+BindsTo=fos-php-fpm-streaming.service
+
+[Service]
+Type=forking
+User=fosstreaming
+Group=fosstreaming
+PIDFile=/tmp/fos-streaming-nginx.pid
+ExecStartPre=${FOS_DIR}/nginx/sbin/nginx_fos -t -c ${FOS_DIR}/nginx/conf/nginx-streaming.conf
+ExecStart=${FOS_DIR}/nginx/sbin/nginx_fos -c ${FOS_DIR}/nginx/conf/nginx-streaming.conf
+ExecReload=/bin/kill -HUP \$MAINPID
+ExecStop=/bin/kill -QUIT \$MAINPID
+TimeoutStopSec=10
+
+# Resource Limits
+LimitNOFILE=1000000
+LimitNPROC=65535
+LimitCORE=infinity
+
+# Restart Policy
+Restart=always
+RestartSec=5s
+
+# Wait for PHP-FPM socket
+ExecStartPre=/bin/bash -c 'for i in {1..30}; do [ -S /tmp/fos-streaming-php-fpm.sock ] && exit 0; sleep 1; done; exit 1'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Update streaming nginx config with correct paths and ports
+log_info "Configuring streaming nginx for port ${STREAM_PORT}..."
+sudo sed -i "s/listen 8000 reuseport;/listen ${STREAM_PORT} reuseport;/g" "${FOS_DIR}/nginx/conf/nginx-streaming.conf"
+sudo sed -i "s/listen \[::\]:8000 reuseport;/listen [::]:${STREAM_PORT} reuseport;/g" "${FOS_DIR}/nginx/conf/nginx-streaming.conf"
+
+# Set permissions
+sudo chown -R fosstreaming:fosstreaming "${FOS_DIR}/nginx"
+sudo chown -R fosstreaming:fosstreaming "${FOS_DIR}/php/etc"
+sudo chmod 644 "${FOS_DIR}/nginx/conf/nginx-streaming.conf"
+sudo chmod 644 "${FOS_DIR}/php/etc/php-fpm-streaming.conf"
+
+# Enable and start streaming services
+log_info "Enabling streaming services..."
+sudo systemctl daemon-reload
+sudo systemctl enable fos-php-fpm-streaming
+sudo systemctl enable fos-nginx-streaming
+
+log_info "Starting streaming services..."
+sudo systemctl start fos-php-fpm-streaming
+sleep 3
+sudo systemctl start fos-nginx-streaming || log_warn "Nginx streaming service failed to start - check shared libraries"
+
+log_info "Streaming services configured successfully"
+
+# ============================================================================
 # STEP 17: Initialize Database
 # ============================================================================
 log_step "Step 17: Initializing Database"
@@ -1193,9 +1333,12 @@ cat <<EOF
   ✓ Node.js $(node --version)
   ✓ NPM $(npm --version)
   ✓ MariaDB ${MARIADB_VERSION}
-  ✓ Nginx with HTTP-FLV module
+  ✓ Nginx Admin Panel (fos-nginx)
+  ✓ Nginx Streaming Service (fos-nginx-streaming with nginx_fos)
+  ✓ PHP-FPM Streaming Service (fos-php-fpm-streaming)
   ✓ FFmpeg latest
   ✓ Self-signed SSL certificates
+  ✓ High-concurrency kernel optimizations
 
 ================================================================
   User Configuration:
@@ -1243,12 +1386,21 @@ cat <<EOF
   Service Management:
 ================================================================
 
+  # Streaming Services (dedicated high-performance)
+  systemctl status fos-nginx-streaming
+  systemctl status fos-php-fpm-streaming
+
+  # Admin Panel Services
   systemctl status fos-nginx
   systemctl status php${PHP_VERSION}-fpm
   systemctl status mariadb
 
-  systemctl restart fos-nginx
-  systemctl reload fos-nginx
+  # Restart streaming services
+  systemctl restart fos-php-fpm-streaming  # Restart this first
+  systemctl restart fos-nginx-streaming
+
+  # Note: fos-nginx-streaming depends on fos-php-fpm-streaming
+  #       If PHP-FPM stops, Nginx streaming will also stop
 
 ================================================================
   NVM Usage (for current user):

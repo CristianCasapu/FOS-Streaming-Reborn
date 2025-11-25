@@ -29,8 +29,8 @@ try {
             // Get basic statistics
             $stats = [
                 'totalStreams' => Stream::count(),
-                'onlineStreams' => Stream::where('running', '=', 1)->count(),
-                'offlineStreams' => Stream::where('running', '=', 0)->count(),
+                'onlineStreams' => Stream::whereIn('state', ['running', 'starting'])->count(),
+                'offlineStreams' => Stream::whereIn('state', ['stopped', 'error', 'crashed'])->orWhereNull('state')->count(),
                 'totalSubscribers' => Subscriber::count(),
                 'activeSubscribers' => Subscriber::where('enabled', '=', 1)->count(),
                 'inactiveSubscribers' => Subscriber::where('enabled', '=', 0)->count(),
@@ -72,7 +72,7 @@ try {
             $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 5;
 
             $streams = Stream::with('category')
-                ->where('running', '=', 1)
+                ->whereIn('state', ['running', 'starting'])
                 ->orderBy('updated_at', 'desc')
                 ->limit($limit)
                 ->get();

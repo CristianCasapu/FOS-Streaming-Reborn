@@ -13,9 +13,9 @@
 const { execSync } = require('child_process');
 const path = require('path');
 
-// Configuration
-const POLL_INTERVAL = 30000; // 30 seconds
-const PHP_CLI = 'php';
+// Configuration (read from environment variables for runtime configurability)
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL, 10) || 30000; // 30 seconds default
+const PHP_CLI = process.env.PHP_CLI || 'php';
 const BASE_PATH = path.resolve(__dirname, '..');
 const WORKER_SCRIPT = path.join(BASE_PATH, 'workers/php/website-health.php');
 

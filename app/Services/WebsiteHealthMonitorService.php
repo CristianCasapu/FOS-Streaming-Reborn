@@ -51,9 +51,13 @@ class WebsiteHealthMonitorService
     private function monitorServices(array $stats): array
     {
         $services = [
-            'nginx' => 'Nginx Web Server',
-            'mariadb' => 'MariaDB Database',
-            'php8.4-fpm' => 'PHP-FPM'
+            // Streaming Services (dedicated high-performance)
+            'fos-nginx-streaming' => 'Nginx Streaming Service',
+            'fos-php-fpm-streaming' => 'PHP-FPM Streaming Service',
+            // Core Platform Services
+            'fos-nginx' => 'Nginx Admin Panel',
+            'php8.4-fpm' => 'PHP-FPM Admin',
+            'mariadb' => 'MariaDB Database'
         ];
 
         foreach ($services as $serviceName => $displayName) {

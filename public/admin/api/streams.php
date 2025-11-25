@@ -39,12 +39,12 @@ try {
 
             $query = Stream::with('category');
 
-            // Apply filters
+            // Apply filters - use state as single source of truth
             if ($running !== null) {
                 if ($running == '1') {
-                    $query->where('status', '=', 1);
+                    $query->whereIn('state', ['running', 'starting']);
                 } elseif ($running == '2') {
-                    $query->where('status', '=', 2);
+                    $query->whereIn('state', ['error', 'crashed']);
                 }
             }
 
@@ -71,9 +71,12 @@ try {
                     'stream_source' => $stream->streamurl, // Map from database column 'streamurl'
                     'category' => $stream->category ? $stream->category->name : 'N/A',
                     'category_id' => $stream->cat_id,
+                    'enabled' => (bool) $stream->enabled,
                     'status' => $stream->status,
                     'status_label' => $stream->statusLabel,
+                    'state' => $stream->state,
                     'running' => $stream->running,
+                    'logo' => $stream->logo, // Picon/channel logo URL
                     'created_at' => $stream->created_at,
                     'updated_at' => $stream->updated_at
                 ];
@@ -111,8 +114,15 @@ try {
                     'stream_source' => $stream->streamurl, // Map from database column 'streamurl'
                     'cat_id' => $stream->cat_id,
                     'trans_id' => $stream->trans_id,
+                    'enabled' => (bool) $stream->enabled,
                     'status' => $stream->status,
+                    'state' => $stream->state,
                     'running' => $stream->running,
+                    // M3U_Plus fields
+                    'logo' => $stream->logo,
+                    'tvid' => $stream->tvid,
+                    'xui_id' => $stream->xui_id,
+                    'timeshift' => $stream->timeshift,
                     'created_at' => $stream->created_at,
                     'updated_at' => $stream->updated_at
                 ]
@@ -134,8 +144,14 @@ try {
             $stream->streamurl3 = ''; // Optional backup URL
             $stream->cat_id = $input['cat_id'] ?? 0;
             $stream->trans_id = $input['trans_id'] ?? 0;
-            $stream->status = 0;
-            $stream->running = 0;
+            $stream->state = 'stopped'; // Use state as single source of truth
+
+            // M3U_Plus fields
+            $stream->logo = $input['logo'] ?? '';
+            $stream->tvid = $input['tvid'] ?? '';
+            $stream->xui_id = $input['xui_id'] ?? '';
+            $stream->timeshift = isset($input['timeshift']) && $input['timeshift'] !== null ? (int)$input['timeshift'] : null;
+
             $stream->save();
 
             echo json_encode([
@@ -174,6 +190,20 @@ try {
                 $stream->trans_id = $input['trans_id'];
             }
 
+            // M3U_Plus fields
+            if (isset($input['logo'])) {
+                $stream->logo = $input['logo'];
+            }
+            if (isset($input['tvid'])) {
+                $stream->tvid = $input['tvid'];
+            }
+            if (isset($input['xui_id'])) {
+                $stream->xui_id = $input['xui_id'];
+            }
+            if (array_key_exists('timeshift', $input)) {
+                $stream->timeshift = $input['timeshift'] !== null ? (int)$input['timeshift'] : null;
+            }
+
             $stream->save();
 
             echo json_encode([
@@ -195,7 +225,7 @@ try {
             }
 
             // Stop stream if running
-            if ($stream->running == 1 || $stream->status == 1) {
+            if ($stream->isActive()) {
                 stop_stream($id);
             }
 
@@ -221,7 +251,7 @@ try {
                 $stream = Stream::find($id);
                 if ($stream) {
                     // Stop stream if running
-                    if ($stream->running == 1 || $stream->status == 1) {
+                    if ($stream->isActive()) {
                         stop_stream($id);
                     }
                     $stream->delete();
@@ -320,6 +350,207 @@ try {
             echo json_encode([
                 'success' => true,
                 'message' => "{$count} stream(s) stopped successfully"
+            ]);
+            break;
+
+        case 'enable':
+            // Enable a stream
+            $id = $_GET['id'] ?? null;
+            if (!$id) {
+                throw new Exception('Stream ID is required');
+            }
+
+            $stream = Stream::find($id);
+            if (!$stream) {
+                throw new Exception('Stream not found');
+            }
+
+            $stream->enable();
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Stream enabled successfully'
+            ]);
+            break;
+
+        case 'disable':
+            // Disable a stream (will be stopped by monitor worker)
+            $id = $_GET['id'] ?? null;
+            if (!$id) {
+                throw new Exception('Stream ID is required');
+            }
+
+            $stream = Stream::find($id);
+            if (!$stream) {
+                throw new Exception('Stream not found');
+            }
+
+            $stream->disable();
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Stream disabled successfully'
+            ]);
+            break;
+
+        case 'mass_enable':
+            // Enable multiple streams
+            $input = json_decode(file_get_contents('php://input'), true);
+            $ids = $input['ids'] ?? [];
+
+            if (empty($ids)) {
+                throw new Exception('No stream IDs provided');
+            }
+
+            $count = 0;
+            foreach ($ids as $id) {
+                $stream = Stream::find($id);
+                if ($stream) {
+                    $stream->enable();
+                    $count++;
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "{$count} stream(s) enabled successfully"
+            ]);
+            break;
+
+        case 'mass_disable':
+            // Disable multiple streams
+            $input = json_decode(file_get_contents('php://input'), true);
+            $ids = $input['ids'] ?? [];
+
+            if (empty($ids)) {
+                throw new Exception('No stream IDs provided');
+            }
+
+            $count = 0;
+            foreach ($ids as $id) {
+                $stream = Stream::find($id);
+                if ($stream) {
+                    $stream->disable();
+                    $count++;
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "{$count} stream(s) disabled successfully"
+            ]);
+            break;
+
+        case 'mass_restart':
+            // Restart multiple streams
+            $input = json_decode(file_get_contents('php://input'), true);
+            $ids = $input['ids'] ?? [];
+
+            if (empty($ids)) {
+                throw new Exception('No stream IDs provided');
+            }
+
+            $count = 0;
+            foreach ($ids as $id) {
+                $stream = Stream::find($id);
+                if ($stream && $stream->isEnabled()) {
+                    $stream->queueCommand('restart');
+                    $count++;
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "{$count} stream(s) queued for restart"
+            ]);
+            break;
+
+        case 'enable_all':
+            // Enable all streams
+            $count = Stream::where('enabled', 0)->update(['enabled' => 1]);
+
+            echo json_encode([
+                'success' => true,
+                'message' => "{$count} stream(s) enabled successfully"
+            ]);
+            break;
+
+        case 'disable_all':
+            // Disable all streams (will be stopped by monitor worker)
+            $count = Stream::where('enabled', 1)->update(['enabled' => 0]);
+
+            echo json_encode([
+                'success' => true,
+                'message' => "{$count} stream(s) disabled successfully"
+            ]);
+            break;
+
+        case 'start_all':
+            // Start all enabled streams that are not running
+            $streams = Stream::where('enabled', 1)
+                ->whereNotIn('state', ['running', 'starting'])
+                ->get();
+
+            $count = 0;
+            foreach ($streams as $stream) {
+                $stream->queueCommand('start');
+                $count++;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "{$count} stream(s) queued to start"
+            ]);
+            break;
+
+        case 'stop_all':
+            // Stop all running streams
+            $streams = Stream::whereIn('state', ['running', 'starting'])->get();
+
+            $count = 0;
+            foreach ($streams as $stream) {
+                $stream->queueCommand('stop');
+                $count++;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "{$count} stream(s) queued to stop"
+            ]);
+            break;
+
+        case 'restart_all':
+            // Restart all enabled running streams
+            $streams = Stream::where('enabled', 1)
+                ->whereIn('state', ['running', 'starting'])
+                ->get();
+
+            $count = 0;
+            foreach ($streams as $stream) {
+                $stream->queueCommand('restart');
+                $count++;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'message' => "{$count} stream(s) queued to restart"
+            ]);
+            break;
+
+        case 'stats':
+            // Get stream statistics
+            $stats = [
+                'total' => Stream::count(),
+                'enabled' => Stream::where('enabled', 1)->count(),
+                'disabled' => Stream::where('enabled', 0)->count(),
+                'running' => Stream::whereIn('state', ['running', 'starting'])->count(),
+                'stopped' => Stream::where('state', 'stopped')->count(),
+                'error' => Stream::whereIn('state', ['error', 'crashed'])->count(),
+            ];
+
+            echo json_encode([
+                'success' => true,
+                'data' => $stats
             ]);
             break;
 
@@ -513,6 +744,166 @@ try {
                     'last_analyzed' => $stream->last_analyzed,
                     'technical_summary' => $stream->getTechnicalSummary(),
                     'recommended_settings' => $stream->recommended_settings ? json_decode($stream->recommended_settings, true) : null
+                ]
+            ]);
+            break;
+
+        case 'preview_urls':
+            // Get preview URLs for a stream in all available formats
+            $id = $_GET['id'] ?? null;
+            if (!$id) {
+                throw new Exception('Stream ID is required');
+            }
+
+            $stream = Stream::find($id);
+            if (!$stream) {
+                throw new Exception('Stream not found');
+            }
+
+            // Check if stream is running
+            if (!$stream->isActive()) {
+                throw new Exception('Stream is not running');
+            }
+
+            // Get streaming settings
+            $setting = Setting::first();
+            $streamingPort = $setting->streaming_port ?? 8001;
+            // Use the same host that the request came from (server's actual IP/hostname)
+            // Remove port from HTTP_HOST if present
+            $requestHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $streamingHost = preg_replace('/:\d+$/', '', $requestHost);
+            $streamsPath = $setting->streams_path ?: \App\Services\PathDetectionService::detectProjectRoot() . '/fospackv69/fos/streams';
+
+            // Check if HLS/DASH files exist (nginx-rtmp creates nested directories)
+            // Format: streams_path/hls/{stream_id}/index.m3u8 (nested) or streams_path/hls/{stream_id}_.m3u8 (flat)
+            $hlsNestedFile = "{$streamsPath}/hls/{$stream->id}/index.m3u8";
+            $hlsFlatFile = "{$streamsPath}/hls/{$stream->id}_.m3u8";
+            $dashNestedFile = "{$streamsPath}/dash/{$stream->id}/index.mpd";
+
+            $hlsExists = file_exists($hlsNestedFile) || file_exists($hlsFlatFile);
+            $dashExists = file_exists($dashNestedFile);
+
+            // Generate preview URLs
+            $previewUrls = [];
+
+            // HLS via nginx streaming server (preferred)
+            if ($hlsExists) {
+                if (file_exists($hlsNestedFile)) {
+                    $previewUrls['hls'] = "http://{$streamingHost}:{$streamingPort}/hls/{$stream->id}/index.m3u8";
+                } else {
+                    $previewUrls['hls'] = "http://{$streamingHost}:{$streamingPort}/hls/{$stream->id}_.m3u8";
+                }
+            }
+
+            // DASH via nginx streaming server
+            if ($dashExists) {
+                $previewUrls['dash'] = "http://{$streamingHost}:{$streamingPort}/dash/{$stream->id}/index.mpd";
+            }
+
+            // Direct source as fallback (if HTTP/HTTPS)
+            if ($stream->streamurl && (strpos($stream->streamurl, 'http://') === 0 || strpos($stream->streamurl, 'https://') === 0)) {
+                $previewUrls['direct'] = $stream->streamurl;
+            }
+
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'stream_id' => $stream->id,
+                    'stream_name' => $stream->name,
+                    'urls' => $previewUrls,
+                    'hls_exists' => $hlsExists,
+                    'dash_exists' => $dashExists,
+                    'recommended_format' => $hlsExists ? 'hls' : ($dashExists ? 'dash' : 'direct'),
+                    'debug' => [
+                        'streams_path' => $streamsPath,
+                        'hls_nested_path' => $hlsNestedFile,
+                        'dash_nested_path' => $dashNestedFile,
+                    ]
+                ]
+            ]);
+            break;
+
+        case 'history':
+            // Get stream history including health logs, crashes, and command history
+            $id = $_GET['id'] ?? null;
+            if (!$id) {
+                throw new Exception('Stream ID is required');
+            }
+
+            $stream = Stream::find($id);
+            if (!$stream) {
+                throw new Exception('Stream not found');
+            }
+
+            $page = (int)($_GET['page'] ?? 1);
+            $limit = (int)($_GET['limit'] ?? 50);
+            $offset = ($page - 1) * $limit;
+
+            $stateInfo = [
+                'state' => $stream->state,
+                'state_label' => $stream->stateLabel,
+                'enabled' => (bool) $stream->enabled,
+                'pid' => $stream->pid,
+                'crash_count' => $stream->crash_count ?? 0,
+                'restart_attempts' => $stream->restart_attempts ?? 0,
+                'max_restart_attempts' => $stream->max_restart_attempts ?? 3,
+                'auto_restart_enabled' => (bool) ($stream->auto_restart_enabled ?? true),
+                'last_crash_at' => $stream->last_crash_at,
+                'last_command_at' => $stream->last_command_at,
+                'last_command_result' => $stream->last_command_result,
+                'scheduled_command' => $stream->scheduled_command,
+                'stream_started_at' => $stream->stream_started_at,
+                'stream_stopped_at' => $stream->stream_stopped_at,
+                'current_uptime' => $stream->current_uptime,
+                'total_uptime' => $stream->total_uptime,
+                'analysis_status' => $stream->analysis_status,
+                'analysis_error' => $stream->analysis_error,
+                'last_analyzed' => $stream->last_analyzed,
+                'last_health_check' => $stream->last_health_check,
+                'health_check_failures' => $stream->health_check_failures ?? 0,
+            ];
+
+            $totalLogs = StreamHealthLog::where('stream_id', $id)->count();
+            $healthLogs = StreamHealthLog::where('stream_id', $id)
+                ->orderBy('checked_at', 'desc')
+                ->offset($offset)
+                ->limit($limit)
+                ->get()
+                ->map(function($log) {
+                    return [
+                        'id' => $log->id,
+                        'check_type' => $log->check_type,
+                        'status' => $log->status,
+                        'pid' => $log->pid,
+                        'pid_exists' => (bool) $log->pid_exists,
+                        'action_taken' => $log->action_taken,
+                        'error_message' => $log->error_message,
+                        'checked_at' => $log->checked_at,
+                    ];
+                });
+
+            $last24h = date('Y-m-d H:i:s', strtotime('-24 hours'));
+            $stats = [
+                'total_checks' => $totalLogs,
+                'checks_24h' => StreamHealthLog::where('stream_id', $id)->where('checked_at', '>=', $last24h)->count(),
+                'failures_24h' => StreamHealthLog::where('stream_id', $id)->where('checked_at', '>=', $last24h)->where('status', 'failed')->count(),
+                'crashes_24h' => StreamHealthLog::where('stream_id', $id)->where('checked_at', '>=', $last24h)->where('check_type', 'pid_check')->where('status', 'failed')->count(),
+            ];
+
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'stream_id' => $stream->id,
+                    'stream_name' => $stream->name,
+                    'state_info' => $stateInfo,
+                    'stats' => $stats,
+                    'health_logs' => $healthLogs,
+                    'pagination' => [
+                        'page' => $page,
+                        'limit' => $limit,
+                        'total' => $totalLogs,
+                        'total_pages' => ceil($totalLogs / $limit),
+                    ],
                 ]
             ]);
             break;
