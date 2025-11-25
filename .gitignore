@@ -15,7 +15,6 @@
 *.sublime-workspace
 
 # Claude AI Assistant
-CLAUDE.md
 .claude/
 
 # Environment & Configuration
@@ -49,7 +48,6 @@ yarn.lock
 /storage/app/public/*
 /storage/*.key
 /.phpunit.result.cache
-/phpunit.xml
 
 # Laravel Sail / Docker
 docker-compose.override.yml
@@ -69,6 +67,9 @@ mix-manifest.json
 /coverage/
 .phpunit.cache
 /.phpunit.cache
+# Prevent scattered test scripts in root (use tests/ directory)
+/test_*.php
+/test_*.js
 _ide_helper.php
 _ide_helper_models.php
 .phpstorm.meta.php
