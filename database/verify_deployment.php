@@ -186,8 +186,8 @@ try {
         $passed++;
         echo "✓ Admin account exists (username: {$admin->username}, role: {$admin->role})\n";
     } else {
-        $warnings[] = "No admin account found - run: php database/seeders/AdminSeeder.php";
-        echo "⚠ Admin account: NOT FOUND (run AdminSeeder.php)\n";
+        $warnings[] = "No admin account found - run: php artisan db:seed AdminSeeder";
+        echo "⚠ Admin account: NOT FOUND (run: php artisan db:seed AdminSeeder)\n";
     }
 } catch (Exception $e) {
     $warnings[] = "Could not check admin account: " . $e->getMessage();
@@ -223,14 +223,16 @@ if (!empty($warnings)) {
 // === Recommendations ===
 if ($failed > 0) {
     echo "\n📋 RECOMMENDATIONS:\n";
-    echo "   Run the following commands to fix issues:\n";
-    echo "   1. php database/migrate.php      # Run missing migrations\n";
-    echo "   2. php database/seed.php         # Seed missing data\n";
+    echo "   Run the following artisan commands to fix issues:\n";
+    echo "   1. php artisan migrate          # Run missing migrations\n";
+    echo "   2. php artisan db:seed          # Seed missing data\n";
     echo "   3. php database/verify_deployment.php  # Re-run verification\n";
+    echo "\n   For a fresh install:\n";
+    echo "   • php artisan migrate:fresh --seed  # Drop all & recreate\n";
 } elseif (count($warnings) > 0) {
     echo "\n📋 RECOMMENDATIONS:\n";
-    echo "   Run the following commands to address warnings:\n";
-    echo "   • php database/seeders/AdminSeeder.php  # Create admin account\n";
+    echo "   Run the following command to address warnings:\n";
+    echo "   • php artisan db:seed AdminSeeder  # Create admin account\n";
 } else {
     echo "\n🎉 SUCCESS!\n";
     echo "   Database is fully deployed and ready to use.\n";

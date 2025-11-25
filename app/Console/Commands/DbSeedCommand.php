@@ -61,9 +61,33 @@ HELP
             $basePath = dirname(dirname(dirname(__DIR__)));
 
             // Mock command object for seeders
-            $command = new class {
+            $command = new class($output) {
+                private $output;
+
+                public function __construct($output) {
+                    $this->output = $output;
+                }
+
                 public function info($message) {
-                    // Output handled by main command
+                    $this->output->writeln("    <info>{$message}</info>");
+                }
+
+                public function warn($message) {
+                    $this->output->writeln("    <comment>{$message}</comment>");
+                }
+
+                public function error($message) {
+                    $this->output->writeln("    <error>{$message}</error>");
+                }
+
+                public function line($message) {
+                    $this->output->writeln("    {$message}");
+                }
+
+                public function newLine($count = 1) {
+                    for ($i = 0; $i < $count; $i++) {
+                        $this->output->writeln('');
+                    }
                 }
             };
 
@@ -72,13 +96,15 @@ HELP
                 return $this->runSeeder($class, $command, $output, $basePath);
             }
 
-            // Otherwise run all seeders
+            // Otherwise run all seeders (order matters for dependencies)
             $seeders = [
+                'SettingsSeeder' => 'Settings',
+                'AdminSeeder' => 'Default Admin Account',
                 'PackagesSeeder' => 'Packages',
                 'BouquetsSeeder' => 'Bouquets',
                 'PackageBouquetSeeder' => 'Package-Bouquet relationships',
                 'PM2WorkersSeeder' => 'PM2 Workers',
-                'SettingsSeeder' => 'Settings',
+                'TranscodeProfilesSeeder' => 'Transcode Profiles',
                 'AdminRolesSeeder' => 'Admin Roles',
                 'ResellersSeeder' => 'Resellers',
                 'V2RayServersSeeder' => 'V2Ray Servers',

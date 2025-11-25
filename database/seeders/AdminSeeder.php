@@ -1,99 +1,77 @@
 <?php
 
-/**
- * Staff Seeder
- *
- * Creates default staff account for initial system access
- */
+namespace Database\Seeders;
 
-require_once __DIR__ . '/../../vendor/autoload.php';
-
-use Dotenv\Dotenv;
+use Illuminate\Database\Seeder;
 use Illuminate\Database\Capsule\Manager as Capsule;
 
-// Load environment variables
-$dotenv = Dotenv::createImmutable(__DIR__ . '/../..');
-$dotenv->load();
+/**
+ * Staff/Admin Seeder
+ *
+ * Creates default admin account for initial system access
+ * This seeder is non-interactive for use with artisan commands
+ */
+class AdminSeeder extends Seeder
+{
+    public $command;
 
-// Set up database connection
-$capsule = new Capsule;
-$capsule->addConnection([
-    'driver' => 'mysql',
-    'host' => env('DB_HOST', 'localhost'),
-    'database' => env('DB_DATABASE', 'fos_streaming'),
-    'username' => env('DB_USERNAME', 'root'),
-    'password' => env('DB_PASSWORD', ''),
-    'charset' => 'utf8mb4',
-    'collation' => 'utf8mb4_unicode_ci',
-    'prefix' => '',
-]);
+    /**
+     * Run the database seeds.
+     */
+    public function run(): void
+    {
+        $timestamp = date('Y-m-d H:i:s');
 
-$capsule->setAsGlobal();
-$capsule->bootEloquent();
+        // Default admin credentials
+        $defaultAdmin = [
+            'username' => 'admin',
+            'email' => 'admin@fosstreaming.local',
+            'password' => md5('admin'), // Default password: admin
+            'role' => 'admin',
+            'full_name' => 'System Administrator',
+            'status' => 'active',
+            'permissions' => json_encode([
+                'manage_admins',
+                'manage_subscribers',
+                'manage_streams',
+                'manage_packages',
+                'manage_settings',
+                'view_logs',
+                'manage_security'
+            ]),
+            'login_count' => 0,
+            'force_password_change' => 1, // Force password change on first login
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp
+        ];
 
-// Load models
-require_once __DIR__ . '/../../models/Staff.php';
+        // Check if admin already exists
+        $existingAdmin = Capsule::table('staff')->where('username', 'admin')->first();
 
-echo "=== Seeding Staff ===\n\n";
+        if ($existingAdmin) {
+            if ($this->command) {
+                $this->command->warn('Default admin account already exists (username: admin)');
+            }
+            return;
+        }
 
-// Check if staff already exists
-$existingStaff = Staff::where('username', 'admin')->first();
+        // Create default admin account
+        Capsule::table('staff')->insert($defaultAdmin);
 
-if ($existingStaff) {
-    echo "⚠ Default admin account already exists\n";
-    echo "  Username: admin\n";
-    echo "  Status: {$existingStaff->status}\n";
-    echo "  Role: {$existingStaff->role}\n\n";
-
-    // Update password if needed
-    $response = readline("Do you want to reset the admin password to 'admin'? (yes/no): ");
-    if (strtolower(trim($response)) === 'yes') {
-        $existingStaff->password = md5('admin');
-        $existingStaff->save();
-        echo "✓ Admin password reset successfully\n\n";
+        if ($this->command) {
+            $this->command->info('Default admin account created successfully!');
+            $this->command->newLine();
+            $this->command->line('╔═══════════════════════════════════════╗');
+            $this->command->line('║     DEFAULT ADMIN CREDENTIALS         ║');
+            $this->command->line('╠═══════════════════════════════════════╣');
+            $this->command->line('║  Username: admin                      ║');
+            $this->command->line('║  Password: admin                      ║');
+            $this->command->line('║  Role: Administrator                  ║');
+            $this->command->line('╠═══════════════════════════════════════╣');
+            $this->command->line('║  ⚠ SECURITY WARNING:                  ║');
+            $this->command->line('║  Change the default password          ║');
+            $this->command->line('║  immediately after first login!       ║');
+            $this->command->line('╚═══════════════════════════════════════╝');
+        }
     }
-} else {
-    // Create default staff account
-    $staff = Staff::create([
-        'username' => 'admin',
-        'email' => 'admin@fosstreaming.local',
-        'password' => md5('admin'),  // Default password: admin
-        'role' => 'admin',
-        'full_name' => 'System Administrator',
-        'status' => 'active',
-        'permissions' => json_encode([
-            'manage_admins',
-            'manage_subscribers',
-            'manage_streams',
-            'manage_packages',
-            'manage_settings',
-            'view_logs',
-            'manage_security'
-        ]),
-        'login_count' => 0,
-        'force_password_change' => true,  // Force password change on first login
-        'created_at' => date('Y-m-d H:i:s'),
-        'updated_at' => date('Y-m-d H:i:s')
-    ]);
-
-    echo "✓ Default staff account created successfully\n\n";
-    echo "╔═══════════════════════════════════════╗\n";
-    echo "║     DEFAULT STAFF CREDENTIALS         ║\n";
-    echo "╠═══════════════════════════════════════╣\n";
-    echo "║  Username: admin                      ║\n";
-    echo "║  Password: admin                      ║\n";
-    echo "║  Role: Administrator                  ║\n";
-    echo "╠═══════════════════════════════════════╣\n";
-    echo "║  ⚠ SECURITY WARNING:                  ║\n";
-    echo "║  Change the default password          ║\n";
-    echo "║  immediately after first login!       ║\n";
-    echo "╚═══════════════════════════════════════╝\n\n";
 }
-
-// Display login URL
-echo "🌐 Admin Login URL:\n";
-echo "   http://localhost:7777/admin#/login\n";
-echo "   or\n";
-echo "   http://127.0.0.1:7777/admin#/login\n\n";
-
-echo "=== Staff Seeding Complete ===\n";

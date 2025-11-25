@@ -1,8 +1,9 @@
 <?php
 
-require_once __DIR__ . '/../../config.php';
+namespace Database\Seeders;
 
-use Reseller;
+use Illuminate\Database\Seeder;
+use Illuminate\Database\Capsule\Manager as Capsule;
 
 /**
  * Resellers Seeder
@@ -10,19 +11,29 @@ use Reseller;
  * Seeds demo reseller accounts for testing
  * Phase 1: Foundation - Multi-tenant System
  */
-class ResellersSeeder
+class ResellersSeeder extends Seeder
 {
-    /**
-     * Run the seeder
-     */
-    public function run()
-    {
-        echo "Seeding Resellers...\n";
+    public $command;
 
-        if (env('APP_ENV') === 'production') {
-            echo "⚠ Skipping reseller seeding in production environment\n";
+    /**
+     * Run the database seeds.
+     */
+    public function run(): void
+    {
+        if ($this->command) {
+            $this->command->info('Seeding Resellers...');
+        }
+
+        $appEnv = env('APP_ENV', 'production');
+
+        if ($appEnv === 'production') {
+            if ($this->command) {
+                $this->command->warn('Skipping reseller seeding in production environment');
+            }
             return;
         }
+
+        $timestamp = date('Y-m-d H:i:s');
 
         $resellers = [
             [
@@ -36,15 +47,17 @@ class ResellersSeeder
                 'commission_rate' => 15.00,
                 'max_subscribers' => 100,
                 'max_packages' => 5,
-                'max_bouquets' => 10,
                 'status' => 'active',
+                'is_active' => 1,
                 'credit_balance' => 0.00,
                 'pending_balance' => 0.00,
                 'total_earned' => 0.00,
                 'total_withdrawn' => 0.00,
-                'api_enabled' => true,
+                'api_enabled' => 1,
                 'api_rate_limit' => 1000,
                 'notes' => 'Demo reseller account for testing',
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
             ],
             [
                 'username' => 'premium_reseller',
@@ -57,13 +70,13 @@ class ResellersSeeder
                 'commission_rate' => 20.00,
                 'max_subscribers' => 500,
                 'max_packages' => 10,
-                'max_bouquets' => 20,
                 'status' => 'active',
+                'is_active' => 1,
                 'credit_balance' => 1500.00,
                 'pending_balance' => 250.00,
                 'total_earned' => 5000.00,
                 'total_withdrawn' => 3500.00,
-                'api_enabled' => true,
+                'api_enabled' => 1,
                 'api_rate_limit' => 5000,
                 'custom_domain' => 'premium-iptv.demo',
                 'brand_name' => 'Premium IPTV',
@@ -73,6 +86,8 @@ class ResellersSeeder
                     'logo_url' => 'https://example.com/logo.png',
                 ]),
                 'notes' => 'Premium tier reseller with white-label features',
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
             ],
             [
                 'username' => 'starter_reseller',
@@ -84,142 +99,46 @@ class ResellersSeeder
                 'commission_rate' => 10.00,
                 'max_subscribers' => 50,
                 'max_packages' => 3,
-                'max_bouquets' => 5,
                 'status' => 'active',
+                'is_active' => 1,
                 'credit_balance' => 0.00,
                 'pending_balance' => 0.00,
                 'total_earned' => 0.00,
                 'total_withdrawn' => 0.00,
-                'api_enabled' => false,
+                'api_enabled' => 0,
                 'api_rate_limit' => 100,
                 'notes' => 'Starter tier reseller account',
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
             ],
         ];
 
         foreach ($resellers as $resellerData) {
             // Check if already exists
-            if (Reseller::where('username', $resellerData['username'])->exists()) {
-                echo "  ⚠ Reseller {$resellerData['username']} already exists\n";
+            $exists = Capsule::table('resellers')->where('username', $resellerData['username'])->exists();
+
+            if ($exists) {
+                if ($this->command) {
+                    $this->command->warn("  Reseller {$resellerData['username']} already exists");
+                }
                 continue;
             }
 
-            $reseller = Reseller::create($resellerData);
+            Capsule::table('resellers')->insert($resellerData);
 
-            // Generate API credentials
-            if ($resellerData['api_enabled']) {
-                $credentials = $reseller->generateApiKey();
-                echo "  ✓ Created reseller: {$reseller->username}\n";
-                echo "    API Key: {$credentials['api_key']}\n";
-                echo "    API Secret: {$credentials['api_secret']}\n";
-            } else {
-                echo "  ✓ Created reseller: {$reseller->username} (API disabled)\n";
-            }
-
-            // Create some demo transactions for premium reseller
-            if ($reseller->username === 'premium_reseller') {
-                $this->createDemoTransactions($reseller);
+            if ($this->command) {
+                $this->command->line("  Created reseller: {$resellerData['username']}");
             }
         }
 
-        echo "\n  Demo Reseller Credentials:\n";
-        echo "    Demo:     demo_reseller / reseller123\n";
-        echo "    Premium:  premium_reseller / premium123\n";
-        echo "    Starter:  starter_reseller / starter123\n";
-
-        echo "\n✓ Resellers seeded successfully\n";
-    }
-
-    /**
-     * Create demo transactions for testing
-     */
-    private function createDemoTransactions($reseller)
-    {
-        echo "    Creating demo transactions...\n";
-
-        $transactions = [
-            [
-                'type' => 'commission',
-                'amount' => 150.00,
-                'balance_before' => 0.00,
-                'balance_after' => 150.00,
-                'description' => 'Commission from subscription #1',
-                'status' => 'completed',
-                'created_at' => now()->subDays(30),
-            ],
-            [
-                'type' => 'commission',
-                'amount' => 200.00,
-                'balance_before' => 150.00,
-                'balance_after' => 350.00,
-                'description' => 'Commission from subscription #2',
-                'status' => 'completed',
-                'created_at' => now()->subDays(25),
-            ],
-            [
-                'type' => 'withdrawal',
-                'amount' => -100.00,
-                'balance_before' => 350.00,
-                'balance_after' => 250.00,
-                'description' => 'Withdrawal to bank account',
-                'status' => 'completed',
-                'created_at' => now()->subDays(20),
-            ],
-            [
-                'type' => 'commission',
-                'amount' => 300.00,
-                'balance_before' => 250.00,
-                'balance_after' => 550.00,
-                'description' => 'Monthly commission batch',
-                'status' => 'completed',
-                'created_at' => now()->subDays(15),
-            ],
-            [
-                'type' => 'commission',
-                'amount' => 250.00,
-                'balance_before' => 550.00,
-                'balance_after' => 800.00,
-                'description' => 'Commission from new subscribers',
-                'status' => 'pending',
-                'created_at' => now()->subDays(5),
-            ],
-        ];
-
-        foreach ($transactions as $txData) {
-            \ResellerTransaction::create(array_merge($txData, [
-                'reseller_id' => $reseller->id,
-            ]));
+        if ($this->command) {
+            $this->command->newLine();
+            $this->command->line('  Demo Reseller Credentials:');
+            $this->command->line('    Demo:     demo_reseller / reseller123');
+            $this->command->line('    Premium:  premium_reseller / premium123');
+            $this->command->line('    Starter:  starter_reseller / starter123');
+            $this->command->newLine();
+            $this->command->info('Resellers seeded successfully!');
         }
-
-        echo "    ✓ Created 5 demo transactions\n";
-    }
-
-    /**
-     * Rollback the seeder
-     */
-    public function rollback()
-    {
-        echo "Rolling back Resellers...\n";
-
-        $demoResellers = ['demo_reseller', 'premium_reseller', 'starter_reseller'];
-
-        // Delete transactions first (foreign key constraint)
-        $resellerIds = Reseller::whereIn('username', $demoResellers)->pluck('id');
-        \ResellerTransaction::whereIn('reseller_id', $resellerIds)->delete();
-
-        // Delete resellers
-        Reseller::whereIn('username', $demoResellers)->delete();
-
-        echo "✓ Resellers rolled back\n";
-    }
-}
-
-// Run seeder if called directly
-if (php_sapi_name() === 'cli' && basename(__FILE__) === basename($_SERVER['PHP_SELF'])) {
-    $seeder = new ResellersSeeder();
-
-    if (isset($argv[1]) && $argv[1] === '--rollback') {
-        $seeder->rollback();
-    } else {
-        $seeder->run();
     }
 }

@@ -153,3 +153,4 @@ fospackv69/nginx-builder/nginx-*/
 !/public/uploads/logos/.gitkeep
 /public/uploads/favicons/*
 !/public/uploads/favicons/.gitkeep
+.fos-install-state

@@ -1,8 +1,9 @@
 <?php
 
-require_once __DIR__ . '/../../config.php';
+namespace Database\Seeders;
 
-use V2RayServer;
+use Illuminate\Database\Seeder;
+use Illuminate\Database\Capsule\Manager as Capsule;
 
 /**
  * V2Ray Servers Seeder
@@ -10,14 +11,21 @@ use V2RayServer;
  * Seeds default V2Ray server configurations
  * Phase 4: V2Ray/VMess Traffic Obfuscation
  */
-class V2RayServersSeeder
+class V2RayServersSeeder extends Seeder
 {
+    public $command;
+
     /**
-     * Run the seeder
+     * Run the database seeds.
      */
-    public function run()
+    public function run(): void
     {
-        echo "Seeding V2Ray Servers...\n";
+        if ($this->command) {
+            $this->command->info('Seeding V2Ray Servers...');
+        }
+
+        $timestamp = date('Y-m-d H:i:s');
+        $appEnv = env('APP_ENV', 'production');
 
         $servers = [
             [
@@ -25,176 +33,139 @@ class V2RayServersSeeder
                 'name' => 'Primary US Server',
                 'address' => env('V2RAY_SERVER_IP', 'v2ray-us.example.com'),
                 'port' => 443,
-                'protocol' => 'vmess',
-                'transport' => 'ws',
-                'tls' => true,
-                'location' => 'US',
-                'region' => 'North America',
-                'enabled' => true,
+                'location' => 'us',
+                'country_code' => 'US',
+                'weight' => 100,
+                'enabled' => 1,
                 'max_connections' => 1000,
                 'current_connections' => 0,
                 'load' => 0.00,
                 'health_status' => 'healthy',
-                'last_health_check' => now(),
+                'last_health_check' => $timestamp,
                 'config' => json_encode([
+                    'protocol' => 'vmess',
+                    'transport' => 'ws',
+                    'tls' => true,
                     'ws_path' => '/v2ray',
                     'ws_host' => env('V2RAY_DOMAIN', 'example.com'),
                     'tls_servername' => env('V2RAY_SNI', 'example.com'),
                     'allow_insecure' => false,
                 ]),
+                'health_check_url' => null,
                 'notes' => 'Primary V2Ray server in US datacenter',
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
             ],
             [
                 'tag' => 'backup-v2ray-eu',
                 'name' => 'Backup EU Server',
                 'address' => 'v2ray-eu.example.com',
                 'port' => 443,
-                'protocol' => 'vless',
-                'transport' => 'tcp',
-                'tls' => true,
-                'location' => 'DE',
-                'region' => 'Europe',
-                'enabled' => true,
+                'location' => 'eu',
+                'country_code' => 'DE',
+                'weight' => 80,
+                'enabled' => 1,
                 'max_connections' => 500,
                 'current_connections' => 0,
                 'load' => 0.00,
                 'health_status' => 'healthy',
-                'last_health_check' => now(),
+                'last_health_check' => $timestamp,
                 'config' => json_encode([
+                    'protocol' => 'vless',
+                    'transport' => 'tcp',
+                    'tls' => true,
                     'reality' => true,
                     'tls_servername' => 'cloudflare.com',
                     'flow' => 'xtls-rprx-vision',
                 ]),
+                'health_check_url' => null,
                 'notes' => 'Backup server in EU with REALITY protocol',
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
             ],
             [
                 'tag' => 'edge-v2ray-sg',
                 'name' => 'Edge Singapore Server',
                 'address' => 'v2ray-sg.example.com',
                 'port' => 8443,
-                'protocol' => 'trojan',
-                'transport' => 'grpc',
-                'tls' => true,
-                'location' => 'SG',
-                'region' => 'Asia Pacific',
-                'enabled' => true,
+                'location' => 'asia',
+                'country_code' => 'SG',
+                'weight' => 60,
+                'enabled' => 1,
                 'max_connections' => 750,
                 'current_connections' => 0,
                 'load' => 0.00,
                 'health_status' => 'healthy',
-                'last_health_check' => now(),
+                'last_health_check' => $timestamp,
                 'config' => json_encode([
+                    'protocol' => 'trojan',
+                    'transport' => 'grpc',
+                    'tls' => true,
                     'grpc_service_name' => 'v2ray',
                     'tls_servername' => 'example.com',
                     'allow_insecure' => false,
                 ]),
+                'health_check_url' => null,
                 'notes' => 'Edge server in Singapore for APAC region',
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
             ],
             [
                 'tag' => 'dev-v2ray-local',
                 'name' => 'Development Local Server',
                 'address' => '127.0.0.1',
                 'port' => 10086,
-                'protocol' => 'vmess',
-                'transport' => 'tcp',
-                'tls' => false,
-                'location' => 'LOCAL',
-                'region' => 'Development',
-                'enabled' => env('APP_ENV') !== 'production',
+                'location' => 'other',
+                'country_code' => null,
+                'weight' => 10,
+                'enabled' => $appEnv !== 'production' ? 1 : 0,
                 'max_connections' => 100,
                 'current_connections' => 0,
                 'load' => 0.00,
                 'health_status' => 'unknown',
-                'last_health_check' => now(),
+                'last_health_check' => $timestamp,
                 'config' => json_encode([
+                    'protocol' => 'vmess',
+                    'transport' => 'tcp',
+                    'tls' => false,
                     'allow_insecure' => true,
                 ]),
+                'health_check_url' => null,
                 'notes' => 'Local development server (disabled in production)',
+                'created_at' => $timestamp,
+                'updated_at' => $timestamp,
             ],
         ];
 
         foreach ($servers as $serverData) {
             // Check if already exists
-            if (V2RayServer::where('tag', $serverData['tag'])->exists()) {
-                echo "  ⚠ Server {$serverData['tag']} already exists\n";
+            $exists = Capsule::table('v2ray_servers')->where('tag', $serverData['tag'])->exists();
+
+            if ($exists) {
+                if ($this->command) {
+                    $this->command->warn("  Server {$serverData['tag']} already exists");
+                }
                 continue;
             }
 
-            $server = V2RayServer::create($serverData);
-            echo "  ✓ Created V2Ray server: {$server->tag} ({$server->name})\n";
+            Capsule::table('v2ray_servers')->insert($serverData);
+
+            if ($this->command) {
+                $this->command->line("  Created V2Ray server: {$serverData['tag']} ({$serverData['name']})");
+            }
         }
 
-        echo "\n  Server Configuration Summary:\n";
-        echo "    Primary US:  vmess+ws+tls @ {$servers[0]['address']}:443\n";
-        echo "    Backup EU:   vless+tcp+reality @ {$servers[1]['address']}:443\n";
-        echo "    Edge SG:     trojan+grpc+tls @ {$servers[2]['address']}:8443\n";
-        if (env('APP_ENV') !== 'production') {
-            echo "    Dev Local:   vmess+tcp @ 127.0.0.1:10086\n";
+        if ($this->command) {
+            $this->command->newLine();
+            $this->command->line('  Server Configuration Summary:');
+            $this->command->line("    Primary US:  vmess+ws+tls @ {$servers[0]['address']}:443");
+            $this->command->line("    Backup EU:   vless+tcp+reality @ {$servers[1]['address']}:443");
+            $this->command->line("    Edge SG:     trojan+grpc+tls @ {$servers[2]['address']}:8443");
+            if ($appEnv !== 'production') {
+                $this->command->line('    Dev Local:   vmess+tcp @ 127.0.0.1:10086');
+            }
+            $this->command->newLine();
+            $this->command->info('V2Ray servers seeded successfully!');
         }
-
-        echo "\n✓ V2Ray servers seeded successfully\n";
-
-        // Provide setup instructions
-        $this->printSetupInstructions();
-    }
-
-    /**
-     * Print setup instructions
-     */
-    private function printSetupInstructions()
-    {
-        echo "\n" . str_repeat("-", 60) . "\n";
-        echo "SETUP INSTRUCTIONS:\n";
-        echo str_repeat("-", 60) . "\n";
-        echo "1. Update .env with your V2Ray server details:\n";
-        echo "   V2RAY_SERVER_IP=your-server-ip\n";
-        echo "   V2RAY_DOMAIN=your-domain.com\n";
-        echo "   V2RAY_SNI=your-domain.com\n";
-        echo "   V2RAY_PORT_START=20000\n";
-        echo "   V2RAY_PORT_END=30000\n\n";
-
-        echo "2. Install V2Ray on your server:\n";
-        echo "   bash <(curl -L https://raw.githubusercontent.com/v2fly/fhs-install-v2ray/master/install-release.sh)\n\n";
-
-        echo "3. Configure V2Ray server config.json\n";
-        echo "   See: docs/guides/V2RAY_SERVER_SETUP.md\n\n";
-
-        echo "4. Test server connectivity:\n";
-        echo "   php test_v2ray.php\n\n";
-
-        echo "5. Run health check:\n";
-        echo "   php -r \"require 'config.php'; \\$s = \\V2RayServer::find(1); \\$s->performHealthCheck(); echo \\$s->health_status;\"\n";
-        echo str_repeat("-", 60) . "\n";
-    }
-
-    /**
-     * Rollback the seeder
-     */
-    public function rollback()
-    {
-        echo "Rolling back V2Ray Servers...\n";
-
-        $demoServers = [
-            'primary-v2ray-us',
-            'backup-v2ray-eu',
-            'edge-v2ray-sg',
-            'dev-v2ray-local',
-        ];
-
-        // Delete servers
-        V2RayServer::whereIn('tag', $demoServers)->delete();
-
-        echo "✓ V2Ray servers rolled back\n";
-    }
-}
-
-// Run seeder if called directly
-if (php_sapi_name() === 'cli' && basename(__FILE__) === basename($_SERVER['PHP_SELF'])) {
-    $seeder = new V2RayServersSeeder();
-
-    if (isset($argv[1]) && $argv[1] === '--rollback') {
-        $seeder->rollback();
-    } else {
-        $seeder->run();
     }
 }
