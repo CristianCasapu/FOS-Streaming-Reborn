@@ -123,7 +123,7 @@ class Subscriber extends FosStreaming {
     {
         return $this->subscriptions()
             ->where('is_active', 1)
-            ->where('expire_date', '>', now())
+            ->where('expire_date', '>', date('Y-m-d H:i:s'))
             ->exists();
     }
 
@@ -134,7 +134,7 @@ class Subscriber extends FosStreaming {
     {
         return $this->subscriptions()
             ->where('is_active', 1)
-            ->where('expire_date', '>', now())
+            ->where('expire_date', '>', date('Y-m-d H:i:s'))
             ->get();
     }
 
@@ -249,7 +249,7 @@ class Subscriber extends FosStreaming {
     {
         return $query->whereHas('subscriptions', function($q) {
             $q->where('is_active', 1)
-              ->where('expire_date', '>', now());
+              ->where('expire_date', '>', date('Y-m-d H:i:s'));
         });
     }
 
@@ -260,7 +260,7 @@ class Subscriber extends FosStreaming {
     {
         return $query->whereHas('trial', function($q) {
             $q->where('is_active', 1)
-              ->where('expires_at', '>', now());
+              ->where('expires_at', '>', date('Y-m-d H:i:s'));
         });
     }
 

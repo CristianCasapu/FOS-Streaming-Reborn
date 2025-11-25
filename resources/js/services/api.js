@@ -118,6 +118,13 @@ export const subscribersAPI = {
     create: (data) => api.post(`${ADMIN_API_PREFIX}/subscribers.php?action=create`, data),
     update: (id, data) => api.post(`${ADMIN_API_PREFIX}/subscribers.php?action=update&id=${id}`, data),
     delete: (id) => api.get(`${ADMIN_API_PREFIX}/subscribers.php?action=delete&id=${id}`),
+    toggle: (id) => api.get(`${ADMIN_API_PREFIX}/subscribers.php?action=toggle&id=${id}`),
+    bulkToggle: (ids, enabled) => api.post(`${ADMIN_API_PREFIX}/subscribers.php?action=bulk_toggle`, { ids, enabled }),
+    bulkDelete: (ids) => api.post(`${ADMIN_API_PREFIX}/subscribers.php?action=bulk_delete`, { ids }),
+    getStats: () => api.get(`${ADMIN_API_PREFIX}/subscribers.php?action=stats`),
+    getCountries: () => api.get(`${ADMIN_API_PREFIX}/subscribers.php?action=countries`),
+    resetPassword: (id, password) => api.post(`${ADMIN_API_PREFIX}/subscribers.php?action=reset_password&id=${id}`, { password }),
+    export: (format = 'json') => api.get(`${ADMIN_API_PREFIX}/subscribers.php?action=export&format=${format}`),
 };
 
 /**
@@ -194,10 +201,15 @@ export const subscriptionsAPI = {
     update: (id, data) => api.post(`${ADMIN_API_PREFIX}/subscriptions.php?action=update&id=${id}`, data),
     delete: (id) => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=delete&id=${id}`),
     toggle: (id) => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=toggle&id=${id}`),
+    bulkToggle: (ids, isActive) => api.post(`${ADMIN_API_PREFIX}/subscriptions.php?action=bulk_toggle`, { ids, is_active: isActive }),
+    bulkDelete: (ids) => api.post(`${ADMIN_API_PREFIX}/subscriptions.php?action=bulk_delete`, { ids }),
+    bulkRenew: (ids, days) => api.post(`${ADMIN_API_PREFIX}/subscriptions.php?action=bulk_renew`, { ids, days }),
     renew: (id, days) => api.post(`${ADMIN_API_PREFIX}/subscriptions.php?action=renew&id=${id}`, { days }),
     bySubscriber: (subscriberId) => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=by_subscriber&subscriber_id=${subscriberId}`),
     recordConnection: (id, data) => api.post(`${ADMIN_API_PREFIX}/subscriptions.php?action=record_connection&id=${id}`, data),
+    clearDevice: (id) => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=clear_device&id=${id}`),
     getStats: () => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=stats`),
+    export: (format = 'json') => api.get(`${ADMIN_API_PREFIX}/subscriptions.php?action=export&format=${format}`),
 };
 
 /**
