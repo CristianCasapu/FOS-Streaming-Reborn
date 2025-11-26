@@ -104,6 +104,9 @@ export const streamsAPI = {
         const queryString = new URLSearchParams(params).toString();
         return api.get(`${ADMIN_API_PREFIX}/streams.php?action=history&id=${id}&${queryString}`);
     },
+    // Secure streaming URLs (enterprise-grade authentication)
+    getSecureUrls: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=get_secure_urls&id=${id}`),
+    revokeTokens: (id) => api.get(`${ADMIN_API_PREFIX}/streams.php?action=revoke_tokens&id=${id}`),
 };
 
 /**

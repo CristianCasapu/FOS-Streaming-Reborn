@@ -2,168 +2,165 @@
 /**
  * FFprobe Analysis Worker - PM2 Managed Background Service
  *
- * Processes FFprobe analysis jobs from the queue.
- * Jobs are added when streams are imported or need re-analysis.
+ * Analyzes streams using FFprobe and auto-sets optimal transcode profiles.
  *
- * This worker:
- * - Polls the ffprobe-analysis queue
- * - Analyzes streams using FFprobe
- * - Updates database with technical specs
- * - Handles errors and retries
- * - Can run multiple instances (cluster mode)
+ * Features:
+ * - Analyzes streams that need analysis (pending, failed > 1h ago)
+ * - Auto-sets optimal transcode profiles for streams without profiles
+ * - Configurable concurrency (CONCURRENT_STREAMS env var)
+ * - Sequential stream testing by default (one by one)
+ *
+ * Environment Variables:
+ * - POLL_INTERVAL: How often to check for streams (default: 10000ms)
+ * - CONCURRENT_STREAMS: Number of streams to analyze per poll (default: 1)
+ * - MODE: 'auto' for auto-analyze, 'queue' for job queue (default: auto)
+ * - LOG_LEVEL: debug|info|warn|error (default: warn)
  */
 
-const { spawn } = require('child_process');
+const { execSync } = require('child_process');
 const path = require('path');
 
 // Configuration (read from environment variables for runtime configurability)
-const QUEUE_NAME = 'ffprobe-analysis';
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL, 10) || 10000; // 10 seconds default
-const PHP_WORKER_SCRIPT = path.join(__dirname, '../scripts/process-ffprobe-job.php');
+const CONCURRENT_STREAMS = parseInt(process.env.CONCURRENT_STREAMS, 10) || 1; // 1 stream at a time by default
+const MODE = process.env.MODE || 'auto'; // 'auto' or 'queue'
+const PHP_CLI = process.env.PHP_CLI || 'php';
+const BASE_PATH = path.resolve(__dirname, '..');
+const WORKER_SCRIPT = path.join(BASE_PATH, 'workers/php/ffprobe-analyzer.php');
 const LOG_LEVEL = process.env.LOG_LEVEL || 'warn';
 
 // Logging utility
-const log = {
-  debug: (...args) => LOG_LEVEL === 'debug' && console.log('[DEBUG]', new Date().toISOString(), ...args),
-  info: (...args) => ['debug', 'info'].includes(LOG_LEVEL) && console.log('[INFO]', new Date().toISOString(), ...args),
-  warn: (...args) => console.warn('[WARN]', new Date().toISOString(), ...args),
-  error: (...args) => console.error('[ERROR]', new Date().toISOString(), ...args)
-};
+function log(level, message) {
+    const levels = ['debug', 'info', 'warn', 'error'];
+    const currentLevel = levels.indexOf(LOG_LEVEL);
+    const msgLevel = levels.indexOf(level);
+
+    if (msgLevel >= currentLevel) {
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] [${level.toUpperCase()}] [ffprobe-worker] ${message}`);
+    }
+}
 
 // State
 let isProcessing = false;
-let processedCount = 0;
-let failedCount = 0;
+let totalAnalyzed = 0;
+let totalFailed = 0;
+let totalProfilesSet = 0;
 let shutdownRequested = false;
 
 /**
- * Process a single FFprobe job
+ * Extract JSON from output that may contain log lines
+ * The PHP script outputs log lines followed by a JSON object at the end
  */
-async function processJob(jobId) {
-  return new Promise((resolve, reject) => {
-    log.debug(`Processing FFprobe job: ${jobId}`);
-
-    const php = spawn('php', [PHP_WORKER_SCRIPT, jobId], {
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    php.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    php.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    php.on('close', (code) => {
-      if (code === 0) {
-        log.info(`FFprobe job ${jobId} completed successfully`);
-        processedCount++;
-        resolve({ success: true, output: stdout });
-      } else {
-        log.error(`FFprobe job ${jobId} failed with code ${code}: ${stderr}`);
-        failedCount++;
-        reject(new Error(stderr || `Exit code: ${code}`));
-      }
-    });
-
-    php.on('error', (err) => {
-      log.error(`Failed to start PHP process for job ${jobId}:`, err);
-      reject(err);
-    });
-  });
+function extractJson(output) {
+    // Try to find JSON object in the output (starts with { and ends with })
+    const jsonMatch = output.match(/\{[\s\S]*\}$/);
+    if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+    }
+    // If no JSON object found, try parsing the whole output
+    return JSON.parse(output);
 }
 
 /**
- * Poll queue and process jobs
+ * Execute FFprobe analyzer PHP script
  */
-async function pollQueue() {
-  if (isProcessing || shutdownRequested) {
-    return;
-  }
+function analyzeStreams() {
+    if (isProcessing || shutdownRequested) {
+        return;
+    }
 
-  isProcessing = true;
+    isProcessing = true;
 
-  try {
-    // Call PHP script to get next job
-    const getNextJob = spawn('php', ['-r', `
-      require_once '${path.join(__dirname, '../config.php')}';
-      require_once '${path.join(__dirname, '../app/Services/JobQueueService.php')}';
-      $queue = new \\App\\Services\\JobQueueService();
-      $job = $queue->pop('${QUEUE_NAME}');
-      if ($job) {
-        echo json_encode($job);
-      }
-    `]);
+    try {
+        log('debug', `Checking for streams to analyze (mode: ${MODE}, concurrent: ${CONCURRENT_STREAMS})...`);
 
-    let output = '';
+        // Set environment variables for PHP script
+        const env = {
+            ...process.env,
+            CONCURRENT_STREAMS: CONCURRENT_STREAMS.toString(),
+            MODE: MODE
+        };
 
-    getNextJob.stdout.on('data', (data) => {
-      output += data.toString();
-    });
+        const output = execSync(`${PHP_CLI} "${WORKER_SCRIPT}"`, {
+            cwd: BASE_PATH,
+            encoding: 'utf8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: env
+        });
 
-    getNextJob.on('close', async (code) => {
-      if (code === 0 && output.trim()) {
-        try {
-          const job = JSON.parse(output.trim());
+        const result = extractJson(output);
 
-          if (job && job.id) {
-            log.info(`Found FFprobe job: ${job.id}`);
-            await processJob(job.id);
-          }
-        } catch (err) {
-          log.error('Failed to parse job:', err);
+        if (result.processed > 0) {
+            totalAnalyzed += result.analyzed;
+            totalFailed += result.failed;
+            totalProfilesSet += result.profiles_set;
+
+            log('info',
+                `Processed ${result.processed} stream(s): ` +
+                `${result.analyzed} analyzed, ${result.failed} failed, ` +
+                `${result.profiles_set} profiles auto-set`
+            );
+
+            // Log individual stream results at debug level
+            if (LOG_LEVEL === 'debug' && result.streams) {
+                result.streams.forEach(stream => {
+                    const status = stream.success ? '✓' : '✗';
+                    log('debug', `  ${status} Stream ${stream.id} (${stream.name}): ${stream.message}`);
+                });
+            }
+        } else {
+            log('debug', 'No streams need analysis at this time');
         }
-      }
 
-      isProcessing = false;
-    });
+    } catch (error) {
+        log('error', `Failed to analyze streams: ${error.message}`);
 
-  } catch (err) {
-    log.error('Error polling queue:', err);
-    isProcessing = false;
-  }
+        if (LOG_LEVEL === 'debug') {
+            log('debug', error.stack);
+        }
+    } finally {
+        isProcessing = false;
+    }
 }
 
 /**
  * Graceful shutdown
  */
 function shutdown() {
-  if (shutdownRequested) {
-    return;
-  }
+    if (shutdownRequested) {
+        return;
+    }
 
-  shutdownRequested = true;
-  log.info('Shutdown requested...');
+    shutdownRequested = true;
+    log('info', 'Shutdown requested...');
 
-  if (!isProcessing) {
-    log.info(`FFprobe worker stopped. Processed: ${processedCount}, Failed: ${failedCount}`);
-    process.exit(0);
-  } else {
-    log.info('Waiting for current FFprobe analysis to finish...');
-    setTimeout(() => {
-      log.warn('Force shutdown');
-      process.exit(0);
-    }, 60000); // Force shutdown after 60 seconds (FFprobe can take time)
-  }
+    if (!isProcessing) {
+        log('info', `FFprobe worker stopped. Total analyzed: ${totalAnalyzed}, Failed: ${totalFailed}, Profiles set: ${totalProfilesSet}`);
+        process.exit(0);
+    } else {
+        log('info', 'Waiting for current analysis to finish...');
+        setTimeout(() => {
+            log('warn', 'Force shutdown');
+            process.exit(0);
+        }, 60000); // Force shutdown after 60 seconds (FFprobe can take time)
+    }
 }
 
 /**
  * Health check for PM2
  */
 function healthCheck() {
-  const stats = {
-    uptime: process.uptime(),
-    processed: processedCount,
-    failed: failedCount,
-    processing: isProcessing,
-    memory: process.memoryUsage()
-  };
+    const stats = {
+        uptime: process.uptime(),
+        analyzed: totalAnalyzed,
+        failed: totalFailed,
+        profiles_set: totalProfilesSet,
+        processing: isProcessing,
+        memory: process.memoryUsage()
+    };
 
-  log.debug('FFprobe worker health check:', stats);
+    log('debug', `FFprobe worker health: ${JSON.stringify(stats)}`);
 }
 
 // Signal handlers for graceful shutdown
@@ -172,34 +169,43 @@ process.on('SIGTERM', shutdown);
 
 // PM2 graceful shutdown
 process.on('message', (msg) => {
-  if (msg === 'shutdown') {
-    shutdown();
-  }
+    if (msg === 'shutdown') {
+        shutdown();
+    }
 });
 
 // Uncaught exception handler
 process.on('uncaughtException', (err) => {
-  log.error('Uncaught exception:', err);
-  shutdown();
+    log('error', `Uncaught exception: ${err.message}`);
+    shutdown();
 });
 
 // Unhandled rejection handler
 process.on('unhandledRejection', (reason, promise) => {
-  log.error('Unhandled rejection at:', promise, 'reason:', reason);
+    log('error', `Unhandled rejection: ${reason}`);
 });
 
-// Start worker
-log.info('FFprobe Analysis Worker started');
-log.info(`Queue: ${QUEUE_NAME}`);
-log.info(`Poll interval: ${POLL_INTERVAL}ms`);
-log.info(`Log level: ${LOG_LEVEL}`);
-log.info(`Worker ID: ${process.pid}`);
+/**
+ * Main worker loop
+ */
+function startWorker() {
+    log('info', 'FFprobe Analysis Worker started');
+    log('info', `Mode: ${MODE}`);
+    log('info', `Concurrent streams: ${CONCURRENT_STREAMS}`);
+    log('info', `Poll interval: ${POLL_INTERVAL}ms`);
+    log('info', `Log level: ${LOG_LEVEL}`);
+    log('info', `Worker ID: ${process.pid}`);
+    log('info', `Base path: ${BASE_PATH}`);
 
-// Poll queue at interval
-const pollTimer = setInterval(pollQueue, POLL_INTERVAL);
+    // Initial analysis
+    analyzeStreams();
 
-// Health check every 60 seconds
-setInterval(healthCheck, 60000);
+    // Poll at interval
+    setInterval(analyzeStreams, POLL_INTERVAL);
 
-// Initial poll
-pollQueue();
+    // Health check every 60 seconds
+    setInterval(healthCheck, 60000);
+}
+
+// Start the worker
+startWorker();

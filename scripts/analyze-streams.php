@@ -133,10 +133,18 @@ try {
             if ($stream->analysis_status === 'completed') {
                 $stats['analyzed']++;
                 $tech = $stream->getTechnicalSummary();
+
+                // Auto-set optimal transcode profile if not manually set
+                $profileSet = false;
+                if ($stream->needsProfileAssignment()) {
+                    $profileSet = $stream->setOptimalTranscodeProfile();
+                }
+
+                $profileInfo = $profileSet ? ' | Profile auto-set' : '';
                 log_message(
                     "  ✓ Success ({$duration}s) - " .
                     "{$tech['quality']} | {$tech['video_codec']} | {$tech['audio_codec']} | " .
-                    "Health: {$tech['health_score']}/100",
+                    "Health: {$tech['health_score']}/100{$profileInfo}",
                     true
                 );
             } else {

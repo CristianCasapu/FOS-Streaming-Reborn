@@ -263,6 +263,19 @@
                                 <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option>
                             </select>
                         </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">FFmpeg Profile (Optional)</label>
+                            <select v-model="newStream.trans_id" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                                <option value="0">Auto-detect (ffprobe will set optimal)</option>
+                                <option v-for="transcode in transcodes" :key="transcode.id" :value="transcode.id">{{ transcode.name }}</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Leave as auto-detect to let the ffprobe worker analyze and set the optimal profile.</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                        <p class="text-sm text-yellow-700">
+                            <strong>Note:</strong> Newly created streams are disabled by default. Enable them manually when ready to start.
+                        </p>
                     </div>
                     <div class="flex justify-end space-x-3 mt-6">
                         <button type="button" @click="showAddModal = false" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">Cancel</button>
@@ -328,7 +341,7 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue';
-import { streamsAPI, categoriesAPI } from '../../services/api';
+import { streamsAPI, categoriesAPI, transcodesAPI } from '../../services/api';
 import { useToastStore } from '../../stores/toast';
 import AppLayout from '../../components/AppLayout.vue';
 import StreamImportWizard from '../../components/StreamImportWizard.vue';
@@ -359,7 +372,8 @@ const hlsInstance = ref(null);
 const showAddModal = ref(false);
 const showImportWizard = ref(false);
 const categories = ref([]);
-const newStream = ref({ name: '', stream_source: '', cat_id: 0 });
+const transcodes = ref([]);
+const newStream = ref({ name: '', stream_source: '', cat_id: 0, trans_id: 0 });
 
 const title = computed(() => filterStatus.value === '1' ? 'Running Streams' : filterStatus.value === '2' ? 'Error Streams' : 'All Streams');
 
@@ -460,8 +474,9 @@ const closePreview = () => {
 };
 
 const fetchCategories = async () => { try { const response = await categoriesAPI.getAll(); categories.value = response.data.data || []; } catch (error) { console.error('Failed to load categories:', error); } };
-const createStream = async () => { try { await streamsAPI.create(newStream.value); toast.success('Stream created successfully', { title: 'Created' }); showAddModal.value = false; newStream.value = { name: '', stream_source: '', cat_id: 0 }; fetchStreams(); fetchStats(); } catch (error) { toast.error('Failed to create stream', { title: 'Error', details: error.response?.data?.message || error.message }); } };
+const fetchTranscodes = async () => { try { const response = await transcodesAPI.getAll(); transcodes.value = response.data.data || []; } catch (error) { console.error('Failed to load transcodes:', error); } };
+const createStream = async () => { try { await streamsAPI.create(newStream.value); toast.success('Stream created successfully (disabled by default)', { title: 'Created' }); showAddModal.value = false; newStream.value = { name: '', stream_source: '', cat_id: 0, trans_id: 0 }; fetchStreams(); fetchStats(); } catch (error) { toast.error('Failed to create stream', { title: 'Error', details: error.response?.data?.message || error.message }); } };
 const handleImported = (count) => { toast.success(`Successfully imported ${count} stream(s). Streams are disabled by default.`, { title: 'Import Complete' }); fetchStreams(); fetchStats(); fetchCategories(); };
 
-onMounted(() => { fetchStreams(); fetchStats(); fetchCategories(); });
+onMounted(() => { fetchStreams(); fetchStats(); fetchCategories(); fetchTranscodes(); });
 </script>

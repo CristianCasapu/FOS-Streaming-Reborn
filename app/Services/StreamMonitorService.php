@@ -31,11 +31,19 @@ class StreamMonitorService
             'healthy' => 0,
             'crashed' => 0,
             'restarted' => 0,
-            'disabled_stopped' => 0
+            'disabled_stopped' => 0,
+            'orphans_cleaned' => 0,
+            'state_fixed' => 0
         ];
 
         // First, stop any disabled streams that are running or have PIDs
         $stats['disabled_stopped'] = $this->stopDisabledStreams();
+
+        // Clean up orphaned PIDs (stopped streams with PIDs)
+        $stats['orphans_cleaned'] = $this->cleanupOrphanedPids();
+
+        // Fix streams with inconsistent state (running/starting but no PID)
+        $stats['state_fixed'] = $this->fixInconsistentStates();
 
         // Get all streams that should be running (only enabled streams)
         // Use state as single source of truth, also check for orphaned PIDs
@@ -53,10 +61,23 @@ class StreamMonitorService
         foreach ($streams as $stream) {
             $stats['checked']++;
 
+            // Handle streams with PIDs but in stopped/error state
+            if (!in_array($stream->state, ['running', 'starting']) && $stream->pid > 0) {
+                $this->handleOrphanedPid($stream);
+                continue;
+            }
+
             $isAlive = $this->checkStreamHealth($stream);
 
             if ($isAlive) {
                 $stats['healthy']++;
+
+                // Ensure state is 'running' if we have an active PID
+                if ($stream->state !== 'running') {
+                    $stream->state = 'running';
+                    $stream->save();
+                    $this->logger->info("Stream {$stream->id} state corrected to 'running' (PID {$stream->pid} is alive)");
+                }
 
                 // Update uptime
                 $this->updateUptime($stream);
@@ -72,7 +93,7 @@ class StreamMonitorService
                 // Record healthy check
                 $stream->recordHealthCheck(true);
             } else {
-                // Stream crashed
+                // Stream crashed or has no PID
                 $stats['crashed']++;
                 $this->handleCrashedStream($stream);
 
@@ -83,6 +104,63 @@ class StreamMonitorService
         }
 
         return $stats;
+    }
+
+    /**
+     * Fix streams with inconsistent states
+     * e.g., state='running' but no PID, state='stopped' but has PID
+     *
+     * @return int Number of streams fixed
+     */
+    private function fixInconsistentStates(): int
+    {
+        $count = 0;
+
+        // Find enabled streams in 'running' or 'starting' state but with no PID
+        // These need to be marked as stopped or crashed
+        $streams = \Stream::where('enabled', 1)
+            ->whereIn('state', ['running', 'starting'])
+            ->where(function($q) {
+                $q->whereNull('pid')
+                  ->orWhere('pid', '=', 0);
+            })
+            ->get();
+
+        foreach ($streams as $stream) {
+            $this->logger->warning("Stream {$stream->id} has state '{$stream->state}' but no PID - marking as stopped");
+            $stream->state = 'stopped';
+            $stream->stream_stopped_at = date('Y-m-d H:i:s');
+            $stream->save();
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
+     * Handle stream with orphaned PID (has PID but in stopped/error state)
+     *
+     * @param \Stream $stream Stream object
+     * @return void
+     */
+    private function handleOrphanedPid(\Stream $stream): void
+    {
+        $pid = $stream->pid;
+
+        // Check if the process actually exists
+        exec("ps -p {$pid} > /dev/null 2>&1", $output, $exitCode);
+
+        if ($exitCode === 0) {
+            // Process exists but stream is in stopped/error state
+            // Kill the orphaned process
+            $this->logger->warning("Killing orphaned process PID {$pid} for stream {$stream->id} (state: {$stream->state})");
+            exec("kill -9 {$pid}");
+        }
+
+        // Clear the PID
+        $stream->pid = null;
+        $stream->save();
+        $this->logger->info("Cleared orphaned PID {$pid} from stream {$stream->id}");
     }
 
     /**

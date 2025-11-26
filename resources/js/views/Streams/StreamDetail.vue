@@ -248,10 +248,36 @@
                                 </div>
 
                                 <div v-else-if="technicalInfo" class="space-y-6">
+                                    <!-- Analysis Status -->
+                                    <div class="flex items-center justify-between p-4 rounded-lg" :class="technicalInfo.analysis_status === 'completed' ? 'bg-green-50' : technicalInfo.analysis_status === 'failed' ? 'bg-red-50' : 'bg-yellow-50'">
+                                        <div>
+                                            <span class="text-sm font-medium" :class="technicalInfo.analysis_status === 'completed' ? 'text-green-800' : technicalInfo.analysis_status === 'failed' ? 'text-red-800' : 'text-yellow-800'">
+                                                Analysis Status: {{ technicalInfo.analysis_status?.toUpperCase() || 'PENDING' }}
+                                            </span>
+                                            <p v-if="technicalInfo.last_analyzed" class="text-xs text-gray-500 mt-1">
+                                                Last analyzed: {{ formatDateTime(technicalInfo.last_analyzed) }}
+                                            </p>
+                                        </div>
+                                        <button @click="analyzeStream" :disabled="analyzing" class="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50">
+                                            {{ analyzing ? 'Analyzing...' : 'Re-Analyze' }}
+                                        </button>
+                                    </div>
+
+                                    <!-- Transcode Profile -->
+                                    <div class="p-4 bg-blue-50 rounded-lg">
+                                        <h4 class="text-sm font-semibold text-blue-800 mb-2">Transcode Profile</h4>
+                                        <p class="text-sm text-blue-900">
+                                            {{ technicalInfo.transcode_name || 'Auto-detect (not yet set)' }}
+                                        </p>
+                                        <p v-if="technicalInfo.profile" class="text-xs text-blue-700 mt-1">
+                                            FFprobe Recommended: {{ technicalInfo.profile }}
+                                        </p>
+                                    </div>
+
                                     <!-- Video Information -->
                                     <div>
                                         <h4 class="text-sm font-semibold text-gray-700 mb-3">Video Information</h4>
-                                        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <dl class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div>
                                                 <dt class="text-sm font-medium text-gray-500">Codec</dt>
                                                 <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.video_codec || 'N/A' }}</dd>
@@ -261,12 +287,28 @@
                                                 <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.resolution || 'N/A' }}</dd>
                                             </div>
                                             <div>
+                                                <dt class="text-sm font-medium text-gray-500">Quality</dt>
+                                                <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.quality || 'N/A' }}</dd>
+                                            </div>
+                                            <div>
                                                 <dt class="text-sm font-medium text-gray-500">Bitrate</dt>
                                                 <dd class="mt-1 text-sm text-gray-900">{{ formatBitrate(technicalInfo.bitrate) }}</dd>
                                             </div>
                                             <div>
                                                 <dt class="text-sm font-medium text-gray-500">Frame Rate</dt>
-                                                <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.fps || 'N/A' }} fps</dd>
+                                                <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.fps ? technicalInfo.fps + ' fps' : 'N/A' }}</dd>
+                                            </div>
+                                            <div>
+                                                <dt class="text-sm font-medium text-gray-500">Profile</dt>
+                                                <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.video_profile || 'N/A' }}</dd>
+                                            </div>
+                                            <div>
+                                                <dt class="text-sm font-medium text-gray-500">Pixel Format</dt>
+                                                <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.pixel_format || 'N/A' }}</dd>
+                                            </div>
+                                            <div>
+                                                <dt class="text-sm font-medium text-gray-500">Aspect Ratio</dt>
+                                                <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.aspect_ratio || 'N/A' }}</dd>
                                             </div>
                                         </dl>
                                     </div>
@@ -274,7 +316,7 @@
                                     <!-- Audio Information -->
                                     <div>
                                         <h4 class="text-sm font-semibold text-gray-700 mb-3">Audio Information</h4>
-                                        <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <dl class="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div>
                                                 <dt class="text-sm font-medium text-gray-500">Codec</dt>
                                                 <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.audio_codec || 'N/A' }}</dd>
@@ -283,13 +325,50 @@
                                                 <dt class="text-sm font-medium text-gray-500">Sample Rate</dt>
                                                 <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.sample_rate || 'N/A' }}</dd>
                                             </div>
+                                            <div>
+                                                <dt class="text-sm font-medium text-gray-500">Channels</dt>
+                                                <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.audio_channels || 'N/A' }}</dd>
+                                            </div>
+                                            <div>
+                                                <dt class="text-sm font-medium text-gray-500">Bitrate</dt>
+                                                <dd class="mt-1 text-sm text-gray-900">{{ formatBitrate(technicalInfo.audio_bitrate) }}</dd>
+                                            </div>
+                                            <div>
+                                                <dt class="text-sm font-medium text-gray-500">Language</dt>
+                                                <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.audio_language || 'N/A' }}</dd>
+                                            </div>
+                                        </dl>
+                                    </div>
+
+                                    <!-- Container Information -->
+                                    <div>
+                                        <h4 class="text-sm font-semibold text-gray-700 mb-3">Container Information</h4>
+                                        <dl class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div>
+                                                <dt class="text-sm font-medium text-gray-500">Format</dt>
+                                                <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.container || 'N/A' }}</dd>
+                                            </div>
+                                            <div>
+                                                <dt class="text-sm font-medium text-gray-500">Duration</dt>
+                                                <dd class="mt-1 text-sm text-gray-900">{{ technicalInfo.duration || 'Live' }}</dd>
+                                            </div>
+                                            <div>
+                                                <dt class="text-sm font-medium text-gray-500">Health Score</dt>
+                                                <dd class="mt-1 text-sm font-semibold" :class="technicalInfo.health_score >= 80 ? 'text-green-600' : technicalInfo.health_score >= 50 ? 'text-yellow-600' : 'text-red-600'">
+                                                    {{ technicalInfo.health_score || 'N/A' }}{{ technicalInfo.health_score ? '/100' : '' }}
+                                                </dd>
+                                            </div>
                                         </dl>
                                     </div>
 
                                     <!-- Raw Data -->
                                     <div v-if="technicalInfo.raw_data">
-                                        <h4 class="text-sm font-semibold text-gray-700 mb-3">Raw FFprobe Data</h4>
-                                        <pre class="bg-gray-50 p-4 rounded-lg text-xs overflow-x-auto">{{ JSON.stringify(technicalInfo.raw_data, null, 2) }}</pre>
+                                        <details class="group">
+                                            <summary class="text-sm font-semibold text-gray-700 mb-3 cursor-pointer hover:text-indigo-600">
+                                                Raw FFprobe Data (click to expand)
+                                            </summary>
+                                            <pre class="bg-gray-50 p-4 rounded-lg text-xs overflow-x-auto mt-2">{{ JSON.stringify(technicalInfo.raw_data, null, 2) }}</pre>
+                                        </details>
                                     </div>
                                 </div>
 
@@ -304,9 +383,82 @@
                         </div>
 
                         <!-- Access URLs Tab -->
-                        <div v-show="activeTab === 'access'">
+                        <div v-show="activeTab === 'access'" class="space-y-6">
+                            <!-- Secure URLs Section (Token-based) -->
                             <div class="bg-white shadow rounded-lg p-6">
-                                <h3 class="text-lg font-medium text-gray-900 mb-4">Stream Access URLs</h3>
+                                <div class="flex justify-between items-center mb-4">
+                                    <div>
+                                        <h3 class="text-lg font-medium text-gray-900">Secure Stream URLs</h3>
+                                        <p class="text-sm text-gray-500">Token-authenticated URLs with enterprise-grade security</p>
+                                    </div>
+                                    <button @click="generateSecureUrls" :disabled="loadingSecureUrls" class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50">
+                                        <svg v-if="loadingSecureUrls" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        {{ loadingSecureUrls ? 'Generating...' : 'Generate Secure URLs' }}
+                                    </button>
+                                </div>
+
+                                <div v-if="secureUrls" class="space-y-4">
+                                    <!-- Token Info -->
+                                    <div class="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                                        <div>
+                                            <p class="text-sm font-medium text-green-800">Token Active</p>
+                                            <p class="text-xs text-green-600">Expires: {{ formatDateTime(secureUrls.expires_at) }}</p>
+                                        </div>
+                                        <button @click="revokeTokens" class="text-sm text-red-600 hover:text-red-800">Revoke All Tokens</button>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Secure HLS URL</label>
+                                        <div class="flex">
+                                            <input type="text" readonly :value="secureUrls.urls?.hls" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm font-mono" />
+                                            <button @click="copyToClipboard(secureUrls.urls?.hls)" class="px-4 py-2 bg-green-600 text-white rounded-r-md hover:bg-green-700">
+                                                Copy
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Secure DASH URL</label>
+                                        <div class="flex">
+                                            <input type="text" readonly :value="secureUrls.urls?.dash" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm font-mono" />
+                                            <button @click="copyToClipboard(secureUrls.urls?.dash)" class="px-4 py-2 bg-green-600 text-white rounded-r-md hover:bg-green-700">
+                                                Copy
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Secure Direct URL</label>
+                                        <div class="flex">
+                                            <input type="text" readonly :value="secureUrls.urls?.direct" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm font-mono" />
+                                            <button @click="copyToClipboard(secureUrls.urls?.direct)" class="px-4 py-2 bg-green-600 text-white rounded-r-md hover:bg-green-700">
+                                                Copy
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="pt-2 text-xs text-gray-500">
+                                        <p><strong>Security Features:</strong> IP-bound tokens, 1-hour expiration, usage tracking, revocation support</p>
+                                    </div>
+                                </div>
+
+                                <div v-else class="text-center py-8 text-gray-500">
+                                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                    <p class="mt-2">Click "Generate Secure URLs" to create token-authenticated streaming links</p>
+                                </div>
+                            </div>
+
+                            <!-- Public URLs Section (Non-authenticated) -->
+                            <div class="bg-white shadow rounded-lg p-6">
+                                <div class="mb-4">
+                                    <h3 class="text-lg font-medium text-gray-900">Public Stream URLs</h3>
+                                    <p class="text-sm text-yellow-600">Warning: These URLs are not authenticated - use secure URLs for production</p>
+                                </div>
                                 <div class="space-y-4">
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 mb-2">HLS Playlist URL</label>
@@ -514,7 +666,18 @@
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Category</label>
-                            <input v-model="editForm.category" type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md" />
+                            <select v-model="editForm.cat_id" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md">
+                                <option value="0">None</option>
+                                <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">FFmpeg Profile</label>
+                            <select v-model="editForm.trans_id" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md">
+                                <option value="0">Auto-detect (ffprobe will set optimal)</option>
+                                <option v-for="transcode in transcodes" :key="transcode.id" :value="transcode.id">{{ transcode.name }}</option>
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">Select a profile for transcoding or leave as auto-detect for FFprobe to determine the optimal settings.</p>
                         </div>
                     </div>
                     <div class="flex justify-end space-x-3 mt-6">
@@ -531,7 +694,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppLayout from '../../components/AppLayout.vue';
-import { streamsAPI } from '../../services/api';
+import { streamsAPI, categoriesAPI, transcodesAPI, settingsAPI } from '../../services/api';
 import { useToastStore } from '../../stores/toast';
 
 const route = useRoute();
@@ -548,14 +711,23 @@ const checkingAccess = ref(false);
 const error = ref(null);
 const loadingHistory = ref(false);
 const historyData = ref(null);
+const loadingSecureUrls = ref(false);
+const secureUrls = ref(null);
 
 const activeTab = ref('overview');
 const showEditModal = ref(false);
+const categories = ref([]);
+const transcodes = ref([]);
+const settings = ref({
+    streaming_port: 8000,
+    rtmp_port: 1935
+});
 
 const editForm = ref({
     name: '',
     stream_source: '',
-    category: ''
+    cat_id: 0,
+    trans_id: 0
 });
 
 const fetchStream = async () => {
@@ -568,7 +740,8 @@ const fetchStream = async () => {
             editForm.value = {
                 name: stream.value.name,
                 stream_source: stream.value.stream_source,
-                category: stream.value.category || ''
+                cat_id: stream.value.cat_id || 0,
+                trans_id: stream.value.trans_id || 0
             };
         } else {
             error.value = response.data.message || 'Failed to load stream';
@@ -578,6 +751,38 @@ const fetchStream = async () => {
         console.error('Error fetching stream:', err);
     } finally {
         loading.value = false;
+    }
+};
+
+const fetchCategories = async () => {
+    try {
+        const response = await categoriesAPI.getAll();
+        categories.value = response.data.data || [];
+    } catch (err) {
+        console.error('Error fetching categories:', err);
+    }
+};
+
+const fetchTranscodes = async () => {
+    try {
+        const response = await transcodesAPI.getAll();
+        transcodes.value = response.data.data || [];
+    } catch (err) {
+        console.error('Error fetching transcodes:', err);
+    }
+};
+
+const fetchSettings = async () => {
+    try {
+        const response = await settingsAPI.get();
+        if (response.data.success && response.data.data) {
+            settings.value = {
+                streaming_port: response.data.data.streaming_port || 8000,
+                rtmp_port: response.data.data.rtmp_port || 1935
+            };
+        }
+    } catch (err) {
+        console.error('Error fetching settings:', err);
     }
 };
 
@@ -705,6 +910,40 @@ const loadHistory = async (page = 1) => {
     }
 };
 
+const generateSecureUrls = async () => {
+    loadingSecureUrls.value = true;
+    try {
+        const response = await streamsAPI.getSecureUrls(streamId);
+        if (response.data.success) {
+            secureUrls.value = response.data.data;
+            toast.success('Secure URLs generated successfully', { title: 'Security', details: `Token valid for 1 hour` });
+        } else {
+            throw new Error(response.data.message || 'Failed to generate secure URLs');
+        }
+    } catch (err) {
+        console.error('Error generating secure URLs:', err);
+        toast.error('Failed to generate secure URLs', { title: 'Error', details: err.response?.data?.message || err.message });
+    } finally {
+        loadingSecureUrls.value = false;
+    }
+};
+
+const revokeTokens = async () => {
+    if (!confirm('Are you sure you want to revoke all streaming tokens for this stream? This will invalidate all current secure URLs.')) {
+        return;
+    }
+    try {
+        const response = await streamsAPI.revokeTokens(streamId);
+        if (response.data.success) {
+            secureUrls.value = null;
+            toast.success('All tokens revoked successfully', { title: 'Security' });
+        }
+    } catch (err) {
+        console.error('Error revoking tokens:', err);
+        toast.error('Failed to revoke tokens', { title: 'Error', details: err.response?.data?.message || err.message });
+    }
+};
+
 const getStateColor = (state) => {
     const colors = {
         'running': 'text-green-600',
@@ -718,14 +957,18 @@ const getStateColor = (state) => {
 };
 
 const getStreamUrl = (type) => {
-    const baseUrl = window.location.origin;
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+    const streamingPort = settings.value.streaming_port || 8000;
+    const rtmpPort = settings.value.rtmp_port || 1935;
+
     switch (type) {
         case 'hls':
-            return `${baseUrl}:8000/live/${stream.value.id}/index.m3u8`;
+            return `${protocol}//${hostname}:${streamingPort}/live/${stream.value.id}/index.m3u8`;
         case 'rtmp':
-            return `rtmp://${window.location.hostname}:1935/live/${stream.value.id}`;
+            return `rtmp://${hostname}:${rtmpPort}/live/${stream.value.id}`;
         case 'direct':
-            return `${baseUrl}:8000/live/${stream.value.id}`;
+            return `${protocol}//${hostname}:${streamingPort}/live/${stream.value.id}`;
         default:
             return '';
     }
@@ -765,5 +1008,8 @@ const formatDateTime = (dateStr) => {
 onMounted(async () => {
     await fetchStream();
     await getTechnicalInfo();
+    fetchCategories();
+    fetchTranscodes();
+    fetchSettings();
 });
 </script>

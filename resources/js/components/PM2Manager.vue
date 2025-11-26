@@ -716,6 +716,7 @@ const workerParameterSchemas = {
     },
     'ffprobe-worker': {
         POLL_INTERVAL: { type: 'number', label: 'Poll Interval (ms)', default: 10000, min: 1000, max: 60000, description: 'How often to poll for analysis jobs' },
+        CONCURRENT_STREAMS: { type: 'number', label: 'Concurrent Streams', default: 1, min: 1, max: 10, description: 'Number of streams to analyze per poll cycle (1 = one by one)' },
     },
     'website-health-worker': {
         POLL_INTERVAL: { type: 'number', label: 'Poll Interval (ms)', default: 30000, min: 5000, max: 300000, description: 'How often to check system health' },

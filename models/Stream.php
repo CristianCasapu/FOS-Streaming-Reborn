@@ -550,4 +550,100 @@ class Stream extends FosStreaming {
             && $this->restart_attempts < $this->max_restart_attempts
             && in_array($this->state, ['crashed', 'error']);
     }
+
+    /**
+     * Set optimal transcode profile based on analysis results
+     * Only sets profile if trans_id is currently 0 (not manually set)
+     *
+     * @return bool True if profile was set
+     */
+    public function setOptimalTranscodeProfile(): bool
+    {
+        // Don't override manually set profiles
+        if ($this->trans_id > 0) {
+            return false;
+        }
+
+        // Need analysis data to determine profile
+        if ($this->analysis_status !== 'completed' || !$this->video_width || !$this->video_codec) {
+            return false;
+        }
+
+        $videoCodec = strtolower($this->video_codec ?? '');
+        $width = (int)$this->video_width;
+
+        // Determine the best profile name based on resolution and codec
+        $profileName = $this->determineOptimalProfileName($width, $videoCodec);
+
+        if (!$profileName) {
+            return false;
+        }
+
+        // Find the transcode profile by name
+        $transcode = Transcode::where('name', 'LIKE', "%{$profileName}%")
+            ->where('is_active', 1)
+            ->first();
+
+        if ($transcode) {
+            $this->trans_id = $transcode->id;
+            return $this->save();
+        }
+
+        // Fallback to default profile
+        $defaultProfile = Transcode::where('name', 'LIKE', '%Default%')
+            ->where('is_active', 1)
+            ->first();
+
+        if ($defaultProfile) {
+            $this->trans_id = $defaultProfile->id;
+            return $this->save();
+        }
+
+        return false;
+    }
+
+    /**
+     * Determine optimal profile name based on stream characteristics
+     *
+     * @param int $width Video width
+     * @param string $codec Video codec
+     * @return string|null Profile name pattern to search for
+     */
+    private function determineOptimalProfileName(int $width, string $codec): ?string
+    {
+        $isHevc = in_array($codec, ['h265', 'hevc']);
+
+        // 4K UHD (3840x2160 or higher)
+        if ($width >= 3840) {
+            return $isHevc ? '4K UHD - H265 Copy' : '4K UHD - H264 Copy';
+        }
+
+        // Full HD 1080p (1920x1080)
+        if ($width >= 1920) {
+            return $isHevc ? 'FHD 1080p - H265 Copy' : 'FHD 1080p - H264 Copy';
+        }
+
+        // HD 720p (1280x720)
+        if ($width >= 1280) {
+            return 'HD 720p - H264 Copy';
+        }
+
+        // SD 480p (854x480 or lower)
+        if ($width >= 720) {
+            return 'SD 480p - H264 Copy';
+        }
+
+        // Default for very low resolution
+        return 'Default 1 - H264 Copy';
+    }
+
+    /**
+     * Check if stream needs a transcode profile to be set
+     *
+     * @return bool True if stream needs profiling
+     */
+    public function needsProfileAssignment(): bool
+    {
+        return $this->trans_id == 0 || $this->trans_id === null;
+    }
 }

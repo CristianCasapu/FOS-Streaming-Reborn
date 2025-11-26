@@ -144,7 +144,9 @@ try {
             $stream->streamurl3 = ''; // Optional backup URL
             $stream->cat_id = $input['cat_id'] ?? 0;
             $stream->trans_id = $input['trans_id'] ?? 0;
+            $stream->enabled = 0; // Streams are disabled by default - must be enabled manually
             $stream->state = 'stopped'; // Use state as single source of truth
+            $stream->analysis_status = 'pending'; // Queue for FFprobe analysis
 
             // M3U_Plus fields
             $stream->logo = $input['logo'] ?? '';
@@ -156,9 +158,10 @@ try {
 
             echo json_encode([
                 'success' => true,
-                'message' => 'Stream created successfully',
+                'message' => 'Stream created successfully (disabled by default)',
                 'data' => [
-                    'id' => $stream->id
+                    'id' => $stream->id,
+                    'enabled' => false
                 ]
             ]);
             break;
@@ -734,6 +737,10 @@ try {
                 throw new Exception('Stream not found');
             }
 
+            // Get technical summary
+            $summary = $stream->getTechnicalSummary();
+
+            // Return flattened structure for frontend compatibility
             echo json_encode([
                 'success' => true,
                 'data' => [
@@ -742,7 +749,33 @@ try {
                     'analysis_status' => $stream->analysis_status,
                     'analysis_status_label' => $stream->analysisStatusLabel,
                     'last_analyzed' => $stream->last_analyzed,
-                    'technical_summary' => $stream->getTechnicalSummary(),
+                    // Flattened technical fields for frontend
+                    'video_codec' => $summary['video_codec'],
+                    'resolution' => $summary['resolution'],
+                    'bitrate' => $stream->bitrate, // Raw bitrate for formatting
+                    'fps' => $stream->video_fps,
+                    'audio_codec' => $summary['audio_codec'],
+                    'sample_rate' => $stream->audio_sample_rate ? ($stream->audio_sample_rate . ' Hz') : null,
+                    'audio_channels' => $summary['audio_channels'],
+                    'quality' => $summary['quality'],
+                    'duration' => $summary['duration'],
+                    'container' => $summary['container'],
+                    'profile' => $summary['profile'],
+                    'health_score' => $summary['health_score'],
+                    // Additional raw data
+                    'video_width' => $stream->video_width,
+                    'video_height' => $stream->video_height,
+                    'video_bitrate' => $stream->video_bitrate,
+                    'video_profile' => $stream->video_profile,
+                    'pixel_format' => $stream->pixel_format,
+                    'aspect_ratio' => $stream->aspect_ratio,
+                    'audio_bitrate' => $stream->audio_bitrate,
+                    'audio_language' => $stream->audio_language,
+                    'container_format' => $stream->container_format,
+                    'trans_id' => $stream->trans_id,
+                    'transcode_name' => $stream->transcode ? $stream->transcode->name : null,
+                    // Raw data for debugging
+                    'raw_data' => $stream->ffprobe_raw_json ? json_decode($stream->ffprobe_raw_json, true) : null,
                     'recommended_settings' => $stream->recommended_settings ? json_decode($stream->recommended_settings, true) : null
                 ]
             ]);
@@ -820,6 +853,87 @@ try {
                         'dash_nested_path' => $dashNestedFile,
                     ]
                 ]
+            ]);
+            break;
+
+        case 'get_secure_urls':
+            // Get secure streaming URLs with authentication tokens for staff
+            $id = $_GET['id'] ?? null;
+            if (!$id) {
+                throw new Exception('Stream ID is required');
+            }
+
+            $stream = Stream::find($id);
+            if (!$stream) {
+                throw new Exception('Stream not found');
+            }
+
+            // Get current user ID from session
+            $userId = $_SESSION['user_id'] ?? 0;
+
+            // Load StreamAuthService
+            require_once __DIR__ . '/../../../app/Services/StreamAuthService.php';
+            $authService = new \App\Services\StreamAuthService();
+
+            // Generate secure URLs for staff
+            $result = $authService->generateSecureUrls($stream->id, 'staff', $userId);
+
+            if (!isset($result['success']) || !$result['success']) {
+                throw new Exception($result['error'] ?? 'Failed to generate secure URLs');
+            }
+
+            // Get streaming settings for port info
+            $setting = Setting::first();
+            $adminPort = $setting->port ?? 7777;
+            $requestHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            // Use admin port for secure-stream.php since it runs under PHP-FPM
+            $adminHost = preg_replace('/:\d+$/', '', $requestHost);
+            $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+
+            // Build full URLs - secure-stream.php runs on admin port
+            $baseUrl = "{$protocol}://{$adminHost}:{$adminPort}";
+            $fullUrls = [
+                'hls' => "{$baseUrl}{$result['urls']['hls']}",
+                'dash' => "{$baseUrl}{$result['urls']['dash']}",
+                'direct' => "{$baseUrl}{$result['urls']['direct']}"
+            ];
+
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'stream_id' => $stream->id,
+                    'stream_name' => $stream->name,
+                    'token' => $result['token'],
+                    'expires_at' => $result['expires_at'],
+                    'urls' => $fullUrls,
+                    'secure_endpoint' => "{$baseUrl}/secure-stream.php",
+                    'stream_running' => $stream->isActive()
+                ]
+            ]);
+            break;
+
+        case 'revoke_tokens':
+            // Revoke all streaming tokens for a stream
+            $id = $_GET['id'] ?? null;
+            if (!$id) {
+                throw new Exception('Stream ID is required');
+            }
+
+            $stream = Stream::find($id);
+            if (!$stream) {
+                throw new Exception('Stream not found');
+            }
+
+            // Load StreamAuthService
+            require_once __DIR__ . '/../../../app/Services/StreamAuthService.php';
+            $authService = new \App\Services\StreamAuthService();
+
+            // Revoke all tokens for this stream
+            $count = $authService->revokeAllStreamTokens($stream->id);
+
+            echo json_encode([
+                'success' => true,
+                'message' => "{$count} token(s) revoked for stream {$stream->id}"
             ]);
             break;
 
