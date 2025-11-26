@@ -18,12 +18,14 @@ class DatabaseSeeder extends Seeder
      * Order is important - dependencies must be seeded first:
      * 1. Core settings and configuration
      * 2. Admin/Staff accounts
-     * 3. Packages (before bouquets)
-     * 4. Bouquets (before package_bouquet)
-     * 5. Package-Bouquet relationships
-     * 6. PM2 Workers
-     * 7. Transcode profiles
-     * 8. Optional: Admin roles, Resellers, V2Ray (for dev environments)
+     * 3. Categories (before streams/bouquets)
+     * 4. Packages (before bouquets)
+     * 5. Bouquets (before package_bouquet)
+     * 6. Package-Bouquet relationships
+     * 7. PM2 Workers
+     * 8. Transcode profiles
+     * 9. Security: UFW Rules
+     * 10. Optional: Admin roles, Resellers, V2Ray (for dev environments)
      */
     public function run(): void
     {
@@ -31,6 +33,11 @@ class DatabaseSeeder extends Seeder
         $this->call([
             SettingsSeeder::class,
             AdminSeeder::class,
+        ]);
+
+        // Content organization
+        $this->call([
+            CategoriesSeeder::class,
         ]);
 
         // Subscription system
@@ -48,6 +55,11 @@ class DatabaseSeeder extends Seeder
         // Streaming configuration
         $this->call([
             TranscodeProfilesSeeder::class,
+        ]);
+
+        // Security configuration
+        $this->call([
+            UfwRulesSeeder::class,
         ]);
 
         // Optional seeders (skipped in production for some)
