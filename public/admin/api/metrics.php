@@ -14,49 +14,107 @@ use Illuminate\Support\Facades\Redis;
 
 $action = $_GET['action'] ?? 'dashboard';
 
+// Helper function to safely count from a table
+function safeCount($table, $conditions = []) {
+    try {
+        $query = DB::table($table);
+        foreach ($conditions as $column => $value) {
+            if (is_array($value)) {
+                $query->where($column, $value[0], $value[1]);
+            } else {
+                $query->where($column, $value);
+            }
+        }
+        return $query->count();
+    } catch (Exception $e) {
+        return 0;
+    }
+}
+
+// Helper function to safely sum from a table
+function safeSum($table, $column, $conditions = []) {
+    try {
+        $query = DB::table($table);
+        foreach ($conditions as $col => $value) {
+            if (is_array($value)) {
+                $query->where($col, $value[0], $value[1]);
+            } else {
+                $query->where($col, $value);
+            }
+        }
+        return $query->sum($column) ?? 0;
+    } catch (Exception $e) {
+        return 0;
+    }
+}
+
 try {
     switch ($action) {
         case 'dashboard':
-            // Quick dashboard metrics
+            // Quick dashboard metrics with safe queries
             $metrics = [
                 'platform' => [
-                    'total_streams' => DB::table('streams')->count(),
-                    'active_streams' => DB::table('streams')->where('enabled', true)->where('pid', '>', 0)->count(),
-                    'total_subscribers' => DB::table('subscribers')->count(),
-                    'active_subscriptions' => DB::table('subscriptions')->where('status', 'active')->count(),
-                    'total_resellers' => DB::table('resellers')->count(),
-                    'active_resellers' => DB::table('resellers')->where('status', 'active')->count(),
+                    'total_streams' => safeCount('streams'),
+                    'active_streams' => safeCount('streams', ['enabled' => true, 'pid' => ['>', 0]]),
+                    'total_subscribers' => safeCount('subscribers'),
+                    'active_subscriptions' => safeCount('subscriptions', ['is_active' => true]),
+                    'total_resellers' => safeCount('resellers'),
+                    'active_resellers' => safeCount('resellers', ['is_active' => true]),
                 ],
                 'revenue' => [
-                    'monthly_revenue' => DB::table('subscriptions')
-                        ->where('status', 'active')
-                        ->whereMonth('created_at', date('m'))
-                        ->whereYear('created_at', date('Y'))
-                        ->sum('price'),
-                    'total_revenue' => DB::table('subscriptions')
-                        ->where('status', 'active')
-                        ->sum('price'),
-                    'pending_commissions' => DB::table('resellers')->sum('pending_balance'),
+                    'monthly_revenue' => (function() {
+                        try {
+                            return DB::table('subscriptions')
+                                ->join('packages', 'subscriptions.package_id', '=', 'packages.id')
+                                ->where('subscriptions.is_active', true)
+                                ->whereMonth('subscriptions.created_at', date('m'))
+                                ->whereYear('subscriptions.created_at', date('Y'))
+                                ->sum('packages.price') ?? 0;
+                        } catch (Exception $e) {
+                            return 0;
+                        }
+                    })(),
+                    'total_revenue' => (function() {
+                        try {
+                            return DB::table('subscriptions')
+                                ->join('packages', 'subscriptions.package_id', '=', 'packages.id')
+                                ->where('subscriptions.is_active', true)
+                                ->sum('packages.price') ?? 0;
+                        } catch (Exception $e) {
+                            return 0;
+                        }
+                    })(),
+                    'pending_commissions' => safeSum('resellers', 'pending_balance'),
                 ],
                 'security' => [
-                    'device_fingerprints' => DB::table('device_fingerprints')->count(),
-                    'active_devices' => DB::table('device_bindings')
-                        ->where('is_active', true)
-                        ->distinct('device_fingerprint_id')
-                        ->count(),
-                    'violations_today' => DB::table('device_violations')
-                        ->whereDate('created_at', date('Y-m-d'))
-                        ->count(),
-                    'blocked_devices' => DB::table('device_fingerprints')
-                        ->where('is_blocked', true)
-                        ->count(),
+                    'device_fingerprints' => safeCount('device_fingerprints'),
+                    'active_devices' => (function() {
+                        try {
+                            return DB::table('device_bindings')
+                                ->where('is_active', true)
+                                ->distinct('device_fingerprint_id')
+                                ->count('device_fingerprint_id');
+                        } catch (Exception $e) {
+                            return 0;
+                        }
+                    })(),
+                    'violations_today' => (function() {
+                        try {
+                            return DB::table('device_violations')
+                                ->whereDate('created_at', date('Y-m-d'))
+                                ->count();
+                        } catch (Exception $e) {
+                            return 0;
+                        }
+                    })(),
+                    'blocked_devices' => safeCount('device_fingerprints', ['is_blocked' => true]),
                 ],
                 'streaming' => [
-                    'srt_streams' => DB::table('streams')->where('srt_enabled', true)->count(),
-                    'proxy_streams' => DB::table('streams')->where('stream_mode', 'proxy')->count(),
-                    'transcode_streams' => DB::table('streams')->where('stream_mode', 'transcode')->count(),
-                    'v2ray_users' => DB::table('v2ray_users')->where('is_active', true)->count(),
-                    'v2ray_servers' => DB::table('v2ray_servers')->where('enabled', true)->count(),
+                    'srt_streams' => safeCount('streams', ['srt_enabled' => true]),
+                    'proxy_streams' => safeCount('streams', ['stream_mode' => 'proxy']),
+                    'transcode_streams' => safeCount('streams', ['stream_mode' => 'transcode']),
+                    'v2ray_users' => safeCount('v2ray_users', ['is_active' => true]),
+                    'v2ray_servers' => safeCount('v2ray_servers', ['enabled' => true]),
                 ],
             ];
 
@@ -72,29 +130,59 @@ try {
             $days = isset($_GET['days']) ? min(90, max(1, intval($_GET['days']))) : 7;
 
             $streamMetrics = [
-                'by_status' => DB::table('streams')
-                    ->select('enabled', DB::raw('COUNT(*) as count'))
-                    ->groupBy('enabled')
-                    ->get(),
-                'by_mode' => DB::table('streams')
-                    ->select('stream_mode', DB::raw('COUNT(*) as count'))
-                    ->groupBy('stream_mode')
-                    ->get(),
-                'by_protocol' => DB::table('streams')
-                    ->select('protocol', DB::raw('COUNT(*) as count'))
-                    ->groupBy('protocol')
-                    ->get(),
-                'by_category' => DB::table('streams')
-                    ->join('categories', 'streams.category_id', '=', 'categories.id')
-                    ->select('categories.name as category', DB::raw('COUNT(*) as count'))
-                    ->groupBy('categories.name')
-                    ->orderBy('count', 'DESC')
-                    ->limit(10)
-                    ->get(),
-                'uptime' => DB::table('streams')
-                    ->where('enabled', true)
-                    ->select(DB::raw('AVG(CASE WHEN pid > 0 THEN 1 ELSE 0 END) * 100 as uptime_percent'))
-                    ->first(),
+                'by_status' => (function() {
+                    try {
+                        return DB::table('streams')
+                            ->select('enabled', DB::raw('COUNT(*) as count'))
+                            ->groupBy('enabled')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'by_mode' => (function() {
+                    try {
+                        return DB::table('streams')
+                            ->select('stream_mode', DB::raw('COUNT(*) as count'))
+                            ->groupBy('stream_mode')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'by_protocol' => (function() {
+                    try {
+                        return DB::table('streams')
+                            ->select('protocol', DB::raw('COUNT(*) as count'))
+                            ->groupBy('protocol')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'by_category' => (function() {
+                    try {
+                        return DB::table('streams')
+                            ->join('categories', 'streams.cat_id', '=', 'categories.id')
+                            ->select('categories.name as category', DB::raw('COUNT(*) as count'))
+                            ->groupBy('categories.name')
+                            ->orderBy('count', 'DESC')
+                            ->limit(10)
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'uptime' => (function() {
+                    try {
+                        return DB::table('streams')
+                            ->where('enabled', true)
+                            ->select(DB::raw('AVG(CASE WHEN pid > 0 THEN 1 ELSE 0 END) * 100 as uptime_percent'))
+                            ->first();
+                    } catch (Exception $e) {
+                        return (object)['uptime_percent' => 0];
+                    }
+                })(),
             ];
 
             echo json_encode([
@@ -108,37 +196,57 @@ try {
             $days = isset($_GET['days']) ? min(90, max(1, intval($_GET['days']))) : 30;
 
             $subscriberMetrics = [
-                'growth' => DB::table('subscribers')
-                    ->select(
-                        DB::raw('DATE(created_at) as date'),
-                        DB::raw('COUNT(*) as new_subscribers')
-                    )
-                    ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
-                    ->groupBy('date')
-                    ->orderBy('date', 'ASC')
-                    ->get(),
-                'by_package' => DB::table('subscriptions')
-                    ->join('packages', 'subscriptions.package_id', '=', 'packages.id')
-                    ->select('packages.name as package', DB::raw('COUNT(DISTINCT subscriptions.subscriber_id) as count'))
-                    ->where('subscriptions.status', 'active')
-                    ->groupBy('packages.name')
-                    ->get(),
-                'subscription_status' => DB::table('subscriptions')
-                    ->select('status', DB::raw('COUNT(*) as count'))
-                    ->groupBy('status')
-                    ->get(),
+                'growth' => (function() use ($days) {
+                    try {
+                        return DB::table('subscribers')
+                            ->select(
+                                DB::raw('DATE(created_at) as date'),
+                                DB::raw('COUNT(*) as new_subscribers')
+                            )
+                            ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
+                            ->groupBy('date')
+                            ->orderBy('date', 'ASC')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'by_package' => (function() {
+                    try {
+                        return DB::table('subscriptions')
+                            ->join('packages', 'subscriptions.package_id', '=', 'packages.id')
+                            ->select('packages.name as package', DB::raw('COUNT(DISTINCT subscriptions.subscriber_id) as count'))
+                            ->where('subscriptions.is_active', true)
+                            ->groupBy('packages.name')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'subscription_status' => (function() {
+                    try {
+                        // Use is_active boolean to derive status
+                        return DB::table('subscriptions')
+                            ->select(DB::raw('CASE WHEN is_active = 1 THEN "active" ELSE "inactive" END as status'), DB::raw('COUNT(*) as count'))
+                            ->groupBy('is_active')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
                 'trial_conversions' => [
-                    'total_trials' => DB::table('trials')->count(),
-                    'active_trials' => DB::table('trials')->where('status', 'active')->count(),
-                    'expired_trials' => DB::table('trials')->where('status', 'expired')->count(),
-                    'converted' => DB::table('trials')
-                        ->whereExists(function($query) {
-                            $query->select(DB::raw(1))
-                                ->from('subscriptions')
-                                ->whereRaw('subscriptions.subscriber_id = trials.subscriber_id')
-                                ->where('subscriptions.status', 'active');
-                        })
-                        ->count(),
+                    'total_trials' => safeCount('trials'),
+                    'active_trials' => safeCount('trials', ['is_active' => true]),
+                    'expired_trials' => safeCount('trials', ['is_active' => false]),
+                    'converted' => (function() {
+                        try {
+                            return DB::table('trials')
+                                ->where('converted_to_subscription', true)
+                                ->count();
+                        } catch (Exception $e) {
+                            return 0;
+                        }
+                    })(),
                 ],
             ];
 
@@ -151,37 +259,49 @@ try {
         case 'resellers':
             // Reseller performance metrics
             $resellerMetrics = [
-                'top_resellers' => DB::table('resellers')
-                    ->select(
-                        'resellers.id',
-                        'resellers.username',
-                        'resellers.company_name',
-                        DB::raw('COUNT(DISTINCT reseller_subscribers.subscriber_id) as total_subscribers'),
-                        'resellers.total_earned',
-                        'resellers.credit_balance'
-                    )
-                    ->leftJoin('reseller_subscribers', 'resellers.id', '=', 'reseller_subscribers.reseller_id')
-                    ->groupBy('resellers.id', 'resellers.username', 'resellers.company_name', 'resellers.total_earned', 'resellers.credit_balance')
-                    ->orderBy('total_subscribers', 'DESC')
-                    ->limit(10)
-                    ->get(),
+                'top_resellers' => (function() {
+                    try {
+                        return DB::table('resellers')
+                            ->select(
+                                'resellers.id',
+                                'resellers.username',
+                                'resellers.company_name',
+                                DB::raw('COUNT(DISTINCT reseller_subscribers.subscriber_id) as total_subscribers'),
+                                'resellers.total_earned',
+                                'resellers.credit_balance'
+                            )
+                            ->leftJoin('reseller_subscribers', 'resellers.id', '=', 'reseller_subscribers.reseller_id')
+                            ->groupBy('resellers.id', 'resellers.username', 'resellers.company_name', 'resellers.total_earned', 'resellers.credit_balance')
+                            ->orderBy('total_subscribers', 'DESC')
+                            ->limit(10)
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
                 'commission_summary' => [
-                    'total_earned' => DB::table('resellers')->sum('total_earned'),
-                    'total_withdrawn' => DB::table('resellers')->sum('total_withdrawn'),
-                    'pending_balance' => DB::table('resellers')->sum('pending_balance'),
-                    'available_balance' => DB::table('resellers')->sum('credit_balance'),
+                    'total_earned' => safeSum('resellers', 'total_earned'),
+                    'total_withdrawn' => safeSum('resellers', 'total_withdrawn'),
+                    'pending_balance' => safeSum('resellers', 'pending_balance'),
+                    'available_balance' => safeSum('resellers', 'credit_balance'),
                 ],
-                'transactions_last_30_days' => DB::table('reseller_transactions')
-                    ->select(
-                        DB::raw('DATE(created_at) as date'),
-                        'type',
-                        DB::raw('SUM(amount) as total_amount'),
-                        DB::raw('COUNT(*) as count')
-                    )
-                    ->where('created_at', '>=', DB::raw('DATE_SUB(NOW(), INTERVAL 30 DAY)'))
-                    ->groupBy('date', 'type')
-                    ->orderBy('date', 'ASC')
-                    ->get(),
+                'transactions_last_30_days' => (function() {
+                    try {
+                        return DB::table('reseller_transactions')
+                            ->select(
+                                DB::raw('DATE(created_at) as date'),
+                                'type',
+                                DB::raw('SUM(amount) as total_amount'),
+                                DB::raw('COUNT(*) as count')
+                            )
+                            ->where('created_at', '>=', DB::raw('DATE_SUB(NOW(), INTERVAL 30 DAY)'))
+                            ->groupBy('date', 'type')
+                            ->orderBy('date', 'ASC')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
             ];
 
             echo json_encode([
@@ -195,48 +315,72 @@ try {
             $days = isset($_GET['days']) ? min(90, max(1, intval($_GET['days']))) : 7;
 
             $securityMetrics = [
-                'device_activity' => DB::table('device_sessions')
-                    ->select(
-                        DB::raw('DATE(created_at) as date'),
-                        DB::raw('COUNT(DISTINCT device_fingerprint_id) as unique_devices'),
-                        DB::raw('COUNT(*) as total_sessions')
-                    )
-                    ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
-                    ->groupBy('date')
-                    ->orderBy('date', 'ASC')
-                    ->get(),
-                'violations' => DB::table('device_violations')
-                    ->select(
-                        'violation_type',
-                        DB::raw('COUNT(*) as count'),
-                        DB::raw('COUNT(DISTINCT device_fingerprint_id) as unique_devices')
-                    )
-                    ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
-                    ->groupBy('violation_type')
-                    ->orderBy('count', 'DESC')
-                    ->get(),
-                'blocked_devices' => DB::table('device_fingerprints')
-                    ->select(
-                        DB::raw('DATE(blocked_at) as date'),
-                        DB::raw('COUNT(*) as count')
-                    )
-                    ->where('is_blocked', true)
-                    ->whereNotNull('blocked_at')
-                    ->where('blocked_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
-                    ->groupBy('date')
-                    ->orderBy('date', 'ASC')
-                    ->get(),
-                'concurrent_streams' => DB::table('device_sessions')
-                    ->select(
-                        'device_fingerprint_id',
-                        DB::raw('COUNT(*) as concurrent_count')
-                    )
-                    ->where('is_active', true)
-                    ->groupBy('device_fingerprint_id')
-                    ->havingRaw('COUNT(*) > 1')
-                    ->orderBy('concurrent_count', 'DESC')
-                    ->limit(20)
-                    ->get(),
+                'device_activity' => (function() use ($days) {
+                    try {
+                        return DB::table('device_sessions')
+                            ->select(
+                                DB::raw('DATE(created_at) as date'),
+                                DB::raw('COUNT(DISTINCT device_fingerprint_id) as unique_devices'),
+                                DB::raw('COUNT(*) as total_sessions')
+                            )
+                            ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
+                            ->groupBy('date')
+                            ->orderBy('date', 'ASC')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'violations' => (function() use ($days) {
+                    try {
+                        return DB::table('device_violations')
+                            ->select(
+                                'violation_type',
+                                DB::raw('COUNT(*) as count'),
+                                DB::raw('COUNT(DISTINCT device_fingerprint_id) as unique_devices')
+                            )
+                            ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
+                            ->groupBy('violation_type')
+                            ->orderBy('count', 'DESC')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'blocked_devices' => (function() use ($days) {
+                    try {
+                        return DB::table('device_fingerprints')
+                            ->select(
+                                DB::raw('DATE(blocked_at) as date'),
+                                DB::raw('COUNT(*) as count')
+                            )
+                            ->where('is_blocked', true)
+                            ->whereNotNull('blocked_at')
+                            ->where('blocked_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
+                            ->groupBy('date')
+                            ->orderBy('date', 'ASC')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'concurrent_streams' => (function() {
+                    try {
+                        return DB::table('device_sessions')
+                            ->select(
+                                'device_fingerprint_id',
+                                DB::raw('COUNT(*) as concurrent_count')
+                            )
+                            ->where('is_active', true)
+                            ->groupBy('device_fingerprint_id')
+                            ->havingRaw('COUNT(*) > 1')
+                            ->orderBy('concurrent_count', 'DESC')
+                            ->limit(20)
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
             ];
 
             echo json_encode([
@@ -250,49 +394,73 @@ try {
             $days = isset($_GET['days']) ? min(90, max(1, intval($_GET['days']))) : 7;
 
             $v2rayMetrics = [
-                'traffic_stats' => DB::table('v2ray_traffic_stats')
-                    ->select(
-                        'date',
-                        DB::raw('SUM(bytes_uploaded) as total_uploaded'),
-                        DB::raw('SUM(bytes_downloaded) as total_downloaded'),
-                        DB::raw('SUM(bytes_total) as total_traffic')
-                    )
-                    ->where('date', '>=', DB::raw("DATE_SUB(CURDATE(), INTERVAL {$days} DAY)"))
-                    ->groupBy('date')
-                    ->orderBy('date', 'ASC')
-                    ->get(),
-                'top_users' => DB::table('v2ray_users')
-                    ->select(
-                        'v2ray_users.id',
-                        'v2ray_users.email',
-                        'subscribers.username',
-                        'v2ray_users.bytes_uploaded',
-                        'v2ray_users.bytes_downloaded',
-                        DB::raw('(v2ray_users.bytes_uploaded + v2ray_users.bytes_downloaded) as total_traffic')
-                    )
-                    ->join('subscribers', 'v2ray_users.subscriber_id', '=', 'subscribers.id')
-                    ->where('v2ray_users.is_active', true)
-                    ->orderBy('total_traffic', 'DESC')
-                    ->limit(20)
-                    ->get(),
-                'server_health' => DB::table('v2ray_servers')
-                    ->select(
-                        'tag',
-                        'address',
-                        'health_status',
-                        'load',
-                        'current_connections',
-                        'max_connections',
-                        DB::raw('(current_connections / max_connections * 100) as load_percent')
-                    )
-                    ->where('enabled', true)
-                    ->orderBy('load', 'DESC')
-                    ->get(),
-                'protocol_usage' => DB::table('v2ray_users')
-                    ->select('protocol', DB::raw('COUNT(*) as count'))
-                    ->where('is_active', true)
-                    ->groupBy('protocol')
-                    ->get(),
+                'traffic_stats' => (function() use ($days) {
+                    try {
+                        return DB::table('v2ray_traffic_stats')
+                            ->select(
+                                'date',
+                                DB::raw('SUM(bytes_uploaded) as total_uploaded'),
+                                DB::raw('SUM(bytes_downloaded) as total_downloaded'),
+                                DB::raw('SUM(bytes_total) as total_traffic')
+                            )
+                            ->where('date', '>=', DB::raw("DATE_SUB(CURDATE(), INTERVAL {$days} DAY)"))
+                            ->groupBy('date')
+                            ->orderBy('date', 'ASC')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'top_users' => (function() {
+                    try {
+                        return DB::table('v2ray_users')
+                            ->select(
+                                'v2ray_users.id',
+                                'v2ray_users.email',
+                                'subscribers.username',
+                                'v2ray_users.bytes_uploaded',
+                                'v2ray_users.bytes_downloaded',
+                                DB::raw('(v2ray_users.bytes_uploaded + v2ray_users.bytes_downloaded) as total_traffic')
+                            )
+                            ->join('subscribers', 'v2ray_users.subscriber_id', '=', 'subscribers.id')
+                            ->where('v2ray_users.is_active', true)
+                            ->orderBy('total_traffic', 'DESC')
+                            ->limit(20)
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'server_health' => (function() {
+                    try {
+                        return DB::table('v2ray_servers')
+                            ->select(
+                                'tag',
+                                'address',
+                                'health_status',
+                                'load',
+                                'current_connections',
+                                'max_connections',
+                                DB::raw('(current_connections / NULLIF(max_connections, 0) * 100) as load_percent')
+                            )
+                            ->where('enabled', true)
+                            ->orderBy('load', 'DESC')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'protocol_usage' => (function() {
+                    try {
+                        return DB::table('v2ray_users')
+                            ->select('protocol', DB::raw('COUNT(*) as count'))
+                            ->where('is_active', true)
+                            ->groupBy('protocol')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
             ];
 
             echo json_encode([
@@ -306,39 +474,63 @@ try {
             $days = isset($_GET['days']) ? min(90, max(1, intval($_GET['days']))) : 7;
 
             $auditMetrics = [
-                'actions_by_day' => DB::table('audit_logs')
-                    ->select(
-                        DB::raw('DATE(created_at) as date'),
-                        DB::raw('COUNT(*) as total_actions')
-                    )
-                    ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
-                    ->groupBy('date')
-                    ->orderBy('date', 'ASC')
-                    ->get(),
-                'actions_by_type' => DB::table('audit_logs')
-                    ->select('action', DB::raw('COUNT(*) as count'))
-                    ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
-                    ->groupBy('action')
-                    ->orderBy('count', 'DESC')
-                    ->limit(10)
-                    ->get(),
-                'actions_by_user_type' => DB::table('audit_logs')
-                    ->select('user_type', DB::raw('COUNT(*) as count'))
-                    ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
-                    ->groupBy('user_type')
-                    ->get(),
-                'failed_actions' => DB::table('audit_logs')
-                    ->select(
-                        'action',
-                        'entity_type',
-                        DB::raw('COUNT(*) as count')
-                    )
-                    ->where('status', 'failed')
-                    ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
-                    ->groupBy('action', 'entity_type')
-                    ->orderBy('count', 'DESC')
-                    ->limit(10)
-                    ->get(),
+                'actions_by_day' => (function() use ($days) {
+                    try {
+                        return DB::table('audit_logs')
+                            ->select(
+                                DB::raw('DATE(created_at) as date'),
+                                DB::raw('COUNT(*) as total_actions')
+                            )
+                            ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
+                            ->groupBy('date')
+                            ->orderBy('date', 'ASC')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'actions_by_type' => (function() use ($days) {
+                    try {
+                        return DB::table('audit_logs')
+                            ->select('action', DB::raw('COUNT(*) as count'))
+                            ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
+                            ->groupBy('action')
+                            ->orderBy('count', 'DESC')
+                            ->limit(10)
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'actions_by_user_type' => (function() use ($days) {
+                    try {
+                        return DB::table('audit_logs')
+                            ->select('user_type', DB::raw('COUNT(*) as count'))
+                            ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
+                            ->groupBy('user_type')
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
+                'failed_actions' => (function() use ($days) {
+                    try {
+                        return DB::table('audit_logs')
+                            ->select(
+                                'action',
+                                'entity_type',
+                                DB::raw('COUNT(*) as count')
+                            )
+                            ->where('status', 'failed')
+                            ->where('created_at', '>=', DB::raw("DATE_SUB(NOW(), INTERVAL {$days} DAY)"))
+                            ->groupBy('action', 'entity_type')
+                            ->orderBy('count', 'DESC')
+                            ->limit(10)
+                            ->get();
+                    } catch (Exception $e) {
+                        return [];
+                    }
+                })(),
             ];
 
             echo json_encode([

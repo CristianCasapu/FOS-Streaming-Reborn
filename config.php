@@ -143,12 +143,17 @@ $capsule->addConnection([
 $capsule->setAsGlobal();
 $capsule->bootEloquent();
 
-// Configure Laravel Encryption (Crypt facade)
-use Illuminate\Encryption\Encrypter;
-use Illuminate\Support\Facades\Facade;
+// Configure Laravel Container for Facades
 use Illuminate\Container\Container;
 
 $app = Container::getInstance();
+
+// Register database manager for DB facade
+$app->instance('db', $capsule->getDatabaseManager());
+
+// Configure Laravel Encryption (Crypt facade)
+use Illuminate\Encryption\Encrypter;
+use Illuminate\Support\Facades\Facade;
 
 // Get the encryption key from environment
 $appKey = env('APP_KEY');
