@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import AppLayout from '../../components/AppLayout.vue';
 import { auditLogsAPI } from '../../services/api';
 
@@ -41,11 +41,14 @@ const fetchLogs = async () => {
         };
 
         const response = await auditLogsAPI.list(params);
-        logs.value = response.data.data;
-        pagination.total = response.data.total;
-        pagination.totalPages = response.data.total_pages;
+        logs.value = response.data.data || [];
+        pagination.total = response.data.total || 0;
+        pagination.totalPages = response.data.total_pages || 1;
     } catch (error) {
         console.error('Failed to fetch audit logs:', error);
+        logs.value = [];
+        pagination.total = 0;
+        pagination.totalPages = 1;
     } finally {
         loading.value = false;
     }
@@ -55,9 +58,21 @@ const fetchLogs = async () => {
 const fetchStats = async () => {
     try {
         const response = await auditLogsAPI.stats({ days: 30 });
-        stats.value = response.data.data;
+        stats.value = response.data.data || {
+            total_actions: 0,
+            success_rate: 100,
+            failed_actions: 0,
+            last_24h: 0,
+        };
     } catch (error) {
         console.error('Failed to fetch stats:', error);
+        // Set default stats on error
+        stats.value = {
+            total_actions: 0,
+            success_rate: 100,
+            failed_actions: 0,
+            last_24h: 0,
+        };
     }
 };
 
