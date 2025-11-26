@@ -9,9 +9,7 @@ logincheck(); // Enforce admin authentication
 
 header('Content-Type: application/json');
 
-use Reseller;
-use ResellerTransaction;
-use Subscriber;
+// Models are autoloaded via composer
 
 $action = $_GET['action'] ?? 'list';
 
@@ -48,7 +46,7 @@ try {
                 $reseller->subscriber_count = $reseller->subscribers()->count();
                 $reseller->active_subscriptions = $reseller->subscribers()
                     ->whereHas('subscriptions', function($q) {
-                        $q->where('status', 'active');
+                        $q->where('is_active', true);
                     })->count();
             }
 
@@ -79,7 +77,7 @@ try {
                 'total_subscribers' => $reseller->subscribers()->count(),
                 'active_subscribers' => $reseller->subscribers()
                     ->whereHas('subscriptions', function($q) {
-                        $q->where('status', 'active');
+                        $q->where('is_active', true);
                     })->count(),
                 'monthly_earnings' => $reseller->getMonthlyEarnings(),
                 'available_balance' => $reseller->available_balance,
@@ -202,7 +200,7 @@ try {
             // Check if reseller has active subscribers
             $activeCount = $reseller->subscribers()
                 ->whereHas('subscriptions', function($q) {
-                    $q->where('status', 'active');
+                    $q->where('is_active', true);
                 })->count();
 
             if ($activeCount > 0) {
