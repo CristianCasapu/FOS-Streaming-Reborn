@@ -775,10 +775,10 @@
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-2">
-                                    Max Trials Per User
+                                    Max Trials Per Subscriber
                                 </label>
                                 <input v-model.number="form.max_trials_per_user" type="number" min="1" max="10" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500" placeholder="1" />
-                                <p class="mt-1 text-xs text-gray-500">Maximum number of trials a user can have (enforced: 1)</p>
+                                <p class="mt-1 text-xs text-gray-500">Maximum number of trials a subscriber can have (database enforces unique constraint: 1 trial per subscriber)</p>
                             </div>
                         </div>
                         <div class="mt-4 space-y-3">

@@ -1,6 +1,6 @@
 #############################################################################
 # FOS-Streaming Nginx Streaming Service Configuration
-# Auto-generated on 1764153982
+# Auto-generated on 1764066869
 #
 # User: casapu:casapu
 # Ports: 8001 (HTTP streaming), 1935 (RTMP ingest)

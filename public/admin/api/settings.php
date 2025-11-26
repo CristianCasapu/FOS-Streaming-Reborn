@@ -148,6 +148,16 @@ try {
                     // Nginx Paths
                     'nginx_config_path' => $setting->nginx_config_path ?? null,
                     'nginx_binary_path' => $setting->nginx_binary_path ?? null,
+                    // Trial Settings
+                    'trial_enabled' => (bool)($setting->trial_enabled ?? true),
+                    'trial_duration_hours' => (int)($setting->trial_duration_hours ?? 24),
+                    'trial_requires_approval' => (bool)($setting->trial_requires_approval ?? false),
+                    'max_trials_per_user' => (int)($setting->max_trials_per_user ?? 1),
+                    // Device Security Settings
+                    'device_concurrent_stream_grace_seconds' => (int)($setting->device_concurrent_stream_grace_seconds ?? 30),
+                    'device_session_timeout_minutes' => (int)($setting->device_session_timeout_minutes ?? 60),
+                    'device_max_registration_per_day' => (int)($setting->device_max_registration_per_day ?? 5),
+                    'device_fingerprint_ttl_days' => (int)($setting->device_fingerprint_ttl_days ?? 365),
                 ]
             ]);
             break;
@@ -310,6 +320,44 @@ try {
 
             if (isset($input['nginx_binary_path'])) {
                 $setting->nginx_binary_path = $input['nginx_binary_path'];
+            }
+
+            // ============================================================
+            // Trial Settings
+            // ============================================================
+            if (isset($input['trial_enabled'])) {
+                $setting->trial_enabled = (bool)$input['trial_enabled'];
+            }
+
+            if (isset($input['trial_duration_hours'])) {
+                $setting->trial_duration_hours = (int)$input['trial_duration_hours'];
+            }
+
+            if (isset($input['trial_requires_approval'])) {
+                $setting->trial_requires_approval = (bool)$input['trial_requires_approval'];
+            }
+
+            if (isset($input['max_trials_per_user'])) {
+                $setting->max_trials_per_user = (int)$input['max_trials_per_user'];
+            }
+
+            // ============================================================
+            // Device Security Settings
+            // ============================================================
+            if (isset($input['device_concurrent_stream_grace_seconds'])) {
+                $setting->device_concurrent_stream_grace_seconds = (int)$input['device_concurrent_stream_grace_seconds'];
+            }
+
+            if (isset($input['device_session_timeout_minutes'])) {
+                $setting->device_session_timeout_minutes = (int)$input['device_session_timeout_minutes'];
+            }
+
+            if (isset($input['device_max_registration_per_day'])) {
+                $setting->device_max_registration_per_day = (int)$input['device_max_registration_per_day'];
+            }
+
+            if (isset($input['device_fingerprint_ttl_days'])) {
+                $setting->device_fingerprint_ttl_days = (int)$input['device_fingerprint_ttl_days'];
             }
 
             $setting->save();
