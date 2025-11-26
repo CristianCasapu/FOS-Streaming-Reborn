@@ -43,7 +43,7 @@ class TranscodeProfilesSeeder extends Seeder
                 Capsule::table('transcodes')->insert($profileData);
                 $created++;
                 if ($this->command) {
-                    $this->command->line("  [{$created}] {$profileData['name']}");
+                    $this->command->info("  [{$created}] {$profileData['name']}");
                 }
             } catch (\Exception $e) {
                 if ($this->command) {
@@ -53,7 +53,7 @@ class TranscodeProfilesSeeder extends Seeder
         }
 
         if ($this->command) {
-            $this->command->newLine();
+            $this->command->info('');
             $this->command->info("Created {$created} transcode profiles!");
         }
     }

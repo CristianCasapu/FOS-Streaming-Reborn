@@ -20,7 +20,7 @@ return new class
             ->where('script', 'LIKE', '%.js')
             ->update([
                 'script' => Capsule::raw("REPLACE(script, '.js', '.cjs')"),
-                'updated_at' => now()
+                'updated_at' => date('Y-m-d H:i:s')
             ]);
     }
 
@@ -31,7 +31,7 @@ return new class
             ->where('script', 'LIKE', '%.cjs')
             ->update([
                 'script' => Capsule::raw("REPLACE(script, '.cjs', '.js')"),
-                'updated_at' => now()
+                'updated_at' => date('Y-m-d H:i:s')
             ]);
     }
 };

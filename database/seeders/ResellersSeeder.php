@@ -127,17 +127,17 @@ class ResellersSeeder extends Seeder
             Capsule::table('resellers')->insert($resellerData);
 
             if ($this->command) {
-                $this->command->line("  Created reseller: {$resellerData['username']}");
+                $this->command->info("  Created reseller: {$resellerData['username']}");
             }
         }
 
         if ($this->command) {
-            $this->command->newLine();
-            $this->command->line('  Demo Reseller Credentials:');
-            $this->command->line('    Demo:     demo_reseller / reseller123');
-            $this->command->line('    Premium:  premium_reseller / premium123');
-            $this->command->line('    Starter:  starter_reseller / starter123');
-            $this->command->newLine();
+            $this->command->info('');
+            $this->command->info('  Demo Reseller Credentials:');
+            $this->command->info('    Demo:     demo_reseller / reseller123');
+            $this->command->info('    Premium:  premium_reseller / premium123');
+            $this->command->info('    Starter:  starter_reseller / starter123');
+            $this->command->info('');
             $this->command->info('Resellers seeded successfully!');
         }
     }

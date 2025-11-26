@@ -68,7 +68,7 @@ class AdminRolesSeeder extends Seeder
     private function updateExistingAdmins(): void
     {
         if ($this->command) {
-            $this->command->line('  Updating existing admins...');
+            $this->command->info('  Updating existing admins...');
         }
 
         $admins = Capsule::table('staff')->get();
@@ -82,7 +82,7 @@ class AdminRolesSeeder extends Seeder
                     'status' => 'active',
                 ]);
                 if ($this->command) {
-                    $this->command->line("    Admin #{$admin->id} ({$admin->username}) -> Super Admin");
+                    $this->command->info("    Admin #{$admin->id} ({$admin->username}) -> Super Admin");
                 }
                 continue;
             }
@@ -95,7 +95,7 @@ class AdminRolesSeeder extends Seeder
                     'status' => 'active',
                 ]);
                 if ($this->command) {
-                    $this->command->line("    Admin #{$admin->id} ({$admin->username}) -> Supervisor");
+                    $this->command->info("    Admin #{$admin->id} ({$admin->username}) -> Supervisor");
                 }
             }
         }
@@ -113,7 +113,7 @@ class AdminRolesSeeder extends Seeder
         }
 
         if ($this->command) {
-            $this->command->line('  Creating example admins for development...');
+            $this->command->info('  Creating example admins for development...');
         }
 
         $timestamp = date('Y-m-d H:i:s');
@@ -148,7 +148,7 @@ class AdminRolesSeeder extends Seeder
             if (!$exists) {
                 Capsule::table('staff')->insert($adminData);
                 if ($this->command) {
-                    $this->command->line("    Created example {$adminData['role']}: {$adminData['username']}");
+                    $this->command->info("    Created example {$adminData['role']}: {$adminData['username']}");
                 }
             } else {
                 if ($this->command) {
@@ -158,10 +158,10 @@ class AdminRolesSeeder extends Seeder
         }
 
         if ($this->command) {
-            $this->command->newLine();
-            $this->command->line('  Example Admin Credentials:');
-            $this->command->line('    Supervisor: supervisor / supervisor123');
-            $this->command->line('    Support:    support / support123');
+            $this->command->info('');
+            $this->command->info('  Example Admin Credentials:');
+            $this->command->info('    Supervisor: supervisor / supervisor123');
+            $this->command->info('    Support:    support / support123');
         }
     }
 }

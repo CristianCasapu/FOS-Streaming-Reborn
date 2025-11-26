@@ -145,12 +145,12 @@ class CategoriesSeeder extends Seeder
             $created++;
 
             if ($this->command) {
-                $this->command->line("  Created category: {$categoryData['name']}");
+                $this->command->info("  Created category: {$categoryData['name']}");
             }
         }
 
         if ($this->command) {
-            $this->command->newLine();
+            $this->command->info('');
             $this->command->info("Categories seeded successfully! ({$created} created)");
         }
     }

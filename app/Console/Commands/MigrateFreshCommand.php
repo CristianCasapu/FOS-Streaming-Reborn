@@ -187,9 +187,13 @@ HELP
             public function info($message) {
                 // Output handled by main command
             }
+            public function warn($message) {
+                // Output handled by main command
+            }
         };
 
         $seeders = [
+            'AdminSeeder' => 'Default Admin Account',
             'PackagesSeeder' => 'Packages',
             'BouquetsSeeder' => 'Bouquets',
             'PackageBouquetSeeder' => 'Package-Bouquet relationships',

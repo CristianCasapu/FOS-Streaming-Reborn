@@ -151,20 +151,20 @@ class V2RayServersSeeder extends Seeder
             Capsule::table('v2ray_servers')->insert($serverData);
 
             if ($this->command) {
-                $this->command->line("  Created V2Ray server: {$serverData['tag']} ({$serverData['name']})");
+                $this->command->info("  Created V2Ray server: {$serverData['tag']} ({$serverData['name']})");
             }
         }
 
         if ($this->command) {
-            $this->command->newLine();
-            $this->command->line('  Server Configuration Summary:');
-            $this->command->line("    Primary US:  vmess+ws+tls @ {$servers[0]['address']}:443");
-            $this->command->line("    Backup EU:   vless+tcp+reality @ {$servers[1]['address']}:443");
-            $this->command->line("    Edge SG:     trojan+grpc+tls @ {$servers[2]['address']}:8443");
+            $this->command->info('');
+            $this->command->info('  Server Configuration Summary:');
+            $this->command->info("    Primary US:  vmess+ws+tls @ {$servers[0]['address']}:443");
+            $this->command->info("    Backup EU:   vless+tcp+reality @ {$servers[1]['address']}:443");
+            $this->command->info("    Edge SG:     trojan+grpc+tls @ {$servers[2]['address']}:8443");
             if ($appEnv !== 'production') {
-                $this->command->line('    Dev Local:   vmess+tcp @ 127.0.0.1:10086');
+                $this->command->info('    Dev Local:   vmess+tcp @ 127.0.0.1:10086');
             }
-            $this->command->newLine();
+            $this->command->info('');
             $this->command->info('V2Ray servers seeded successfully!');
         }
     }

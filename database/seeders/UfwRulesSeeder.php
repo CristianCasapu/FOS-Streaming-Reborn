@@ -75,7 +75,7 @@ class UfwRulesSeeder extends Seeder
         $sshPort = $this->detectSshPort();
 
         if ($this->command) {
-            $this->command->line("  Detected SSH port: {$sshPort}");
+            $this->command->info("  Detected SSH port: {$sshPort}");
         }
 
         // Default rules - essential services
@@ -184,16 +184,16 @@ class UfwRulesSeeder extends Seeder
 
             if ($this->command) {
                 $status = $ruleData['is_active'] ? 'active' : 'disabled';
-                $this->command->line("  Created rule: {$ruleData['action']} {$ruleData['to_port']}/{$ruleData['protocol']} ({$status})");
+                $this->command->info("  Created rule: {$ruleData['action']} {$ruleData['to_port']}/{$ruleData['protocol']} ({$status})");
             }
         }
 
         if ($this->command) {
-            $this->command->newLine();
-            $this->command->line('  Important: These rules are database records only.');
-            $this->command->line('  They must be applied to UFW via the admin panel.');
-            $this->command->line("  SSH (port {$sshPort}) is protected and cannot be removed.");
-            $this->command->newLine();
+            $this->command->info('');
+            $this->command->info('  Important: These rules are database records only.');
+            $this->command->info('  They must be applied to UFW via the admin panel.');
+            $this->command->info("  SSH (port {$sshPort}) is protected and cannot be removed.");
+            $this->command->info('');
             $this->command->info("UFW rules seeded successfully! ({$created} created)");
         }
     }

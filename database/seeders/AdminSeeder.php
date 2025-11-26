@@ -60,18 +60,18 @@ class AdminSeeder extends Seeder
 
         if ($this->command) {
             $this->command->info('Default admin account created successfully!');
-            $this->command->newLine();
-            $this->command->line('╔═══════════════════════════════════════╗');
-            $this->command->line('║     DEFAULT ADMIN CREDENTIALS         ║');
-            $this->command->line('╠═══════════════════════════════════════╣');
-            $this->command->line('║  Username: admin                      ║');
-            $this->command->line('║  Password: admin                      ║');
-            $this->command->line('║  Role: Administrator                  ║');
-            $this->command->line('╠═══════════════════════════════════════╣');
-            $this->command->line('║  ⚠ SECURITY WARNING:                  ║');
-            $this->command->line('║  Change the default password          ║');
-            $this->command->line('║  immediately after first login!       ║');
-            $this->command->line('╚═══════════════════════════════════════╝');
+            $this->command->info('');
+            $this->command->info('╔═══════════════════════════════════════╗');
+            $this->command->info('║     DEFAULT ADMIN CREDENTIALS         ║');
+            $this->command->info('╠═══════════════════════════════════════╣');
+            $this->command->info('║  Username: admin                      ║');
+            $this->command->info('║  Password: admin                      ║');
+            $this->command->info('║  Role: Administrator                  ║');
+            $this->command->info('╠═══════════════════════════════════════╣');
+            $this->command->info('║  ⚠ SECURITY WARNING:                  ║');
+            $this->command->info('║  Change the default password          ║');
+            $this->command->info('║  immediately after first login!       ║');
+            $this->command->info('╚═══════════════════════════════════════╝');
         }
     }
 }
