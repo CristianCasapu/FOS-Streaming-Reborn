@@ -1131,6 +1131,32 @@ NVMRC
     log_success "NPM $(npm --version) installed successfully"
     log_to_file "SUCCESS" "Node.js $(node --version), NPM $(npm --version) installed"
 
+    # Also install NVM and Node.js for root user (needed for sudo npm commands)
+    log_info "Installing NVM and Node.js for root user (for sudo commands)..."
+
+    sudo bash -c "
+        export HOME=/root
+        export NVM_DIR=\"/root/.nvm\"
+
+        # Install NVM for root
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+
+        # Load NVM
+        [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
+
+        # Install Node.js
+        nvm install ${NODE_VERSION}
+        nvm use ${NODE_VERSION}
+        nvm alias default ${NODE_VERSION}
+
+        # Verify
+        node --version && npm --version
+    " 2>&1 | tee -a "$INSTALL_LOG" && {
+        log_success "Node.js installed for root user"
+    } || {
+        log_warn "Failed to install Node.js for root (sudo npm commands may not work)"
+    }
+
     return 0
 }
 

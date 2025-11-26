@@ -36,6 +36,7 @@
   "dependencies": {
     "bull": "^4.16.3",
     "crypto-js": "^4.2.0",
+    "dashjs": "^5.1.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-rate-limit": "^7.4.1",

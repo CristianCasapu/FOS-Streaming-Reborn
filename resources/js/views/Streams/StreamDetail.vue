@@ -384,109 +384,88 @@
 
                         <!-- Access URLs Tab -->
                         <div v-show="activeTab === 'access'" class="space-y-6">
-                            <!-- Secure URLs Section (Token-based) -->
+                            <!-- Staff Preview URLs (Session-authenticated) -->
                             <div class="bg-white shadow rounded-lg p-6">
-                                <div class="flex justify-between items-center mb-4">
-                                    <div>
-                                        <h3 class="text-lg font-medium text-gray-900">Secure Stream URLs</h3>
-                                        <p class="text-sm text-gray-500">Token-authenticated URLs with enterprise-grade security</p>
-                                    </div>
-                                    <button @click="generateSecureUrls" :disabled="loadingSecureUrls" class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50">
-                                        <svg v-if="loadingSecureUrls" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        {{ loadingSecureUrls ? 'Generating...' : 'Generate Secure URLs' }}
-                                    </button>
+                                <div class="mb-4">
+                                    <h3 class="text-lg font-medium text-gray-900">Staff Preview URLs</h3>
+                                    <p class="text-sm text-gray-500">Session-authenticated URLs for staff preview (requires admin login)</p>
                                 </div>
-
-                                <div v-if="secureUrls" class="space-y-4">
-                                    <!-- Token Info -->
-                                    <div class="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                                        <div>
-                                            <p class="text-sm font-medium text-green-800">Token Active</p>
-                                            <p class="text-xs text-green-600">Expires: {{ formatDateTime(secureUrls.expires_at) }}</p>
-                                        </div>
-                                        <button @click="revokeTokens" class="text-sm text-red-600 hover:text-red-800">Revoke All Tokens</button>
-                                    </div>
-
+                                <div class="space-y-4">
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Secure HLS URL</label>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">HLS Preview URL</label>
                                         <div class="flex">
-                                            <input type="text" readonly :value="secureUrls.urls?.hls" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm font-mono" />
-                                            <button @click="copyToClipboard(secureUrls.urls?.hls)" class="px-4 py-2 bg-green-600 text-white rounded-r-md hover:bg-green-700">
+                                            <input type="text" readonly :value="getPreviewUrl('hls')" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm font-mono" />
+                                            <button @click="copyToClipboard(getPreviewUrl('hls'))" class="px-4 py-2 bg-indigo-600 text-white rounded-r-md hover:bg-indigo-700">
                                                 Copy
                                             </button>
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Secure DASH URL</label>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">DASH Preview URL</label>
                                         <div class="flex">
-                                            <input type="text" readonly :value="secureUrls.urls?.dash" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm font-mono" />
-                                            <button @click="copyToClipboard(secureUrls.urls?.dash)" class="px-4 py-2 bg-green-600 text-white rounded-r-md hover:bg-green-700">
-                                                Copy
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Secure Direct URL</label>
-                                        <div class="flex">
-                                            <input type="text" readonly :value="secureUrls.urls?.direct" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm font-mono" />
-                                            <button @click="copyToClipboard(secureUrls.urls?.direct)" class="px-4 py-2 bg-green-600 text-white rounded-r-md hover:bg-green-700">
+                                            <input type="text" readonly :value="getPreviewUrl('dash')" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm font-mono" />
+                                            <button @click="copyToClipboard(getPreviewUrl('dash'))" class="px-4 py-2 bg-indigo-600 text-white rounded-r-md hover:bg-indigo-700">
                                                 Copy
                                             </button>
                                         </div>
                                     </div>
 
                                     <div class="pt-2 text-xs text-gray-500">
-                                        <p><strong>Security Features:</strong> IP-bound tokens, 1-hour expiration, usage tracking, revocation support</p>
+                                        <p><strong>Note:</strong> These URLs require an active admin session. They are for internal preview only.</p>
                                     </div>
-                                </div>
-
-                                <div v-else class="text-center py-8 text-gray-500">
-                                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                    </svg>
-                                    <p class="mt-2">Click "Generate Secure URLs" to create token-authenticated streaming links</p>
                                 </div>
                             </div>
 
-                            <!-- Public URLs Section (Non-authenticated) -->
+                            <!-- Internal Source URLs -->
                             <div class="bg-white shadow rounded-lg p-6">
                                 <div class="mb-4">
-                                    <h3 class="text-lg font-medium text-gray-900">Public Stream URLs</h3>
-                                    <p class="text-sm text-yellow-600">Warning: These URLs are not authenticated - use secure URLs for production</p>
+                                    <h3 class="text-lg font-medium text-gray-900">Internal Source URLs</h3>
+                                    <p class="text-sm text-orange-600">Internal use only - not exposed to subscribers</p>
                                 </div>
                                 <div class="space-y-4">
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">HLS Playlist URL</label>
-                                        <div class="flex">
-                                            <input type="text" readonly :value="getStreamUrl('hls')" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm" />
-                                            <button @click="copyToClipboard(getStreamUrl('hls'))" class="px-4 py-2 bg-indigo-600 text-white rounded-r-md hover:bg-indigo-700">
-                                                Copy
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">RTMP URL</label>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">RTMP Ingest URL (Internal)</label>
                                         <div class="flex">
                                             <input type="text" readonly :value="getStreamUrl('rtmp')" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm" />
-                                            <button @click="copyToClipboard(getStreamUrl('rtmp'))" class="px-4 py-2 bg-indigo-600 text-white rounded-r-md hover:bg-indigo-700">
+                                            <button @click="copyToClipboard(getStreamUrl('rtmp'))" class="px-4 py-2 bg-orange-600 text-white rounded-r-md hover:bg-orange-700">
+                                                Copy
+                                            </button>
+                                        </div>
+                                        <p class="mt-1 text-xs text-gray-500">Used for source ingestion and inter-node communication only</p>
+                                    </div>
+
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Source Stream URL</label>
+                                        <div class="flex">
+                                            <input type="text" readonly :value="stream.stream_source" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm" />
+                                            <button @click="copyToClipboard(stream.stream_source)" class="px-4 py-2 bg-gray-600 text-white rounded-r-md hover:bg-gray-700">
                                                 Copy
                                             </button>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
 
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Direct Stream URL</label>
-                                        <div class="flex">
-                                            <input type="text" readonly :value="getStreamUrl('direct')" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md bg-gray-50 text-sm" />
-                                            <button @click="copyToClipboard(getStreamUrl('direct'))" class="px-4 py-2 bg-indigo-600 text-white rounded-r-md hover:bg-indigo-700">
-                                                Copy
-                                            </button>
+                            <!-- Subscriber Access Info -->
+                            <div class="bg-white shadow rounded-lg p-6">
+                                <div class="mb-4">
+                                    <h3 class="text-lg font-medium text-gray-900">Subscriber Access</h3>
+                                    <p class="text-sm text-gray-500">How subscribers access this stream</p>
+                                </div>
+                                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                    <div class="flex items-start">
+                                        <svg class="h-5 w-5 text-blue-600 mt-0.5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <div class="text-sm text-blue-800">
+                                            <p class="font-medium mb-2">Subscription-Based Access</p>
+                                            <ul class="list-disc list-inside space-y-1 text-blue-700">
+                                                <li>Subscribers access streams via their <strong>subscription token</strong> (auto-generated on subscription activation)</li>
+                                                <li>Token expires when subscription expires - no manual generation needed</li>
+                                                <li>Access validated against: ISP restrictions, IP restrictions, concurrent connection limits</li>
+                                                <li>Subscriber stream URL format: <code class="bg-blue-100 px-1 rounded">/stream.php?token={subscription_token}&stream={{ stream.id }}&format=hls</code></li>
+                                            </ul>
                                         </div>
                                     </div>
                                 </div>
@@ -972,6 +951,11 @@ const getStreamUrl = (type) => {
         default:
             return '';
     }
+};
+
+const getPreviewUrl = (format) => {
+    const origin = window.location.origin;
+    return `${origin}/admin/preview-stream.php?stream=${stream.value.id}&format=${format}`;
 };
 
 const copyToClipboard = async (text) => {

@@ -6,11 +6,9 @@ if (defined('FOS_CONFIG_LOADED')) {
 }
 define('FOS_CONFIG_LOADED', true);
 
-session_start();
-
 require 'vendor/autoload.php';
 
-// Load environment variables
+// Load environment variables first (needed for session config)
 use Dotenv\Dotenv;
 
 $dotenv = Dotenv::createImmutable(__DIR__);
@@ -18,6 +16,20 @@ $dotenv->load();
 
 // Load helper functions
 require_once 'helpers.php';
+
+// Configure session cookies based on environment
+// Only use secure cookies in production with HTTPS
+$isHttps = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
+           (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+$isProduction = env('APP_ENV', 'local') === 'production';
+$useSecureCookies = $isHttps && $isProduction;
+
+// Override php.ini session.cookie_secure setting for development
+ini_set('session.cookie_secure', $useSecureCookies ? '1' : '0');
+ini_set('session.cookie_httponly', '1');
+ini_set('session.cookie_samesite', 'Lax');
+
+session_start();
 
 // Set timezone from environment
 date_default_timezone_set(env('APP_TIMEZONE', 'America/Chicago'));

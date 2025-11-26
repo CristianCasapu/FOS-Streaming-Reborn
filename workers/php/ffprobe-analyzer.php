@@ -22,6 +22,7 @@ $stats = [
     'analyzed' => 0,
     'failed' => 0,
     'profiles_set' => 0,
+    'recovered' => 0,  // Count of streams recovered from error state
     'mode' => $mode,
     'streams' => []
 ];
@@ -34,7 +35,7 @@ try {
     $query = Stream::query();
 
     if ($mode === 'auto') {
-        // Auto mode: Find streams that need analysis OR have no profile set
+        // Auto mode: Find streams that need analysis OR have no profile set OR are in error state
         $query->where(function($q) {
             // Streams with pending analysis
             $q->where('analysis_status', '=', 'pending')
@@ -51,6 +52,17 @@ try {
                          $q4->where('trans_id', '=', 0)
                             ->orWhereNull('trans_id');
                      });
+              })
+              // NEW: Streams in error/crashed state that need validation for recovery
+              // Only pick up streams not currently being processed (no scheduled command)
+              ->orWhere(function($q5) {
+                  $q5->whereIn('state', ['error', 'crashed'])
+                     ->where('enabled', 1)  // Only enabled streams
+                     ->where(function($q6) {
+                         $q6->where('scheduled_command', '=', 'none')
+                            ->orWhereNull('scheduled_command');
+                     })
+                     ->whereNull('pid');  // Not currently running
               });
         });
     } else {
@@ -68,11 +80,17 @@ try {
 
     foreach ($streams as $stream) {
         $stats['processed']++;
+
+        // Track if this stream was in error state before analysis
+        $wasInErrorState = in_array($stream->state, ['error', 'crashed']);
+
         $streamResult = [
             'id' => $stream->id,
             'name' => $stream->name,
             'success' => false,
             'profile_set' => false,
+            'recovered' => false,
+            'previous_state' => $stream->state,
             'message' => ''
         ];
 
@@ -94,21 +112,40 @@ try {
                 $stats['analyzed']++;
                 $streamResult['success'] = true;
 
-                // Auto-set optimal transcode profile if not manually set
-                if ($stream->needsProfileAssignment()) {
-                    if ($stream->setOptimalTranscodeProfile()) {
-                        $stats['profiles_set']++;
-                        $streamResult['profile_set'] = true;
-                        $streamResult['message'] = 'Analyzed and profile auto-set';
-                    } else {
-                        $streamResult['message'] = 'Analyzed but no matching profile found';
-                    }
+                // RECOVERY: If stream was in error/crashed state and analysis succeeded,
+                // recover it to 'stopped' state so it can be started again
+                if ($wasInErrorState) {
+                    $stream->state = 'stopped';
+                    $stream->restart_attempts = 0;  // Reset restart counter
+                    $stream->health_check_failures = 0;  // Reset health failures
+                    $stream->save();
+
+                    $stats['recovered']++;
+                    $streamResult['recovered'] = true;
+                    $streamResult['message'] = 'Recovered from ' . $streamResult['previous_state'] . ' state - stream validated successfully';
                 } else {
-                    $streamResult['message'] = 'Analyzed (profile already set)';
+                    // Auto-set optimal transcode profile if not manually set
+                    if ($stream->needsProfileAssignment()) {
+                        if ($stream->setOptimalTranscodeProfile()) {
+                            $stats['profiles_set']++;
+                            $streamResult['profile_set'] = true;
+                            $streamResult['message'] = 'Analyzed and profile auto-set';
+                        } else {
+                            $streamResult['message'] = 'Analyzed but no matching profile found';
+                        }
+                    } else {
+                        $streamResult['message'] = 'Analyzed (profile already set)';
+                    }
                 }
             } else {
                 $stats['failed']++;
                 $streamResult['message'] = $stream->analysis_error ?? 'Analysis failed';
+
+                // If stream was in error state and analysis also failed,
+                // keep it in error state but update the error message
+                if ($wasInErrorState) {
+                    $streamResult['message'] = 'Stream remains in ' . $streamResult['previous_state'] . ' state - validation failed: ' . ($stream->analysis_error ?? 'Unknown error');
+                }
             }
 
         } catch (Exception $e) {
@@ -118,6 +155,10 @@ try {
             $stream->last_analyzed = date('Y-m-d H:i:s');
             $stream->save();
             $streamResult['message'] = $e->getMessage();
+
+            if ($wasInErrorState) {
+                $streamResult['message'] = 'Stream remains in ' . $streamResult['previous_state'] . ' state - validation error: ' . $e->getMessage();
+            }
         }
 
         $stats['streams'][] = $streamResult;

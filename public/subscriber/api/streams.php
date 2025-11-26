@@ -3,15 +3,17 @@
  * Subscriber Streams API
  *
  * Provides secure streaming access for authenticated subscribers.
- * Validates subscription/trial access and generates token-authenticated URLs.
+ * Uses subscription-based access tokens (generated on subscription activation).
  *
  * Actions:
  * - list: Get streams accessible to subscriber (based on bouquets)
- * - get_secure_url: Generate secure streaming URL with token
+ * - get_stream_url: Get subscription-token-based streaming URL
+ * - subscriptions: Get subscriber's active subscriptions with access tokens
+ * - categories: Get available categories
+ * - by_category: Get streams filtered by category
  */
 
 require_once __DIR__ . '/../../../config.php';
-require_once __DIR__ . '/../../../app/Services/StreamAuthService.php';
 
 // Set JSON response header
 header('Content-Type: application/json');
@@ -54,6 +56,42 @@ function checkSubscriberAuth()
     }
 
     return $subscriber;
+}
+
+/**
+ * Get base URL for streaming
+ */
+function getBaseUrl()
+{
+    $setting = Setting::first();
+    $adminPort = $setting->port ?? 7777;
+    $requestHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $host = preg_replace('/:\d+$/', '', $requestHost);
+    $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+    return "{$protocol}://{$host}:{$adminPort}";
+}
+
+/**
+ * Find subscription that gives access to a stream
+ */
+function findSubscriptionForStream(Subscriber $subscriber, int $streamId): ?Subscription
+{
+    // Check active subscriptions
+    $subscriptions = $subscriber->subscriptions()->valid()->get();
+
+    foreach ($subscriptions as $subscription) {
+        $bouquets = $subscription->bouquets;
+        foreach ($bouquets as $bouquet) {
+            if ($bouquet->stream_ids) {
+                $streamIds = json_decode($bouquet->stream_ids, true) ?: [];
+                if (in_array($streamId, $streamIds)) {
+                    return $subscription;
+                }
+            }
+        }
+    }
+
+    return null;
 }
 
 // Get action from query parameter
@@ -118,65 +156,103 @@ try {
             ]);
             break;
 
-        case 'get_secure_url':
-            // Generate secure streaming URL for a specific stream
+        case 'get_stream_url':
+        case 'get_secure_url': // Backwards compatibility
+            // Get subscription-token-based streaming URL for a stream
             $subscriber = checkSubscriberAuth();
 
             $streamId = isset($_GET['stream_id']) ? intval($_GET['stream_id']) : null;
-            $format = $_GET['format'] ?? 'hls'; // hls, dash, direct
+            $format = $_GET['format'] ?? 'hls';
 
             if (!$streamId) {
                 throw new Exception('Stream ID is required');
             }
 
-            // Validate subscriber has access to this stream
-            $authService = new \App\Services\StreamAuthService();
-            $accessCheck = $authService->validateSubscriberStreamAccess($subscriber->id, $streamId);
+            // Find subscription that gives access to this stream
+            $subscription = findSubscriptionForStream($subscriber, $streamId);
 
-            if (!$accessCheck['valid']) {
+            if (!$subscription) {
+                // Check trial
+                $trial = $subscriber->trial;
+                if ($trial && $trial->isValid()) {
+                    // Trial users can access via trial - generate temporary token
+                    http_response_code(403);
+                    echo json_encode([
+                        'success' => false,
+                        'error' => 'Trial access not yet implemented for streaming',
+                        'code' => 'TRIAL_ACCESS'
+                    ]);
+                    exit;
+                }
+
                 http_response_code(403);
                 echo json_encode([
                     'success' => false,
-                    'error' => $accessCheck['error'],
+                    'error' => 'No subscription grants access to this stream',
                     'code' => 'NO_ACCESS'
                 ]);
                 exit;
             }
 
-            // Generate secure URLs
-            $result = $authService->generateSecureUrls($streamId, 'subscriber', $subscriber->id);
+            // Get or create subscription access token
+            $accessToken = $subscription->getOrCreateAccessToken();
 
-            if (!isset($result['success']) || !$result['success']) {
-                throw new Exception($result['error'] ?? 'Failed to generate secure URL');
+            // Get stream details
+            $stream = Stream::find($streamId);
+            if (!$stream || !$stream->enabled) {
+                throw new Exception('Stream not found or disabled');
             }
 
-            // Get settings for URL construction
-            $setting = Setting::first();
-            $adminPort = $setting->port ?? 7777;
-            $requestHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
-            $adminHost = preg_replace('/:\d+$/', '', $requestHost);
-            $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
-
-            // Build full URL
-            $baseUrl = "{$protocol}://{$adminHost}:{$adminPort}";
-
-            $stream = Stream::find($streamId);
+            // Build URLs
+            $baseUrl = getBaseUrl();
 
             echo json_encode([
                 'success' => true,
                 'data' => [
                     'stream_id' => $streamId,
                     'stream_name' => $stream->name,
-                    'url' => "{$baseUrl}{$result['urls'][$format]}",
+                    'subscription_id' => $subscription->id,
+                    'url' => "{$baseUrl}/stream.php?token={$accessToken}&stream={$streamId}&format={$format}",
                     'format' => $format,
-                    'token' => $result['token'],
-                    'expires_at' => $result['expires_at'],
+                    'token' => $accessToken,
+                    'expires_at' => $subscription->expire_date ? $subscription->expire_date->format('Y-m-d H:i:s') : null,
                     'all_urls' => [
-                        'hls' => "{$baseUrl}{$result['urls']['hls']}",
-                        'dash' => "{$baseUrl}{$result['urls']['dash']}",
-                        'direct' => "{$baseUrl}{$result['urls']['direct']}",
+                        'hls' => "{$baseUrl}/stream.php?token={$accessToken}&stream={$streamId}&format=hls",
+                        'dash' => "{$baseUrl}/stream.php?token={$accessToken}&stream={$streamId}&format=dash",
+                    ],
+                    'access_info' => [
+                        'max_connections' => $subscription->max_concurrent_connections,
+                        'current_connections' => $subscription->getActiveConnectionCount(),
+                        'package' => $subscription->package ? $subscription->package->name : null,
                     ]
                 ]
+            ]);
+            break;
+
+        case 'subscriptions':
+            // Get subscriber's active subscriptions with access tokens
+            $subscriber = checkSubscriberAuth();
+
+            $subscriptions = $subscriber->subscriptions()->valid()->with('package')->get();
+
+            $data = $subscriptions->map(function ($sub) {
+                return [
+                    'id' => $sub->id,
+                    'package_id' => $sub->package_id,
+                    'package_name' => $sub->package ? $sub->package->name : null,
+                    'access_token' => $sub->getOrCreateAccessToken(),
+                    'expires_at' => $sub->expire_date ? $sub->expire_date->format('Y-m-d H:i:s') : null,
+                    'days_remaining' => $sub->days_until_expiration,
+                    'max_connections' => $sub->max_concurrent_connections,
+                    'current_connections' => $sub->getActiveConnectionCount(),
+                    'ip_restricted' => !empty($sub->allowed_ips),
+                    'isp_restricted' => !empty($sub->allowed_isps),
+                ];
+            });
+
+            echo json_encode([
+                'success' => true,
+                'data' => $data
             ]);
             break;
 

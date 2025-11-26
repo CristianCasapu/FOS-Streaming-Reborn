@@ -200,7 +200,7 @@
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Video Quality</label>
                                     <select v-model="formData.video_quality" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
                                         <option value="">Any Quality</option>
-                                        <option value="4K">4K UHD</option>
+                                        <option value="UHD">4K UHD</option>
                                         <option value="FHD">Full HD (1080p)</option>
                                         <option value="HD">HD (720p)</option>
                                         <option value="SD">SD (480p)</option>

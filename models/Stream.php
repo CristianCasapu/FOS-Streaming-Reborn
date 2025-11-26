@@ -11,6 +11,7 @@ class Stream extends FosStreaming {
         'state',  // Primary state field: stopped, starting, running, stopping, error, crashed
         'cat_id',
         'trans_id',
+        'user_agent_id',  // Foreign key to user_agents table
         'pid',
         'restream',
         'video_codec_name',
@@ -127,6 +128,26 @@ class Stream extends FosStreaming {
     public function transcode()
     {
         return $this->hasOne(Transcode::class, 'id', 'trans_id');
+    }
+
+    public function userAgent()
+    {
+        return $this->belongsTo(UserAgent::class, 'user_agent_id');
+    }
+
+    /**
+     * Get the user agent string to use for this stream
+     * Falls back to default or setting if not set on stream
+     */
+    public function getUserAgentString(): string
+    {
+        // First check if stream has specific user agent
+        if ($this->user_agent_id && $this->userAgent) {
+            return $this->userAgent->user_agent;
+        }
+
+        // Fall back to UserAgent model's default/random logic
+        return UserAgent::getForStreaming();
     }
 
     public function getStatusLabelAttribute()

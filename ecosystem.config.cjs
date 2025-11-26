@@ -2,11 +2,13 @@
  * PM2 Ecosystem Configuration
  * 
  * AUTO-GENERATED from database by PM2WorkerService
- * Generated: 2025-11-25 07:15:44
+ * Generated: 2025-11-26 18:19:52
  * Workers: 8
  * 
  * DO NOT EDIT MANUALLY - Use Admin UI to manage workers
  */
+
+const isDev = process.env.NODE_ENV !== 'production';
 
 module.exports = {
   apps: [
@@ -30,6 +32,8 @@ module.exports = {
         NODE_ENV: 'production',
         LOG_LEVEL: 'warn'
       },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
       kill_timeout: 5000,
       listen_timeout: 3000,
       shutdown_with_message: true,
@@ -54,6 +58,8 @@ module.exports = {
         NODE_ENV: 'production',
         LOG_LEVEL: 'warn'
       },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
       kill_timeout: 30000,
       listen_timeout: 3000,
       shutdown_with_message: true,
@@ -78,6 +84,8 @@ module.exports = {
         NODE_ENV: 'production',
         LOG_LEVEL: 'warn'
       },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
       kill_timeout: 10000,
       listen_timeout: 3000,
       shutdown_with_message: true,
@@ -102,6 +110,8 @@ module.exports = {
         NODE_ENV: 'production',
         LOG_LEVEL: 'warn'
       },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
       kill_timeout: 5000,
       listen_timeout: 3000,
       shutdown_with_message: true,
@@ -126,6 +136,8 @@ module.exports = {
         NODE_ENV: 'production',
         LOG_LEVEL: 'warn'
       },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
       kill_timeout: 5000,
       listen_timeout: 3000,
       shutdown_with_message: true,
@@ -150,6 +162,8 @@ module.exports = {
         NODE_ENV: 'production',
         LOG_LEVEL: 'warn'
       },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
       kill_timeout: 10000,
       listen_timeout: 3000,
       shutdown_with_message: true,
@@ -174,6 +188,8 @@ module.exports = {
         NODE_ENV: 'production',
         LOG_LEVEL: 'warn'
       },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
       kill_timeout: 10000,
       listen_timeout: 3000,
       shutdown_with_message: true,
@@ -198,6 +214,8 @@ module.exports = {
         NODE_ENV: 'production',
         LOG_LEVEL: 'warn'
       },
+      watch: false,
+      ignore_watch: ['node_modules', 'logs', '*.log', 'storage', 'cache'],
       kill_timeout: 10000,
       listen_timeout: 3000,
       shutdown_with_message: true,

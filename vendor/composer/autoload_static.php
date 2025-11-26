@@ -653,6 +653,7 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
     );
 
     public static $classMap = array (
+        'ActiveConnection' => __DIR__ . '/../..' . '/models/ActiveConnection.php',
         'Activity' => __DIR__ . '/../..' . '/models/Activity.php',
         'Admin' => __DIR__ . '/../..' . '/models/Admin.php',
         'App\\Console\\Commands\\DbSeedCommand' => __DIR__ . '/../..' . '/app/Console/Commands/DbSeedCommand.php',
@@ -673,6 +674,7 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         'App\\Services\\PM2WorkerService' => __DIR__ . '/../..' . '/app/Services/PM2WorkerService.php',
         'App\\Services\\PathDetectionService' => __DIR__ . '/../..' . '/app/Services/PathDetectionService.php',
         'App\\Services\\SRTService' => __DIR__ . '/../..' . '/app/Services/SRTService.php',
+        'App\\Services\\StreamAuthService' => __DIR__ . '/../..' . '/app/Services/StreamAuthService.php',
         'App\\Services\\StreamManagerService' => __DIR__ . '/../..' . '/app/Services/StreamManagerService.php',
         'App\\Services\\StreamMonitorService' => __DIR__ . '/../..' . '/app/Services/StreamMonitorService.php',
         'App\\Services\\V2RayService' => __DIR__ . '/../..' . '/app/Services/V2RayService.php',
@@ -6044,6 +6046,7 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         'Staff' => __DIR__ . '/../..' . '/models/Staff.php',
         'Stream' => __DIR__ . '/../..' . '/models/Stream.php',
         'StreamHealthLog' => __DIR__ . '/../..' . '/models/StreamHealthLog.php',
+        'StreamToken' => __DIR__ . '/../..' . '/models/StreamToken.php',
         'Stringable' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/Stringable.php',
         'Subscriber' => __DIR__ . '/../..' . '/models/Subscriber.php',
         'Subscription' => __DIR__ . '/../..' . '/models/Subscription.php',
@@ -7074,6 +7077,7 @@ class ComposerStaticInitd7c19318aeb827b282d69319510de682
         'UfwRule' => __DIR__ . '/../..' . '/models/UfwRule.php',
         'UnhandledMatchError' => __DIR__ . '/..' . '/symfony/polyfill-php80/Resources/stubs/UnhandledMatchError.php',
         'User' => __DIR__ . '/../..' . '/models/User.php',
+        'UserAgent' => __DIR__ . '/../..' . '/models/UserAgent.php',
         'V2RayLog' => __DIR__ . '/../..' . '/models/V2RayUser.php',
         'V2RayServer' => __DIR__ . '/../..' . '/models/V2RayServer.php',
         'V2RayTrafficStat' => __DIR__ . '/../..' . '/models/V2RayUser.php',

@@ -89,6 +89,9 @@ function getTranscode($id, $streamnumber = null)
     // Use direct HLS output only when HLS-only mode is selected
     if ($streamingProtocol === 'dash' || $streamingProtocol === 'both') {
         // Push to nginx-rtmp server which handles DASH and HLS output
+        // Add dump_extra bitstream filter to ensure SPS/PPS (codec config) is included at each keyframe
+        // This is critical for HLS playback - without it, segments can't be decoded independently
+        $endofffmpeg .= ' -bsf:v dump_extra=freq=keyframe';
         $endofffmpeg .= ' -f flv rtmp://127.0.0.1:' . $rtmpPort . '/live/' . $stream->id;
         $endofffmpeg .= ' > /dev/null 2>/dev/null & echo $!';
     } else {
@@ -99,12 +102,15 @@ function getTranscode($id, $streamnumber = null)
         $endofffmpeg .= ' > /dev/null 2>/dev/null & echo $!';
     }
 
+    // Get user agent: stream-specific > default from user_agents table > legacy setting > fallback
+    $userAgentString = $stream->getUserAgentString();
+
     if ($trans) {
         $ffmpeg .= ' -y';
         $ffmpeg .= ' -probesize ' . ($trans->probesize ? $trans->probesize : '15000000');
         $ffmpeg .= ' -analyzeduration ' . ($trans->analyzeduration ? $trans->analyzeduration : '12000000');
         $ffmpeg .= ' -i ' . '"' . "$url" . '"';
-        $ffmpeg .= ' -user_agent "' . ($setting->user_agent ? $setting->user_agent : 'FOS-Streaming') . '"';
+        $ffmpeg .= ' -user_agent "' . $userAgentString . '"';
         $ffmpeg .= ' -strict -2 -dn ';
         $ffmpeg .= $trans->scale ? ' -vf scale=' . ($trans->scale ? $trans->scale : '') : '';
         $ffmpeg .= $trans->audio_codec ? ' -acodec ' . $trans->audio_codec : '';
@@ -130,7 +136,7 @@ function getTranscode($id, $streamnumber = null)
     }
 
     $ffmpeg .= ' -probesize 15000000 -analyzeduration 9000000 -i "' . $url . '"';
-    $ffmpeg .= ' -user_agent "' . ($setting->user_agent ? $setting->user_agent : 'FOS-Streaming') . '"';
+    $ffmpeg .= ' -user_agent "' . $userAgentString . '"';
     $ffmpeg .= ' -c copy -c:a aac -b:a 128k';
     $ffmpeg .= $endofffmpeg;
     return $ffmpeg;
@@ -205,7 +211,9 @@ function start_stream($id)
 
     // Helper function to try starting with a specific URL
     $tryStartWithUrl = function($url, $urlNumber = null) use ($stream, $setting, $extractCodecs) {
-        $checkstreamurl = shell_exec($setting->ffprobe_path . ' -analyzeduration 1000000 -probesize 9000000 -i "' . $url . '" -v quiet -print_format json -show_streams 2>&1');
+        // Get user agent for ffprobe
+        $userAgentString = $stream->getUserAgentString();
+        $checkstreamurl = shell_exec($setting->ffprobe_path . ' -user_agent "' . $userAgentString . '" -analyzeduration 1000000 -probesize 9000000 -i "' . $url . '" -v quiet -print_format json -show_streams 2>&1');
         $streaminfo = json_decode($checkstreamurl, true);
 
         if ($streaminfo) {

@@ -6,6 +6,7 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
+    'ActiveConnection' => $baseDir . '/models/ActiveConnection.php',
     'Activity' => $baseDir . '/models/Activity.php',
     'Admin' => $baseDir . '/models/Admin.php',
     'App\\Console\\Commands\\DbSeedCommand' => $baseDir . '/app/Console/Commands/DbSeedCommand.php',
@@ -26,6 +27,7 @@ return array(
     'App\\Services\\PM2WorkerService' => $baseDir . '/app/Services/PM2WorkerService.php',
     'App\\Services\\PathDetectionService' => $baseDir . '/app/Services/PathDetectionService.php',
     'App\\Services\\SRTService' => $baseDir . '/app/Services/SRTService.php',
+    'App\\Services\\StreamAuthService' => $baseDir . '/app/Services/StreamAuthService.php',
     'App\\Services\\StreamManagerService' => $baseDir . '/app/Services/StreamManagerService.php',
     'App\\Services\\StreamMonitorService' => $baseDir . '/app/Services/StreamMonitorService.php',
     'App\\Services\\V2RayService' => $baseDir . '/app/Services/V2RayService.php',
@@ -5397,6 +5399,7 @@ return array(
     'Staff' => $baseDir . '/models/Staff.php',
     'Stream' => $baseDir . '/models/Stream.php',
     'StreamHealthLog' => $baseDir . '/models/StreamHealthLog.php',
+    'StreamToken' => $baseDir . '/models/StreamToken.php',
     'Stringable' => $vendorDir . '/symfony/polyfill-php80/Resources/stubs/Stringable.php',
     'Subscriber' => $baseDir . '/models/Subscriber.php',
     'Subscription' => $baseDir . '/models/Subscription.php',
@@ -6427,6 +6430,7 @@ return array(
     'UfwRule' => $baseDir . '/models/UfwRule.php',
     'UnhandledMatchError' => $vendorDir . '/symfony/polyfill-php80/Resources/stubs/UnhandledMatchError.php',
     'User' => $baseDir . '/models/User.php',
+    'UserAgent' => $baseDir . '/models/UserAgent.php',
     'V2RayLog' => $baseDir . '/models/V2RayUser.php',
     'V2RayServer' => $baseDir . '/models/V2RayServer.php',
     'V2RayTrafficStat' => $baseDir . '/models/V2RayUser.php',

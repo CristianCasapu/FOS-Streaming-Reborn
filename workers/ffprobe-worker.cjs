@@ -46,6 +46,7 @@ let isProcessing = false;
 let totalAnalyzed = 0;
 let totalFailed = 0;
 let totalProfilesSet = 0;
+let totalRecovered = 0;  // Streams recovered from error state
 let shutdownRequested = false;
 
 /**
@@ -95,12 +96,18 @@ function analyzeStreams() {
             totalAnalyzed += result.analyzed;
             totalFailed += result.failed;
             totalProfilesSet += result.profiles_set;
+            totalRecovered += result.recovered || 0;
 
-            log('info',
-                `Processed ${result.processed} stream(s): ` +
+            let logMsg = `Processed ${result.processed} stream(s): ` +
                 `${result.analyzed} analyzed, ${result.failed} failed, ` +
-                `${result.profiles_set} profiles auto-set`
-            );
+                `${result.profiles_set} profiles auto-set`;
+
+            // Highlight recoveries
+            if (result.recovered > 0) {
+                logMsg += `, ${result.recovered} recovered from error state`;
+            }
+
+            log('info', logMsg);
 
             // Log individual stream results at debug level
             if (LOG_LEVEL === 'debug' && result.streams) {
@@ -136,7 +143,7 @@ function shutdown() {
     log('info', 'Shutdown requested...');
 
     if (!isProcessing) {
-        log('info', `FFprobe worker stopped. Total analyzed: ${totalAnalyzed}, Failed: ${totalFailed}, Profiles set: ${totalProfilesSet}`);
+        log('info', `FFprobe worker stopped. Total analyzed: ${totalAnalyzed}, Failed: ${totalFailed}, Profiles set: ${totalProfilesSet}, Recovered: ${totalRecovered}`);
         process.exit(0);
     } else {
         log('info', 'Waiting for current analysis to finish...');
@@ -156,6 +163,7 @@ function healthCheck() {
         analyzed: totalAnalyzed,
         failed: totalFailed,
         profiles_set: totalProfilesSet,
+        recovered: totalRecovered,
         processing: isProcessing,
         memory: process.memoryUsage()
     };

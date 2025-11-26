@@ -936,6 +936,7 @@ NGINX;
             hls_playlist_length {$hlsPlaylistLength}s;
             hls_nested {$hlsNested};
             hls_cleanup {$hlsCleanup};
+            hls_continuous on;
 NGINX;
             }
 

@@ -302,10 +302,59 @@
                     </svg>
                 </button>
                 <div class="bg-gray-900 text-white px-6 py-4 rounded-t-lg">
-                    <h3 class="text-xl font-semibold">{{ previewStreamData?.name }}</h3>
-                    <p class="text-sm text-gray-400 mt-1">{{ previewStreamData?.stream_source }}</p>
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-xl font-semibold">{{ previewStreamData?.name }}</h3>
+                            <p class="text-sm text-gray-400 mt-1 truncate max-w-lg">{{ currentSourceUrl }}</p>
+                        </div>
+                        <!-- Source & Format Selectors -->
+                        <div class="flex items-center space-x-4">
+                            <!-- Format Selector (HLS/DASH) -->
+                            <div v-if="selectedSourceIndex === 'output' && (previewUrls?.hls || previewUrls?.dash)" class="flex items-center space-x-2">
+                                <label class="text-sm text-gray-400">Format:</label>
+                                <div class="flex rounded-md overflow-hidden border border-gray-700">
+                                    <button
+                                        @click="selectedFormat = 'hls'; switchFormat()"
+                                        :class="[
+                                            'px-3 py-1.5 text-sm font-medium transition-colors',
+                                            selectedFormat === 'hls' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
+                                        ]"
+                                        :disabled="!previewUrls?.hls"
+                                        :title="previewUrls?.hls ? 'HLS Stream' : 'HLS not available'"
+                                    >
+                                        HLS
+                                    </button>
+                                    <button
+                                        @click="selectedFormat = 'dash'; switchFormat()"
+                                        :class="[
+                                            'px-3 py-1.5 text-sm font-medium transition-colors',
+                                            selectedFormat === 'dash' ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
+                                        ]"
+                                        :disabled="!previewUrls?.dash"
+                                        :title="previewUrls?.dash ? 'DASH Stream' : 'DASH not available'"
+                                    >
+                                        DASH
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Source Selector -->
+                            <div v-if="previewSources.length > 0" class="flex items-center space-x-2">
+                                <label class="text-sm text-gray-400">Source:</label>
+                                <select
+                                    v-model="selectedSourceIndex"
+                                    @change="switchSource"
+                                    class="bg-gray-800 text-white border border-gray-700 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-indigo-500"
+                                >
+                                    <option value="output">Stream Output</option>
+                                    <option v-for="source in previewSources" :key="source.index" :value="source.index">
+                                        {{ source.label }}
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="bg-black rounded-b-lg overflow-hidden">
+                <div class="bg-black overflow-hidden">
                     <div v-if="loadingPreview" class="p-12 text-center text-gray-400">
                         <svg class="animate-spin h-12 w-12 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -313,25 +362,45 @@
                         </svg>
                         <p class="text-lg">Loading preview...</p>
                     </div>
-                    <video v-else-if="previewUrls && !videoError" ref="videoPlayer" class="w-full h-auto" controls autoplay :key="previewStreamData?.id">
-                        <source v-if="previewUrls.proxy" :src="previewUrls.proxy" type="video/mp2t">
-                        <source v-if="previewUrls.hls" :src="previewUrls.hls" type="application/x-mpegURL">
-                        <source v-if="previewUrls.direct" :src="previewUrls.direct" type="video/mp4">
+                    <video v-else-if="currentPreviewUrl && !videoError" ref="videoPlayer" class="w-full h-auto max-h-[70vh]" controls autoplay playsinline>
                         Your browser does not support video playback.
                     </video>
-                    <div v-if="previewUrls && !loadingPreview && !videoError" class="bg-gray-900 px-6 py-3 text-xs text-gray-400">
-                        <p>
-                            <span v-if="previewUrls.proxy" class="text-green-400">Proxy Stream</span>
-                            <span v-if="previewUrls.hls" class="text-blue-400 ml-2">HLS</span>
-                            <span v-if="previewUrls.direct" class="text-yellow-400 ml-2">Direct</span>
-                        </p>
-                    </div>
                     <div v-if="videoError && !loadingPreview" class="p-8 text-center text-gray-400">
                         <svg class="h-16 w-16 mx-auto mb-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <p class="text-lg font-medium">Unable to play stream</p>
                         <p class="text-sm mt-2">{{ videoError }}</p>
+                    </div>
+                </div>
+                <!-- Preview Info Bar -->
+                <div v-if="currentPreviewUrl && !loadingPreview && !videoError" class="bg-gray-900 px-6 py-3 rounded-b-lg">
+                    <div class="flex items-center justify-between text-xs">
+                        <div class="flex items-center space-x-4">
+                            <span v-if="selectedSourceIndex === 'output' && selectedFormat === 'hls'" class="flex items-center text-blue-400">
+                                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                HLS Output (Session Auth)
+                            </span>
+                            <span v-else-if="selectedSourceIndex === 'output' && selectedFormat === 'dash'" class="flex items-center text-purple-400">
+                                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                DASH Output (Session Auth)
+                            </span>
+                            <span v-else class="flex items-center text-yellow-400">
+                                <svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                Direct Source
+                            </span>
+                        </div>
+                        <div class="flex items-center space-x-3 text-gray-500">
+                            <span v-if="previewUrls?.hls" class="text-blue-400" title="HLS available">HLS</span>
+                            <span v-if="previewUrls?.dash" class="text-purple-400" title="DASH available">DASH</span>
+                            <span>{{ previewSources.length }} source(s)</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -346,6 +415,7 @@ import { useToastStore } from '../../stores/toast';
 import AppLayout from '../../components/AppLayout.vue';
 import StreamImportWizard from '../../components/StreamImportWizard.vue';
 import Hls from 'hls.js';
+import dashjs from 'dashjs';
 
 const toast = useToastStore();
 
@@ -366,8 +436,18 @@ const previewStreamData = ref(null);
 const videoPlayer = ref(null);
 const videoError = ref(null);
 const previewUrls = ref(null);
+const previewSources = ref([]);
+const selectedSourceIndex = ref('output');
+const currentPreviewUrl = ref(null);
+const currentSourceUrl = ref('');
 const loadingPreview = ref(false);
 const hlsInstance = ref(null);
+const hlsRecoveryAttempts = ref(0);
+const maxHlsRecoveryAttempts = 3;
+const dashInstance = ref(null);
+const dashRecoveryAttempts = ref(0);
+const maxDashRecoveryAttempts = 3;
+const selectedFormat = ref('hls'); // 'hls' or 'dash'
 
 const showAddModal = ref(false);
 const showImportWizard = ref(false);
@@ -439,38 +519,342 @@ const restartAll = async () => { if (!confirm('Restart ALL enabled running strea
 const initHlsPlayer = (url) => {
     if (!videoPlayer.value) return;
     if (hlsInstance.value) { hlsInstance.value.destroy(); hlsInstance.value = null; }
+    hlsRecoveryAttempts.value = 0; // Reset recovery counter
+
     if (Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 90 });
-        hls.loadSource(url); hls.attachMedia(videoPlayer.value);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => { videoPlayer.value.play().catch(() => {}); });
-        hls.on(Hls.Events.ERROR, (event, data) => { if (data.fatal) { switch (data.type) { case Hls.ErrorTypes.NETWORK_ERROR: videoError.value = 'Network error - trying to recover...'; hls.startLoad(); break; case Hls.ErrorTypes.MEDIA_ERROR: videoError.value = 'Media error - trying to recover...'; hls.recoverMediaError(); break; default: videoError.value = 'Fatal error loading stream'; hls.destroy(); break; } } });
+        const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 90,
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60,
+            liveSyncDurationCount: 3,
+            liveMaxLatencyDurationCount: 10,
+            xhrSetup: function(xhr) {
+                // Include credentials (cookies) for session-based auth
+                xhr.withCredentials = true;
+            }
+        });
+        hls.loadSource(url);
+        hls.attachMedia(videoPlayer.value);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            hlsRecoveryAttempts.value = 0; // Reset on successful parse
+            videoPlayer.value.play().catch(() => {});
+        });
+        hls.on(Hls.Events.FRAG_LOADED, () => {
+            // Reset recovery counter on successful fragment load
+            hlsRecoveryAttempts.value = 0;
+        });
+        hls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+                hlsRecoveryAttempts.value++;
+                console.warn(`HLS error (attempt ${hlsRecoveryAttempts.value}/${maxHlsRecoveryAttempts}):`, data.type, data.details);
+
+                switch (data.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                        if (hlsRecoveryAttempts.value < maxHlsRecoveryAttempts) {
+                            // Try to recover without showing error (keeps video element mounted)
+                            console.log('HLS network error, attempting recovery...');
+                            hls.startLoad();
+                        } else {
+                            videoError.value = 'Network error - unable to load stream. Check if stream is running.';
+                            hls.destroy();
+                        }
+                        break;
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                        if (hlsRecoveryAttempts.value < maxHlsRecoveryAttempts) {
+                            console.log('HLS media error, attempting recovery...');
+                            hls.recoverMediaError();
+                        } else {
+                            videoError.value = 'Media error - unable to play stream format.';
+                            hls.destroy();
+                        }
+                        break;
+                    default:
+                        videoError.value = 'Fatal error loading stream. Make sure you are logged in.';
+                        hls.destroy();
+                        break;
+                }
+            }
+        });
         hlsInstance.value = hls;
-    } else if (videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) { videoPlayer.value.src = url; videoPlayer.value.play().catch(() => {}); }
-    else { videoError.value = 'HLS is not supported in this browser'; }
+    } else if (videoPlayer.value.canPlayType('application/vnd.apple.mpegurl')) {
+        videoPlayer.value.src = url;
+        videoPlayer.value.play().catch(() => {});
+    } else {
+        videoError.value = 'HLS is not supported in this browser';
+    }
+};
+
+const initDashPlayer = (url) => {
+    if (!videoPlayer.value) return;
+    if (dashInstance.value) { dashInstance.value.destroy(); dashInstance.value = null; }
+    dashRecoveryAttempts.value = 0; // Reset recovery counter
+
+    try {
+        const player = dashjs.MediaPlayer().create();
+        player.initialize(videoPlayer.value, url, true);
+
+        // Configure for low latency live streaming
+        player.updateSettings({
+            streaming: {
+                delay: {
+                    liveDelay: 3
+                },
+                liveCatchup: {
+                    enabled: true,
+                    mode: 'liveCatchupModeLoLP'
+                },
+                buffer: {
+                    fastSwitchEnabled: true,
+                    stableBufferTime: 12,
+                    bufferTimeAtTopQuality: 20
+                }
+            },
+            debug: {
+                logLevel: dashjs.Debug.LOG_LEVEL_WARNING
+            }
+        });
+
+        // Enable credentials for session-based auth
+        player.extend('RequestModifier', function () {
+            return {
+                modifyRequestHeader: function (xhr) {
+                    xhr.withCredentials = true;
+                    return xhr;
+                },
+                modifyRequestURL: function (url) {
+                    return url;
+                }
+            };
+        }, true);
+
+        player.on(dashjs.MediaPlayer.events.MANIFEST_LOADED, () => {
+            dashRecoveryAttempts.value = 0;
+            console.log('DASH manifest loaded successfully');
+        });
+
+        player.on(dashjs.MediaPlayer.events.FRAGMENT_LOADING_COMPLETED, () => {
+            dashRecoveryAttempts.value = 0;
+        });
+
+        player.on(dashjs.MediaPlayer.events.ERROR, (e) => {
+            dashRecoveryAttempts.value++;
+            console.warn(`DASH error (attempt ${dashRecoveryAttempts.value}/${maxDashRecoveryAttempts}):`, e.error);
+
+            if (dashRecoveryAttempts.value < maxDashRecoveryAttempts) {
+                console.log('DASH error, attempting recovery...');
+                // Try to recover by refreshing the manifest
+                setTimeout(() => {
+                    if (dashInstance.value) {
+                        dashInstance.value.refreshManifest();
+                    }
+                }, 1000);
+            } else {
+                videoError.value = 'DASH error - unable to load stream. Check if stream is running.';
+                if (dashInstance.value) {
+                    dashInstance.value.destroy();
+                    dashInstance.value = null;
+                }
+            }
+        });
+
+        dashInstance.value = player;
+    } catch (err) {
+        console.error('Failed to initialize DASH player:', err);
+        videoError.value = 'Failed to initialize DASH player: ' + err.message;
+    }
+};
+
+const destroyPlayers = () => {
+    if (hlsInstance.value) {
+        hlsInstance.value.destroy();
+        hlsInstance.value = null;
+    }
+    if (dashInstance.value) {
+        dashInstance.value.destroy();
+        dashInstance.value = null;
+    }
+};
+
+const initPlayerForUrl = (url, format = null) => {
+    if (!videoPlayer.value || !url) return;
+
+    // Destroy any existing players first
+    destroyPlayers();
+
+    // Determine format from URL or use specified format
+    const useFormat = format || selectedFormat.value;
+    const isHls = url.includes('.m3u8') || (url.includes('preview-stream.php') && url.includes('format=hls'));
+    const isDash = url.includes('.mpd') || (url.includes('preview-stream.php') && url.includes('format=dash'));
+
+    if (useFormat === 'dash' || isDash) {
+        initDashPlayer(url);
+    } else if (useFormat === 'hls' || isHls) {
+        initHlsPlayer(url);
+    } else {
+        // Direct playback for non-HLS/DASH sources
+        videoPlayer.value.src = url;
+        videoPlayer.value.play().catch(() => {});
+        videoPlayer.value.addEventListener('error', () => {
+            if (!videoError.value) {
+                videoError.value = 'Unable to play source directly. Try HLS or DASH output instead.';
+            }
+        });
+    }
+};
+
+const switchFormat = async () => {
+    videoError.value = null;
+    hlsRecoveryAttempts.value = 0;
+    dashRecoveryAttempts.value = 0;
+
+    // Destroy existing players
+    destroyPlayers();
+
+    // Also reset the video element
+    if (videoPlayer.value) {
+        videoPlayer.value.pause();
+        videoPlayer.value.removeAttribute('src');
+        videoPlayer.value.load();
+    }
+
+    // Update URL based on selected format
+    if (selectedSourceIndex.value === 'output') {
+        if (selectedFormat.value === 'hls' && previewUrls.value?.hls) {
+            currentPreviewUrl.value = previewUrls.value.hls;
+            currentSourceUrl.value = 'HLS Output';
+        } else if (selectedFormat.value === 'dash' && previewUrls.value?.dash) {
+            currentPreviewUrl.value = previewUrls.value.dash;
+            currentSourceUrl.value = 'DASH Output';
+        }
+    }
+
+    await nextTick();
+    if (videoPlayer.value && currentPreviewUrl.value) {
+        initPlayerForUrl(currentPreviewUrl.value, selectedFormat.value);
+    }
 };
 
 const previewStream = async (stream) => {
-    previewStreamData.value = stream; videoError.value = null; previewUrls.value = null; loadingPreview.value = true; showPreviewModal.value = true;
+    previewStreamData.value = stream;
+    videoError.value = null;
+    previewUrls.value = null;
+    previewSources.value = [];
+    selectedSourceIndex.value = 'output';
+    selectedFormat.value = 'hls'; // Default to HLS
+    currentPreviewUrl.value = null;
+    currentSourceUrl.value = stream.stream_source || '';
+    loadingPreview.value = true;
+    showPreviewModal.value = true;
+    hlsRecoveryAttempts.value = 0;
+    dashRecoveryAttempts.value = 0;
+
     try {
-        const response = await streamsAPI.getPreviewUrls(stream.id); previewUrls.value = response.data.data.urls;
+        const response = await streamsAPI.getPreviewUrls(stream.id);
+        const data = response.data.data;
+        previewUrls.value = data.urls;
+        previewSources.value = data.sources || [];
+
+        // Default to HLS output if available, otherwise DASH, otherwise first source
+        if (data.urls?.hls) {
+            selectedSourceIndex.value = 'output';
+            selectedFormat.value = 'hls';
+            currentPreviewUrl.value = data.urls.hls;
+            currentSourceUrl.value = 'HLS Output';
+        } else if (data.urls?.dash) {
+            selectedSourceIndex.value = 'output';
+            selectedFormat.value = 'dash';
+            currentPreviewUrl.value = data.urls.dash;
+            currentSourceUrl.value = 'DASH Output';
+        } else if (previewSources.value.length > 0) {
+            selectedSourceIndex.value = previewSources.value[0].index;
+            currentPreviewUrl.value = previewSources.value[0].url;
+            currentSourceUrl.value = previewSources.value[0].url;
+        }
+
+        // IMPORTANT: Set loadingPreview to false BEFORE nextTick so video element renders
+        loadingPreview.value = false;
+
+        // Wait for Vue to render the video element
         await nextTick();
+
+        // Give the DOM a moment to fully render, then initialize player
         setTimeout(() => {
-            if (videoPlayer.value && previewUrls.value) {
-                if (previewUrls.value.hls) { initHlsPlayer(previewUrls.value.hls); }
-                else if (previewUrls.value.proxy) { videoPlayer.value.src = previewUrls.value.proxy; videoPlayer.value.play().catch(() => {}); }
-                else if (previewUrls.value.direct) { videoPlayer.value.src = previewUrls.value.direct; videoPlayer.value.play().catch(() => {}); }
-                videoPlayer.value.addEventListener('error', () => { if (!videoError.value) { videoError.value = 'Unable to play stream with current format'; } });
+            if (videoPlayer.value && currentPreviewUrl.value) {
+                initPlayerForUrl(currentPreviewUrl.value, selectedFormat.value);
             }
-        }, 100);
-    } catch (error) { videoError.value = 'Failed to load preview URLs: ' + (error.response?.data?.message || error.message); }
-    finally { loadingPreview.value = false; }
+        }, 50);
+    } catch (error) {
+        videoError.value = 'Failed to load preview URLs: ' + (error.response?.data?.message || error.message);
+        loadingPreview.value = false;
+    }
+};
+
+const switchSource = async () => {
+    videoError.value = null;
+    hlsRecoveryAttempts.value = 0;
+    dashRecoveryAttempts.value = 0;
+
+    // Destroy existing players
+    destroyPlayers();
+
+    // Also reset the video element
+    if (videoPlayer.value) {
+        videoPlayer.value.pause();
+        videoPlayer.value.removeAttribute('src');
+        videoPlayer.value.load();
+    }
+
+    if (selectedSourceIndex.value === 'output') {
+        // Use selected format output
+        if (selectedFormat.value === 'hls' && previewUrls.value?.hls) {
+            currentPreviewUrl.value = previewUrls.value.hls;
+            currentSourceUrl.value = 'HLS Output';
+        } else if (selectedFormat.value === 'dash' && previewUrls.value?.dash) {
+            currentPreviewUrl.value = previewUrls.value.dash;
+            currentSourceUrl.value = 'DASH Output';
+        } else if (previewUrls.value?.hls) {
+            // Fallback to HLS if preferred format not available
+            selectedFormat.value = 'hls';
+            currentPreviewUrl.value = previewUrls.value.hls;
+            currentSourceUrl.value = 'HLS Output';
+        } else if (previewUrls.value?.dash) {
+            // Fallback to DASH
+            selectedFormat.value = 'dash';
+            currentPreviewUrl.value = previewUrls.value.dash;
+            currentSourceUrl.value = 'DASH Output';
+        }
+    } else {
+        // Use direct source
+        const source = previewSources.value.find(s => s.index === selectedSourceIndex.value);
+        if (source) {
+            currentPreviewUrl.value = source.url;
+            currentSourceUrl.value = source.url;
+        }
+    }
+
+    await nextTick();
+    if (videoPlayer.value && currentPreviewUrl.value) {
+        initPlayerForUrl(currentPreviewUrl.value, selectedSourceIndex.value === 'output' ? selectedFormat.value : null);
+    }
 };
 
 const closePreview = () => {
     showPreviewModal.value = false;
-    if (hlsInstance.value) { hlsInstance.value.destroy(); hlsInstance.value = null; }
+    destroyPlayers();
     if (videoPlayer.value) { videoPlayer.value.pause(); videoPlayer.value.src = ''; videoPlayer.value.load(); }
-    previewStreamData.value = null; videoError.value = null; previewUrls.value = null; loadingPreview.value = false;
+    previewStreamData.value = null;
+    videoError.value = null;
+    previewUrls.value = null;
+    previewSources.value = [];
+    selectedSourceIndex.value = 'output';
+    selectedFormat.value = 'hls';
+    currentPreviewUrl.value = null;
+    currentSourceUrl.value = '';
+    loadingPreview.value = false;
+    hlsRecoveryAttempts.value = 0;
+    dashRecoveryAttempts.value = 0;
 };
 
 const fetchCategories = async () => { try { const response = await categoriesAPI.getAll(); categories.value = response.data.data || []; } catch (error) { console.error('Failed to load categories:', error); } };

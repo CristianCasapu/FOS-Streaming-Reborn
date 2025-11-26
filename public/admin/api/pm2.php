@@ -45,40 +45,108 @@ try {
     switch ($action) {
         case 'install':
             // Install PM2 globally
-            // When using NVM, we don't need sudo - install to user's NVM directory
+            // Strategy: Try user's npm first (with or without NVM), fall back to sudo if needed
 
-            // Get npm path
-            exec('which npm 2>&1', $npmPathOutput, $npmExitCode);
-            $npmPath = trim(implode('', $npmPathOutput));
+            $output = [];
+            $exitCode = 1;
 
-            if ($npmExitCode !== 0 || empty($npmPath)) {
-                throw new Exception('npm command not found. Please ensure Node.js and npm are installed.');
+            // Get current user info
+            $currentUser = exec('whoami');
+            $userHome = exec("getent passwd {$currentUser} | cut -d: -f6") ?: "/home/{$currentUser}";
+
+            // Helper function to find npm
+            $findNpm = function($home) {
+                // Check standard PATH first
+                exec('which npm 2>/dev/null', $whichOutput, $whichExit);
+                if ($whichExit === 0 && !empty($whichOutput[0])) {
+                    return ['path' => trim($whichOutput[0]), 'nvm' => false];
+                }
+
+                // Check NVM paths
+                $nvmBase = "{$home}/.nvm/versions/node";
+                if (is_dir($nvmBase)) {
+                    $versions = glob("{$nvmBase}/v*", GLOB_ONLYDIR);
+                    if (!empty($versions)) {
+                        rsort($versions);
+                        foreach ($versions as $ver) {
+                            $npm = "{$ver}/bin/npm";
+                            if (file_exists($npm) && is_executable($npm)) {
+                                return ['path' => $npm, 'nvm' => true, 'nvm_dir' => "{$home}/.nvm"];
+                            }
+                        }
+                    }
+                }
+
+                // Check system paths
+                foreach (['/usr/local/bin/npm', '/usr/bin/npm'] as $path) {
+                    if (file_exists($path) && is_executable($path)) {
+                        return ['path' => $path, 'nvm' => false];
+                    }
+                }
+
+                return null;
+            };
+
+            // Method 1: Try with current user's npm
+            $userNpm = $findNpm($userHome);
+            if ($userNpm) {
+                if ($userNpm['nvm']) {
+                    // NVM install: Set PATH to include node binary directory
+                    $nodeBinDir = dirname($userNpm['path']);
+                    $command = "export PATH=\"{$nodeBinDir}:\$PATH\" && export HOME='{$userHome}' && npm install -g pm2 2>&1";
+                    exec("bash -c '{$command}'", $output, $exitCode);
+                } else {
+                    // Direct npm path - also need to ensure node is in PATH
+                    $nodeBinDir = dirname($userNpm['path']);
+                    $command = "export PATH=\"{$nodeBinDir}:\$PATH\" && npm install -g pm2 2>&1";
+                    exec("bash -c '{$command}'", $output, $exitCode);
+                }
             }
 
-            // Check if npm is managed by NVM
-            $isNVM = strpos($npmPath, '/.nvm/') !== false;
+            // Method 2: Fall back to sudo with root's npm if user install failed
+            if ($exitCode !== 0) {
+                $output = []; // Reset output
 
-            if ($isNVM) {
-                // NVM-managed npm - install without sudo
-                $command = "{$npmPath} install -g pm2 2>&1";
-                exec($command, $output, $exitCode);
-            } else {
-                // System-wide npm - requires sudo
+                // Get sudo password from settings
                 $setting = Setting::first();
                 if (!$setting || empty($setting->sudo_password)) {
-                    throw new Exception('Sudo password not configured. Please set it in Settings → System Commands Configuration.');
+                    throw new Exception('User npm install failed and sudo password not configured. Please set sudo password in Settings → System Commands Configuration.');
                 }
 
                 // Decrypt sudo password
                 $sudoPassword = Crypt::decryptString($setting->sudo_password);
 
-                $command = "echo '{$sudoPassword}' | sudo -S {$npmPath} install -g pm2 2>&1";
+                // Try to find npm as root - check root's NVM first, then system paths
+                $rootNvmScript = 'export HOME=/root && export NVM_DIR="/root/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"';
+
+                // Try root's NVM installation
+                $command = "echo '{$sudoPassword}' | sudo -S bash -c '{$rootNvmScript} && npm install -g pm2' 2>&1";
                 exec($command, $output, $exitCode);
+
+                // If still failed, try system npm with sudo
+                if ($exitCode !== 0) {
+                    foreach (['/usr/local/bin/npm', '/usr/bin/npm'] as $sysNpm) {
+                        if (file_exists($sysNpm)) {
+                            $output = [];
+                            $command = "echo '{$sudoPassword}' | sudo -S {$sysNpm} install -g pm2 2>&1";
+                            exec($command, $output, $exitCode);
+                            if ($exitCode === 0) break;
+                        }
+                    }
+                }
+            }
+
+            if ($exitCode !== 0 && empty($userNpm)) {
+                throw new Exception('npm not found. Please ensure Node.js and npm are installed for either the web server user or root.');
             }
 
             if ($exitCode === 0) {
-                // Start workers after installation
-                exec("cd {$projectRoot} && pm2 start ecosystem.config.cjs 2>&1", $startOutput, $startExitCode);
+                // Start workers after installation - need PATH for pm2 command
+                $nodeBinDir = $userNpm ? dirname($userNpm['path']) : '';
+                $startCommand = $nodeBinDir
+                    ? "export PATH=\"{$nodeBinDir}:\$PATH\" && cd {$projectRoot} && pm2 start ecosystem.config.cjs 2>&1"
+                    : "cd {$projectRoot} && pm2 start ecosystem.config.cjs 2>&1";
+                exec("bash -c '{$startCommand}'", $startOutput, $startExitCode);
 
                 echo json_encode([
                     'success' => true,
@@ -221,11 +289,18 @@ try {
                 ];
             }
 
-            exec('pm2 jlist 2>&1', $output, $exitCode);
+            execPM2('pm2 jlist --no-color', $output, $exitCode);
 
             $runningProcesses = [];
             if ($exitCode === 0 && !empty($output)) {
+                // PM2 may output warning messages before the JSON - find the JSON array
                 $jsonOutput = implode('', $output);
+                // Strip ANSI escape codes
+                $jsonOutput = preg_replace('/\x1b\[[0-9;]*m/', '', $jsonOutput);
+                // Extract JSON array from output (handles PM2 "out-of-date" warnings)
+                if (preg_match('/\[.*\]/s', $jsonOutput, $matches)) {
+                    $jsonOutput = $matches[0];
+                }
                 $processes = json_decode($jsonOutput, true);
 
                 if ($processes) {
@@ -329,9 +404,9 @@ try {
             $workerId = $_GET['worker_id'] ?? 'all';
 
             if ($workerId === 'all') {
-                exec("cd {$projectRoot} && pm2 start ecosystem.config.cjs 2>&1", $output, $exitCode);
+                execPM2("cd {$projectRoot} && pm2 start ecosystem.config.cjs", $output, $exitCode);
             } else {
-                exec("cd {$projectRoot} && pm2 start {$workerId} 2>&1", $output, $exitCode);
+                execPM2("cd {$projectRoot} && pm2 start {$workerId}", $output, $exitCode);
             }
 
             if ($exitCode === 0) {
@@ -349,9 +424,9 @@ try {
             $workerId = $_GET['worker_id'] ?? 'all';
 
             if ($workerId === 'all') {
-                exec("cd {$projectRoot} && pm2 stop all 2>&1", $output, $exitCode);
+                execPM2("cd {$projectRoot} && pm2 stop all", $output, $exitCode);
             } else {
-                exec("cd {$projectRoot} && pm2 stop {$workerId} 2>&1", $output, $exitCode);
+                execPM2("cd {$projectRoot} && pm2 stop {$workerId}", $output, $exitCode);
             }
 
             if ($exitCode === 0) {
@@ -369,9 +444,9 @@ try {
             $workerId = $_GET['worker_id'] ?? 'all';
 
             if ($workerId === 'all') {
-                exec("cd {$projectRoot} && pm2 restart all 2>&1", $output, $exitCode);
+                execPM2("cd {$projectRoot} && pm2 restart all", $output, $exitCode);
             } else {
-                exec("cd {$projectRoot} && pm2 restart {$workerId} 2>&1", $output, $exitCode);
+                execPM2("cd {$projectRoot} && pm2 restart {$workerId}", $output, $exitCode);
             }
 
             if ($exitCode === 0) {
@@ -390,9 +465,9 @@ try {
             $lines = isset($_GET['lines']) ? (int)$_GET['lines'] : 100;
 
             if ($worker === 'all') {
-                exec("cd {$projectRoot} && pm2 logs --nostream --lines {$lines} 2>&1", $output, $exitCode);
+                execPM2("cd {$projectRoot} && pm2 logs --nostream --lines {$lines}", $output, $exitCode);
             } else {
-                exec("cd {$projectRoot} && pm2 logs {$worker} --nostream --lines {$lines} 2>&1", $output, $exitCode);
+                execPM2("cd {$projectRoot} && pm2 logs {$worker} --nostream --lines {$lines}", $output, $exitCode);
             }
 
             echo json_encode([
@@ -524,11 +599,96 @@ function isServiceEnabled($serviceName) {
 }
 
 /**
+ * Get the node binary directory for PATH
+ * Returns the directory containing node/npm/pm2 binaries
+ */
+function getNodeBinDir() {
+    // Check NVM installation first
+    $currentUser = exec('whoami');
+    $userHome = exec("getent passwd {$currentUser} | cut -d: -f6") ?: "/home/{$currentUser}";
+    $nvmBase = "{$userHome}/.nvm/versions/node";
+
+    if (is_dir($nvmBase)) {
+        $versions = glob("{$nvmBase}/v*", GLOB_ONLYDIR);
+        if (!empty($versions)) {
+            rsort($versions);
+            foreach ($versions as $ver) {
+                $bin = "{$ver}/bin";
+                if (file_exists("{$bin}/node") && file_exists("{$bin}/pm2")) {
+                    return $bin;
+                }
+            }
+        }
+    }
+
+    // Check system paths
+    if (file_exists('/usr/local/bin/pm2')) {
+        return '/usr/local/bin';
+    }
+    if (file_exists('/usr/bin/pm2')) {
+        return '/usr/bin';
+    }
+
+    return null;
+}
+
+/**
+ * Execute a PM2 command with proper PATH and HOME
+ */
+function execPM2($command, &$output = [], &$exitCode = 0) {
+    $nodeBinDir = getNodeBinDir();
+    $currentUser = exec('whoami');
+    $userHome = exec("getent passwd {$currentUser} | cut -d: -f6") ?: "/home/{$currentUser}";
+
+    // Set HOME and PATH so PM2 uses the correct daemon
+    $envSetup = "export HOME=\"{$userHome}\" && export PM2_HOME=\"{$userHome}/.pm2\"";
+
+    if ($nodeBinDir) {
+        $fullCommand = "{$envSetup} && export PATH=\"{$nodeBinDir}:\$PATH\" && {$command}";
+    } else {
+        $fullCommand = "{$envSetup} && {$command}";
+    }
+
+    exec("bash -c '{$fullCommand}' 2>&1", $output, $exitCode);
+    return $exitCode === 0;
+}
+
+/**
  * Check if PM2 is installed
  */
 function checkPM2Installed() {
+    // Check PATH first
     exec('which pm2 2>&1', $output, $exitCode);
-    return $exitCode === 0;
+    if ($exitCode === 0) {
+        return true;
+    }
+
+    // Check NVM installation
+    $currentUser = exec('whoami');
+    $userHome = exec("getent passwd {$currentUser} | cut -d: -f6") ?: "/home/{$currentUser}";
+    $nvmBase = "{$userHome}/.nvm/versions/node";
+
+    if (is_dir($nvmBase)) {
+        $versions = glob("{$nvmBase}/v*", GLOB_ONLYDIR);
+        if (!empty($versions)) {
+            rsort($versions);
+            foreach ($versions as $ver) {
+                $pm2 = "{$ver}/bin/pm2";
+                if (file_exists($pm2) && is_executable($pm2)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Check global npm paths
+    foreach (['/usr/local/bin/pm2', '/usr/bin/pm2'] as $path) {
+        if (file_exists($path) && is_executable($path)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**

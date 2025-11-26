@@ -782,7 +782,7 @@ try {
             break;
 
         case 'preview_urls':
-            // Get preview URLs for a stream in all available formats
+            // Get preview URLs for a stream using session-authenticated preview endpoint
             $id = $_GET['id'] ?? null;
             if (!$id) {
                 throw new Exception('Stream ID is required');
@@ -798,17 +798,14 @@ try {
                 throw new Exception('Stream is not running');
             }
 
-            // Get streaming settings
+            // Use current request origin (same host:port user is accessing)
+            $requestHost = $_SERVER['HTTP_HOST'] ?? 'localhost:8000';
+            $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+            $baseUrl = "{$protocol}://{$requestHost}";
             $setting = Setting::first();
-            $streamingPort = $setting->streaming_port ?? 8001;
-            // Use the same host that the request came from (server's actual IP/hostname)
-            // Remove port from HTTP_HOST if present
-            $requestHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
-            $streamingHost = preg_replace('/:\d+$/', '', $requestHost);
-            $streamsPath = $setting->streams_path ?: \App\Services\PathDetectionService::detectProjectRoot() . '/fospackv69/fos/streams';
 
-            // Check if HLS/DASH files exist (nginx-rtmp creates nested directories)
-            // Format: streams_path/hls/{stream_id}/index.m3u8 (nested) or streams_path/hls/{stream_id}_.m3u8 (flat)
+            // Check if HLS/DASH files exist
+            $streamsPath = $setting->streams_path ?: \App\Services\PathDetectionService::detectProjectRoot() . '/fospackv69/fos/streams';
             $hlsNestedFile = "{$streamsPath}/hls/{$stream->id}/index.m3u8";
             $hlsFlatFile = "{$streamsPath}/hls/{$stream->id}_.m3u8";
             $dashNestedFile = "{$streamsPath}/dash/{$stream->id}/index.mpd";
@@ -816,26 +813,38 @@ try {
             $hlsExists = file_exists($hlsNestedFile) || file_exists($hlsFlatFile);
             $dashExists = file_exists($dashNestedFile);
 
-            // Generate preview URLs
+            // Build session-authenticated preview URLs (staff only)
+            // Uses PHP session auth - not directly exposed
             $previewUrls = [];
-
-            // HLS via nginx streaming server (preferred)
             if ($hlsExists) {
-                if (file_exists($hlsNestedFile)) {
-                    $previewUrls['hls'] = "http://{$streamingHost}:{$streamingPort}/hls/{$stream->id}/index.m3u8";
-                } else {
-                    $previewUrls['hls'] = "http://{$streamingHost}:{$streamingPort}/hls/{$stream->id}_.m3u8";
-                }
+                $previewUrls['hls'] = "{$baseUrl}/admin/preview-stream.php?stream={$stream->id}&format=hls";
             }
-
-            // DASH via nginx streaming server
             if ($dashExists) {
-                $previewUrls['dash'] = "http://{$streamingHost}:{$streamingPort}/dash/{$stream->id}/index.mpd";
+                $previewUrls['dash'] = "{$baseUrl}/admin/preview-stream.php?stream={$stream->id}&format=dash";
             }
 
-            // Direct source as fallback (if HTTP/HTTPS)
-            if ($stream->streamurl && (strpos($stream->streamurl, 'http://') === 0 || strpos($stream->streamurl, 'https://') === 0)) {
-                $previewUrls['direct'] = $stream->streamurl;
+            // Collect available sources for source switching
+            $sources = [];
+            if (!empty($stream->streamurl)) {
+                $sources[] = [
+                    'label' => 'Primary Source',
+                    'url' => $stream->streamurl,
+                    'index' => 1
+                ];
+            }
+            if (!empty($stream->streamurl2)) {
+                $sources[] = [
+                    'label' => 'Backup Source 1',
+                    'url' => $stream->streamurl2,
+                    'index' => 2
+                ];
+            }
+            if (!empty($stream->streamurl3)) {
+                $sources[] = [
+                    'label' => 'Backup Source 2',
+                    'url' => $stream->streamurl3,
+                    'index' => 3
+                ];
             }
 
             echo json_encode([
@@ -844,14 +853,11 @@ try {
                     'stream_id' => $stream->id,
                     'stream_name' => $stream->name,
                     'urls' => $previewUrls,
+                    'sources' => $sources,
                     'hls_exists' => $hlsExists,
                     'dash_exists' => $dashExists,
                     'recommended_format' => $hlsExists ? 'hls' : ($dashExists ? 'dash' : 'direct'),
-                    'debug' => [
-                        'streams_path' => $streamsPath,
-                        'hls_nested_path' => $hlsNestedFile,
-                        'dash_nested_path' => $dashNestedFile,
-                    ]
+                    'preview_note' => 'Uses session-based authentication (no token required for staff)'
                 ]
             ]);
             break;
