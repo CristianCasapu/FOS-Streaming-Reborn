@@ -252,7 +252,7 @@ fi
 # Dynamic Configuration - Detect from environment
 # =============================================================================
 PHP_VERSION="8.4"
-MARIADB_VERSION="11.4"
+MARIADB_VERSION="12.2.1"
 NODE_VERSION="24"  # LTS version
 
 # Directory hierarchy: HOME_DIR > FOS_DIR > SCRIPT_DIR
@@ -922,6 +922,7 @@ run_bootstrap() {
     # -------------------------------------------------------------------------
     log_bootstrap "Installing essential packages..."
 
+    # Note: whoami/whereami are commands from coreutils, not separate packages
     local essential_packages=(
         "curl"
         "wget"
@@ -932,12 +933,14 @@ run_bootstrap() {
         "tar"
         "gzip"
         "bzip2"
-        "whoami"
-        "whereami"
         "coreutils"
         "lsb-release"
         "ca-certificates"
         "apt-transport-https"
+    )
+
+    # Optional packages that may not exist on all systems (e.g., minimal installs)
+    local optional_packages=(
         "software-properties-common"
     )
 
@@ -951,6 +954,14 @@ run_bootstrap() {
             }
         else
             log_bootstrap "$pkg is already installed"
+        fi
+    done
+
+    # Install optional packages silently
+    for pkg in "${optional_packages[@]}"; do
+        if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+            log_bootstrap "Installing optional: $pkg..."
+            bootstrap_install_package "$pkg" 2>/dev/null || true
         fi
     done
 
@@ -1591,7 +1602,26 @@ setup_debian_repositories() {
     log_info "Adding MariaDB repository..."
     if [ ! -f /etc/apt/sources.list.d/mariadb.list ]; then
         sudo curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc' 2>/dev/null || true
-        echo "deb [arch=amd64,arm64] https://mirrors.xtom.com/mariadb/repo/${MARIADB_VERSION}/debian ${OS_CODENAME} main" | sudo tee /etc/apt/sources.list.d/mariadb.list
+
+        # Debian codenames supported by MariaDB (ordered by release year, newest first)
+        # sid=unstable, bookworm=2023 (Debian 12), bullseye=2021 (Debian 11), buster=2019 (Debian 10)
+        # trixie=2025 (Debian 13) - not yet in MariaDB repo, use sid as fallback
+        local mariadb_codename="${OS_CODENAME}"
+
+        case "${OS_CODENAME}" in
+            sid|bookworm|bullseye|buster)
+                # Supported directly
+                mariadb_codename="${OS_CODENAME}"
+                ;;
+            trixie|forky|*)
+                # Future/unsupported versions - use sid (unstable, always latest)
+                log_warn "Debian ${OS_CODENAME} not yet supported by MariaDB repository"
+                log_info "Using sid (unstable) repository as fallback"
+                mariadb_codename="sid"
+                ;;
+        esac
+
+        echo "deb [arch=amd64,arm64 signed-by=/etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc] https://mirrors.xtom.com/mariadb/repo/${MARIADB_VERSION}/debian ${mariadb_codename} main" | sudo tee /etc/apt/sources.list.d/mariadb.list
     fi
 
     # Update package lists
@@ -1621,8 +1651,23 @@ setup_ubuntu_repositories() {
     # MariaDB Repository
     log_info "Adding MariaDB repository..."
     if [ ! -f /etc/apt/sources.list.d/mariadb.list ]; then
+        # Determine supported Ubuntu codename for MariaDB repository
+        local mariadb_codename
+        case "${OS_CODENAME}" in
+            noble|jammy|focal|bionic)
+                # These are officially supported by MariaDB
+                mariadb_codename="${OS_CODENAME}"
+                ;;
+            oracular|plucky|*)
+                # Newer Ubuntu versions not yet supported - fall back to noble (24.04 LTS)
+                log_warn "Ubuntu ${OS_CODENAME} not yet supported by MariaDB repository"
+                log_warn "Falling back to 'noble' (Ubuntu 24.04 LTS) repository"
+                mariadb_codename="noble"
+                ;;
+        esac
+
         sudo curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc' 2>/dev/null || true
-        echo "deb [arch=amd64,arm64] https://mirrors.xtom.com/mariadb/repo/${MARIADB_VERSION}/ubuntu ${OS_CODENAME} main" | sudo tee /etc/apt/sources.list.d/mariadb.list
+        echo "deb [arch=amd64,arm64] https://mirrors.xtom.com/mariadb/repo/${MARIADB_VERSION}/ubuntu ${mariadb_codename} main" | sudo tee /etc/apt/sources.list.d/mariadb.list
     fi
 
     # Update package lists
