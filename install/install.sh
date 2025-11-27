@@ -1121,6 +1121,26 @@ read_required() {
     local error_msg="$4"
     local default="$5"
     local value=""
+    local attempts=0
+    local max_attempts=3
+
+    # Check if running non-interactively (stdin not a terminal)
+    if [ ! -t 0 ]; then
+        if [ -n "$default" ]; then
+            log_info "Non-interactive mode: using default '${default}' for '${prompt}'"
+            value="$default"
+            # Validate default
+            if [ -n "$validation" ] && [[ ! "$value" =~ $validation ]]; then
+                log_warn "Default value '$value' does not match validation pattern"
+            fi
+            eval "$var_name=\"\$value\""
+            return 0
+        else
+            log_error "Non-interactive mode: no default for required field '${prompt}'"
+            log_error "Please run the installer interactively or set environment variables"
+            return 1
+        fi
+    fi
 
     while true; do
         if [ -n "$default" ]; then
@@ -1132,6 +1152,11 @@ read_required() {
 
         # Check if empty (and no default)
         if [ -z "$value" ] && [ -z "$default" ]; then
+            ((attempts++))
+            if [ $attempts -ge $max_attempts ]; then
+                log_error "Too many empty attempts. Aborting."
+                return 1
+            fi
             log_error "This field is required. Please enter a value."
             continue
         fi
@@ -1139,13 +1164,18 @@ read_required() {
         # Validate against regex if provided
         if [ -n "$validation" ]; then
             if [[ ! "$value" =~ $validation ]]; then
+                ((attempts++))
+                if [ $attempts -ge $max_attempts ]; then
+                    log_error "Too many invalid attempts. Aborting."
+                    return 1
+                fi
                 log_error "$error_msg"
                 continue
             fi
         fi
 
         # Set the variable
-        eval "$var_name=\"$value\""
+        eval "$var_name=\"\$value\""
         break
     done
 }
@@ -1156,6 +1186,19 @@ read_confirm() {
     local prompt="$1"
     local default="$2"
     local response
+    local attempts=0
+    local max_attempts=3
+
+    # Check if running non-interactively (stdin not a terminal)
+    if [ ! -t 0 ]; then
+        if [ "$default" = "y" ]; then
+            log_info "Non-interactive mode: using 'yes' for '${prompt}'"
+            return 0
+        else
+            log_info "Non-interactive mode: using 'no' for '${prompt}'"
+            return 1
+        fi
+    fi
 
     while true; do
         if [ "$default" = "y" ]; then
@@ -1169,7 +1212,18 @@ read_confirm() {
         case "$response" in
             [Yy]|[Yy][Ee][Ss]) return 0 ;;
             [Nn]|[Nn][Oo]) return 1 ;;
-            *) log_error "Please answer 'y' or 'n'" ;;
+            *)
+                ((attempts++))
+                if [ $attempts -ge $max_attempts ]; then
+                    log_error "Too many invalid attempts. Using default."
+                    if [ "$default" = "y" ]; then
+                        return 0
+                    else
+                        return 1
+                    fi
+                fi
+                log_error "Please answer 'y' or 'n'"
+                ;;
         esac
     done
 }
@@ -1180,17 +1234,42 @@ read_password() {
     local prompt="$1"
     local var_name="$2"
     local pass1 pass2
+    local attempts=0
+    local max_attempts=3
+
+    # Check if running non-interactively (stdin not a terminal)
+    if [ ! -t 0 ]; then
+        log_info "Non-interactive mode: generating random password for '${prompt}'"
+        local generated_pass
+        generated_pass=$(generate_password 24)
+        eval "$var_name=\"\$generated_pass\""
+        return 0
+    fi
 
     while true; do
         read -s -p "${prompt}: " pass1
         echo
 
         if [ -z "$pass1" ]; then
+            ((attempts++))
+            if [ $attempts -ge $max_attempts ]; then
+                log_error "Too many empty attempts. Generating random password."
+                pass1=$(generate_password 24)
+                eval "$var_name=\"\$pass1\""
+                return 0
+            fi
             log_error "Password cannot be empty. Please try again."
             continue
         fi
 
         if [ ${#pass1} -lt 8 ]; then
+            ((attempts++))
+            if [ $attempts -ge $max_attempts ]; then
+                log_error "Too many invalid attempts. Generating random password."
+                pass1=$(generate_password 24)
+                eval "$var_name=\"\$pass1\""
+                return 0
+            fi
             log_error "Password must be at least 8 characters. Please try again."
             continue
         fi
@@ -1199,11 +1278,18 @@ read_password() {
         echo
 
         if [ "$pass1" != "$pass2" ]; then
+            ((attempts++))
+            if [ $attempts -ge $max_attempts ]; then
+                log_error "Too many mismatches. Generating random password."
+                pass1=$(generate_password 24)
+                eval "$var_name=\"\$pass1\""
+                return 0
+            fi
             log_error "Passwords do not match. Please try again."
             continue
         fi
 
-        eval "$var_name=\"$pass1\""
+        eval "$var_name=\"\$pass1\""
         break
     done
 }
