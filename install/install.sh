@@ -1323,6 +1323,167 @@ is_container() {
     return 1
 }
 
+# Check if systemd is available and running
+has_systemd() {
+    # Check if systemd is PID 1
+    if [ -d /run/systemd/system ]; then
+        return 0
+    fi
+    # Alternative check
+    if command -v systemctl &>/dev/null && systemctl is-system-running &>/dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+# =============================================================================
+# Service Management Functions (handles systemd and non-systemd environments)
+# =============================================================================
+
+# Restart a service (works in both systemd and non-systemd environments)
+# Usage: service_restart "service_name"
+service_restart() {
+    local service="$1"
+
+    if has_systemd; then
+        sudo systemctl restart "$service" 2>/dev/null
+        return $?
+    else
+        # Non-systemd environment (WSL, container without systemd)
+        log_info "Non-systemd environment: attempting direct service restart for $service"
+
+        # Try service command first
+        if sudo service "$service" restart 2>/dev/null; then
+            return 0
+        fi
+
+        # Try init.d script
+        if [ -x "/etc/init.d/$service" ]; then
+            sudo /etc/init.d/"$service" restart 2>/dev/null
+            return $?
+        fi
+
+        # For PHP-FPM, try direct binary control
+        if [[ "$service" =~ php.*fpm ]]; then
+            local php_version="${service//[^0-9.]/}"
+            php_version="${php_version:0:3}"  # e.g., "8.4"
+
+            # Kill existing and restart
+            sudo pkill -9 -f "php-fpm.*${php_version}" 2>/dev/null || true
+            sleep 1
+
+            # Try to start PHP-FPM directly
+            local fpm_bin="/usr/sbin/php-fpm${php_version}"
+            if [ -x "$fpm_bin" ]; then
+                sudo "$fpm_bin" --daemonize 2>/dev/null
+                return $?
+            fi
+        fi
+
+        # For nginx, try direct control
+        if [[ "$service" =~ nginx ]]; then
+            sudo pkill -9 nginx 2>/dev/null || true
+            sleep 1
+            if [ -x "${FOS_DIR}/fospackv69/fos/nginx/sbin/nginx_fos" ]; then
+                sudo "${FOS_DIR}/fospackv69/fos/nginx/sbin/nginx_fos" 2>/dev/null
+                return $?
+            elif [ -x "/usr/sbin/nginx" ]; then
+                sudo /usr/sbin/nginx 2>/dev/null
+                return $?
+            fi
+        fi
+
+        log_warn "Could not restart $service in non-systemd environment"
+        return 0  # Don't fail - service may work differently in this environment
+    fi
+}
+
+# Enable a service to start on boot
+# Usage: service_enable "service_name"
+service_enable() {
+    local service="$1"
+
+    if has_systemd; then
+        sudo systemctl enable "$service" 2>/dev/null
+        return $?
+    else
+        log_info "Non-systemd environment: skipping enable for $service (no systemd)"
+        # In non-systemd environments, services are managed differently
+        # For WSL, services typically need to be started manually or via .bashrc/.profile
+        return 0
+    fi
+}
+
+# Stop a service
+# Usage: service_stop "service_name"
+service_stop() {
+    local service="$1"
+
+    if has_systemd; then
+        sudo systemctl stop "$service" 2>/dev/null
+        return $?
+    else
+        if sudo service "$service" stop 2>/dev/null; then
+            return 0
+        fi
+        if [ -x "/etc/init.d/$service" ]; then
+            sudo /etc/init.d/"$service" stop 2>/dev/null
+            return $?
+        fi
+        return 0
+    fi
+}
+
+# Start a service
+# Usage: service_start "service_name"
+service_start() {
+    local service="$1"
+
+    if has_systemd; then
+        sudo systemctl start "$service" 2>/dev/null
+        return $?
+    else
+        log_info "Non-systemd environment: attempting to start $service"
+        if sudo service "$service" start 2>/dev/null; then
+            return 0
+        fi
+        if [ -x "/etc/init.d/$service" ]; then
+            sudo /etc/init.d/"$service" start 2>/dev/null
+            return $?
+        fi
+        return 0
+    fi
+}
+
+# Check service status
+# Usage: service_status "service_name"
+service_status() {
+    local service="$1"
+
+    if has_systemd; then
+        sudo systemctl status "$service" 2>/dev/null
+        return $?
+    else
+        if sudo service "$service" status 2>/dev/null; then
+            return 0
+        fi
+        # Check if process is running
+        if pgrep -f "$service" &>/dev/null; then
+            log_info "$service is running (detected via process)"
+            return 0
+        fi
+        return 1
+    fi
+}
+
+# Reload systemd daemon (only if systemd is available)
+# Usage: systemd_reload
+systemd_reload() {
+    if has_systemd; then
+        sudo systemctl daemon-reload 2>/dev/null
+    fi
+}
+
 # Check if an IP address is a local/private address
 is_private_ip() {
     local ip="$1"
@@ -1671,23 +1832,50 @@ setup_debian_repositories() {
         if ! grep -q "contrib" /etc/apt/sources.list 2>/dev/null; then
             log_info "Adding contrib and non-free repositories..."
             sudo sed -i 's/main$/main contrib non-free non-free-firmware/g' /etc/apt/sources.list 2>/dev/null || true
+        else
+            log_info "contrib and non-free repositories already configured"
         fi
     fi
 
     # PHP Repository (Sury)
     log_info "Adding PHP repository (Sury)..."
-    if [ ! -f /etc/apt/sources.list.d/php-sury.list ]; then
+    if [ -f /etc/apt/sources.list.d/php-sury.list ] || [ -f /etc/apt/sources.list.d/php.list ]; then
+        log_info "PHP Sury repository already exists, skipping..."
+    else
+        # Determine supported codename for Sury PHP repository
+        # Supported: bookworm, bullseye, buster (Debian 10+)
+        local php_codename="${OS_CODENAME}"
+        case "${OS_CODENAME}" in
+            bookworm|bullseye|buster)
+                php_codename="${OS_CODENAME}"
+                ;;
+            trixie|forky|sid|*)
+                # Newer/unstable versions - fall back to bookworm (latest stable)
+                log_warn "Debian ${OS_CODENAME} may not be supported by Sury PHP repository"
+                log_info "Falling back to 'bookworm' (Debian 12) repository"
+                php_codename="bookworm"
+                ;;
+        esac
+
         sudo curl -sSL https://packages.sury.org/php/apt.gpg -o /etc/apt/trusted.gpg.d/php-sury.gpg 2>/dev/null || {
             # Alternative method using apt-key (deprecated but fallback)
-            curl -sSL https://packages.sury.org/php/apt.gpg | sudo apt-key add - 2>/dev/null || true
+            log_warn "GPG key download failed, trying apt-key method..."
+            curl -sSL https://packages.sury.org/php/apt.gpg | sudo apt-key add - 2>/dev/null || {
+                log_error "Failed to add PHP Sury GPG key"
+            }
         }
-        echo "deb https://packages.sury.org/php/ ${OS_CODENAME} main" | sudo tee /etc/apt/sources.list.d/php-sury.list
+        echo "deb https://packages.sury.org/php/ ${php_codename} main" | sudo tee /etc/apt/sources.list.d/php-sury.list
+        log_info "PHP Sury repository added for ${php_codename}"
     fi
 
     # MariaDB Repository
     log_info "Adding MariaDB repository..."
-    if [ ! -f /etc/apt/sources.list.d/mariadb.list ]; then
-        sudo curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc' 2>/dev/null || true
+    if [ -f /etc/apt/sources.list.d/mariadb.list ]; then
+        log_info "MariaDB repository already exists, skipping..."
+    else
+        sudo curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc' 2>/dev/null || {
+            log_warn "Failed to download MariaDB GPG key"
+        }
 
         # Debian codenames supported by MariaDB (ordered by release year, newest first)
         # sid=unstable, bookworm=2023 (Debian 12), bullseye=2021 (Debian 11), buster=2019 (Debian 10)
@@ -1708,6 +1896,7 @@ setup_debian_repositories() {
         esac
 
         echo "deb [arch=amd64,arm64 signed-by=/etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc] https://mirrors.xtom.com/mariadb/repo/${MARIADB_VERSION}/debian ${mariadb_codename} main" | sudo tee /etc/apt/sources.list.d/mariadb.list
+        log_info "MariaDB repository added for ${mariadb_codename}"
     fi
 
     # Update package lists
@@ -1719,24 +1908,59 @@ setup_ubuntu_repositories() {
     log_info "Setting up Ubuntu repositories for ${OS_CODENAME}..."
 
     # Ensure universe and multiverse are enabled
-    log_info "Enabling universe and multiverse repositories..."
-    sudo add-apt-repository -y universe 2>/dev/null || true
-    sudo add-apt-repository -y multiverse 2>/dev/null || true
+    log_info "Checking universe and multiverse repositories..."
+    if grep -rq "universe" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+        log_info "Universe repository already enabled"
+    else
+        log_info "Enabling universe repository..."
+        sudo add-apt-repository -y universe 2>/dev/null || true
+    fi
+
+    if grep -rq "multiverse" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+        log_info "Multiverse repository already enabled"
+    else
+        log_info "Enabling multiverse repository..."
+        sudo add-apt-repository -y multiverse 2>/dev/null || true
+    fi
 
     # PHP Repository (Ondrej PPA)
     log_info "Adding PHP repository (Ondrej PPA)..."
-    if ! ls /etc/apt/sources.list.d/*ondrej* 2>/dev/null | grep -q php; then
+    if ls /etc/apt/sources.list.d/*ondrej* 2>/dev/null | grep -q php || [ -f /etc/apt/sources.list.d/ondrej-php.list ]; then
+        log_info "Ondrej PHP repository already exists, skipping..."
+    else
+        # Determine supported codename for Ondrej PHP PPA
+        # Supported: noble (24.04), jammy (22.04), focal (20.04), bionic (18.04)
+        local php_codename="${OS_CODENAME}"
+        case "${OS_CODENAME}" in
+            noble|jammy|focal|bionic)
+                php_codename="${OS_CODENAME}"
+                ;;
+            oracular|plucky|*)
+                # Newer versions - fall back to noble (latest LTS)
+                log_warn "Ubuntu ${OS_CODENAME} may not be supported by Ondrej PHP PPA"
+                log_info "Falling back to 'noble' (Ubuntu 24.04 LTS) repository"
+                php_codename="noble"
+                ;;
+        esac
+
         sudo add-apt-repository -y ppa:ondrej/php 2>&1 | tee -a "$INSTALL_LOG" || {
-            log_warn "PPA add failed, trying manual method..."
-            # Manual fallback for older systems
-            sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 4F4EA0AAE5267A6C 2>/dev/null || true
-            echo "deb http://ppa.launchpad.net/ondrej/php/ubuntu ${OS_CODENAME} main" | sudo tee /etc/apt/sources.list.d/ondrej-php.list
+            log_warn "PPA add failed, trying manual method with fallback codename..."
+            # Manual fallback for unsupported systems
+            sudo mkdir -p /etc/apt/keyrings
+            sudo curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x4F4EA0AAE5267A6C" | sudo gpg --dearmor -o /etc/apt/keyrings/ondrej-php.gpg 2>/dev/null || {
+                # Ultimate fallback using apt-key (deprecated)
+                sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 4F4EA0AAE5267A6C 2>/dev/null || true
+            }
+            echo "deb [signed-by=/etc/apt/keyrings/ondrej-php.gpg] http://ppa.launchpad.net/ondrej/php/ubuntu ${php_codename} main" | sudo tee /etc/apt/sources.list.d/ondrej-php.list
         }
+        log_info "Ondrej PHP repository configured for ${php_codename}"
     fi
 
     # MariaDB Repository
     log_info "Adding MariaDB repository..."
-    if [ ! -f /etc/apt/sources.list.d/mariadb.list ]; then
+    if [ -f /etc/apt/sources.list.d/mariadb.list ]; then
+        log_info "MariaDB repository already exists, skipping..."
+    else
         # Determine supported Ubuntu codename for MariaDB repository
         local mariadb_codename
         case "${OS_CODENAME}" in
@@ -1747,13 +1971,16 @@ setup_ubuntu_repositories() {
             oracular|plucky|*)
                 # Newer Ubuntu versions not yet supported - fall back to noble (24.04 LTS)
                 log_warn "Ubuntu ${OS_CODENAME} not yet supported by MariaDB repository"
-                log_warn "Falling back to 'noble' (Ubuntu 24.04 LTS) repository"
+                log_info "Falling back to 'noble' (Ubuntu 24.04 LTS) repository"
                 mariadb_codename="noble"
                 ;;
         esac
 
-        sudo curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc' 2>/dev/null || true
+        sudo curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc' 2>/dev/null || {
+            log_warn "Failed to download MariaDB GPG key"
+        }
         echo "deb [arch=amd64,arm64] https://mirrors.xtom.com/mariadb/repo/${MARIADB_VERSION}/ubuntu ${mariadb_codename} main" | sudo tee /etc/apt/sources.list.d/mariadb.list
+        log_info "MariaDB repository added for ${mariadb_codename}"
     fi
 
     # Update package lists
@@ -2709,6 +2936,12 @@ if [ $RESUME_STEP -le 9 ]; then
     log_step "Step 9: Configuring System Users and Permissions"
     log_progress "Setting up user permissions"
 
+    # Detect environment type for service management
+    if ! has_systemd; then
+        log_warn "Non-systemd environment detected (WSL or container)"
+        log_info "Services will be managed using alternative methods"
+    fi
+
     # Create nginx user for system services (if needed for compatibility)
     if ! id "nginx" &>/dev/null; then
         sudo useradd -r -s /sbin/nologin nginx
@@ -2724,9 +2957,20 @@ if [ $RESUME_STEP -le 9 ]; then
         log_info "${USER} already has sudo configuration"
     fi
 
-    # Restart PHP-FPM
-    sudo systemctl restart php${PHP_VERSION}-fpm || handle_error 9 "Failed to restart PHP-FPM"
-    sudo systemctl enable php${PHP_VERSION}-fpm
+    # Restart PHP-FPM (using helper that handles non-systemd environments)
+    log_info "Configuring PHP-FPM service..."
+    if service_restart "php${PHP_VERSION}-fpm"; then
+        log_success "PHP-FPM restarted successfully"
+    else
+        log_warn "PHP-FPM restart returned non-zero, checking if running..."
+        # Check if PHP-FPM is actually running
+        if pgrep -f "php-fpm.*${PHP_VERSION}" &>/dev/null; then
+            log_info "PHP-FPM is running (detected via process)"
+        else
+            handle_error 9 "Failed to restart PHP-FPM"
+        fi
+    fi
+    service_enable "php${PHP_VERSION}-fpm"
 
     save_state 9
 else
@@ -2807,8 +3051,8 @@ MARIADB_ROOT_PATH_EOF
 
     # Start MariaDB
     log_info "Starting MariaDB service..."
-    sudo systemctl stop mariadb 2>/dev/null || true
-    sudo systemctl start mariadb || handle_error 10 "Failed to start MariaDB"
+    service_stop "mariadb"
+    service_start "mariadb" || handle_error 10 "Failed to start MariaDB"
 
     # Secure MariaDB installation using unix_socket authentication for root
     # This allows passwordless access via sudo (more secure than password auth)
@@ -2873,8 +3117,8 @@ default-character-set = utf8mb4
 # MariaDB specific settings
 MARIADB_EOF
 
-    sudo systemctl restart mariadb || handle_error 10 "Failed to restart MariaDB"
-    sudo systemctl enable mariadb
+    service_restart "mariadb" || handle_error 10 "Failed to restart MariaDB"
+    service_enable "mariadb"
 
     # Verify MariaDB is accessible
     log_info "Verifying MariaDB installation..."
@@ -3835,13 +4079,13 @@ REDIS_CONF_EOF
 
     # Restart Redis with new configuration
     log_info "Restarting Redis service..."
-    sudo systemctl stop redis-server 2>/dev/null || true
-    sudo systemctl start redis-server || {
+    service_stop "redis-server"
+    service_start "redis-server" || {
         log_warn "Redis failed to start with new config, trying default..."
         sudo cp /etc/redis/redis.conf.backup /etc/redis/redis.conf 2>/dev/null || true
-        sudo systemctl start redis-server || log_error "Redis failed to start"
+        service_start "redis-server" || log_error "Redis failed to start"
     }
-    sudo systemctl enable redis-server
+    service_enable "redis-server"
 
     # Verify Redis is running and accessible
     log_info "Verifying Redis installation..."
@@ -3961,13 +4205,13 @@ RestartSec=5s
 WantedBy=multi-user.target
 SERVICE_EOF
 
-        sudo systemctl daemon-reload
-        sudo systemctl enable fos-nginx 2>/dev/null || true
+        systemd_reload
+        service_enable "fos-nginx"
     else
         log_warn "Nginx binary not found, skipping service creation"
     fi
 
-    sudo systemctl enable php${PHP_VERSION}-fpm 2>/dev/null || true
+    service_enable "php${PHP_VERSION}-fpm"
 
     log_info "Configuring system kernel parameters for high concurrency..."
     sudo tee /etc/sysctl.d/99-fos-streaming.conf > /dev/null <<'SYSCTL_EOF'
