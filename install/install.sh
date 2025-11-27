@@ -6,6 +6,7 @@
 # previous installation scripts into a single, comprehensive installer.
 #
 # Features:
+#   - Remote installation: Run directly from URL, clones repo automatically
 #   - Bootstrap system: Handles fresh OS installations (installs sudo if missing)
 #   - Robust package installation: One-by-one with error recovery
 #   - Comprehensive logging: All steps logged to install/install.log
@@ -35,21 +36,36 @@
 #   - Loopback: localhost, 127.0.0.1
 #
 # Repository: https://github.com/CristianCasapu/FOS-Streaming-Reborn
-# Date: 2025-11-26
-# Version: 70.0.2
+# Date: 2025-11-27
+# Version: 70.0.3
 # Supported OS: Debian 10/11/12, Ubuntu 20.04/22.04/24.04 LTS (any minor version)
 # Run as: Normal user OR root (script will adapt)
 #
-# Usage:
+# Usage (Remote Installation - Recommended):
+#   curl -fsSL https://raw.githubusercontent.com/CristianCasapu/FOS-Streaming-Reborn/develop/install/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/CristianCasapu/FOS-Streaming-Reborn/develop/install/install.sh | bash -s -- master
+#
+# Usage (Local Installation):
 #   chmod +x install/install.sh
 #   ./install/install.sh
 #
-# Legacy alias also works:
-#   ./install/debian12-installer
+# Arguments:
+#   $1 - Branch to install (default: develop). Options: develop, master
 ################################################################################
 
 # Don't exit on error - we handle errors gracefully
 set +e
+
+# =============================================================================
+# Early Locale Fix - Prevent perl/apt warnings on minimal systems
+# =============================================================================
+# Set safe locale defaults immediately to avoid perl warnings during bootstrap
+# This is a temporary fix; proper locale generation happens in bootstrap phase
+if [ -z "$LC_ALL" ] || ! locale 2>/dev/null | grep -q "LC_ALL"; then
+    export LANG="${LANG:-C.UTF-8}"
+    export LC_ALL="${LC_ALL:-C.UTF-8}"
+    export LANGUAGE="${LANGUAGE:-en_US:en}"
+fi
 
 # Colors for output
 RED='\033[0;31m'
@@ -59,6 +75,178 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
+
+# =============================================================================
+# Remote Installation Handler
+# =============================================================================
+# Detect if running from curl/wget pipe (no BASH_SOURCE means piped)
+# or if FOS_DIR doesn't exist (script downloaded but repo not cloned)
+
+REPO_URL="https://github.com/CristianCasapu/FOS-Streaming-Reborn.git"
+INSTALL_BRANCH="${1:-develop}"  # Default to develop branch
+PROJECT_NAME="FOS-Streaming"
+
+# Function to handle remote installation
+handle_remote_install() {
+    echo -e "${CYAN}================================================================${NC}"
+    echo -e "${CYAN}  FOS-Streaming Remote Installation${NC}"
+    echo -e "${CYAN}================================================================${NC}"
+    echo ""
+    echo -e "  Branch: ${GREEN}${INSTALL_BRANCH}${NC}"
+    echo ""
+
+    # Determine target user and home directory
+    local target_user=""
+    local target_home=""
+    local need_user_creation=false
+
+    if [ "$EUID" -eq 0 ]; then
+        # Running as root
+        if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+            target_user="$SUDO_USER"
+            target_home=$(eval echo ~$SUDO_USER)
+        else
+            # Check for existing non-root user
+            target_user=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 && $7 !~ /nologin|false/ {print $1; exit}')
+            if [ -n "$target_user" ]; then
+                target_home=$(eval echo ~$target_user)
+            else
+                # No user exists - will create one during bootstrap
+                # Clone to /opt temporarily, installer will move it later
+                need_user_creation=true
+                target_home="/opt"
+                echo -e "${YELLOW}[INFO]${NC} No regular user found. User will be created during installation."
+            fi
+        fi
+    else
+        target_user="$(whoami)"
+        target_home="$HOME"
+    fi
+
+    local fos_dir="${target_home}/${PROJECT_NAME}"
+
+    echo -e "  Target directory: ${CYAN}${fos_dir}${NC}"
+    if [ "$need_user_creation" = true ]; then
+        echo -e "  ${YELLOW}(Will be moved to user's home after user creation)${NC}"
+    fi
+    echo ""
+
+    # Check if git is available, install if not
+    if ! command -v git &>/dev/null; then
+        echo -e "${YELLOW}[INFO]${NC} Git not found, installing..."
+
+        # Update package lists
+        if [ "$EUID" -eq 0 ]; then
+            apt-get update -y >/dev/null 2>&1 || true
+            apt-get install -y git >/dev/null 2>&1 || {
+                echo -e "${RED}[ERROR]${NC} Failed to install git"
+                exit 1
+            }
+        else
+            sudo apt-get update -y >/dev/null 2>&1 || true
+            sudo apt-get install -y git >/dev/null 2>&1 || {
+                echo -e "${RED}[ERROR]${NC} Failed to install git"
+                exit 1
+            }
+        fi
+        echo -e "${GREEN}[SUCCESS]${NC} Git installed"
+    fi
+
+    # Check if directory already exists
+    if [ -d "$fos_dir" ]; then
+        echo -e "${YELLOW}[WARN]${NC} Directory ${fos_dir} already exists"
+        echo -e "  Checking if it's a valid FOS-Streaming installation..."
+
+        if [ -f "${fos_dir}/install/install.sh" ]; then
+            echo -e "${GREEN}[INFO]${NC} Found existing installation, updating..."
+            cd "$fos_dir"
+
+            # Fetch and checkout the requested branch
+            git fetch origin >/dev/null 2>&1 || true
+            git checkout "$INSTALL_BRANCH" >/dev/null 2>&1 || {
+                echo -e "${RED}[ERROR]${NC} Failed to checkout branch ${INSTALL_BRANCH}"
+                exit 1
+            }
+            git pull origin "$INSTALL_BRANCH" >/dev/null 2>&1 || true
+
+            echo -e "${GREEN}[SUCCESS]${NC} Repository updated"
+        else
+            echo -e "${RED}[ERROR]${NC} Directory exists but is not a valid FOS-Streaming installation"
+            echo -e "  Please remove or rename: ${fos_dir}"
+            exit 1
+        fi
+    else
+        # Clone the repository
+        echo -e "${GREEN}[INFO]${NC} Cloning repository..."
+
+        # Create parent directory if needed and set permissions
+        if [ "$EUID" -eq 0 ] && [ -n "$target_user" ]; then
+            # Running as root, clone then chown
+            git clone --branch "$INSTALL_BRANCH" --single-branch "$REPO_URL" "$fos_dir" || {
+                echo -e "${RED}[ERROR]${NC} Failed to clone repository"
+                exit 1
+            }
+            chown -R "${target_user}:${target_user}" "$fos_dir"
+        else
+            git clone --branch "$INSTALL_BRANCH" --single-branch "$REPO_URL" "$fos_dir" || {
+                echo -e "${RED}[ERROR]${NC} Failed to clone repository"
+                exit 1
+            }
+        fi
+
+        echo -e "${GREEN}[SUCCESS]${NC} Repository cloned to ${fos_dir}"
+    fi
+
+    # Now execute the local install script
+    echo ""
+    echo -e "${GREEN}[INFO]${NC} Starting installation from cloned repository..."
+    echo ""
+
+    # Change to the project directory and run the local installer
+    cd "$fos_dir"
+
+    # Execute the local install script
+    if [ "$EUID" -eq 0 ]; then
+        # Pass the branch as argument and mark as local install
+        exec bash "${fos_dir}/install/install.sh" --local "$INSTALL_BRANCH"
+    else
+        exec bash "${fos_dir}/install/install.sh" --local "$INSTALL_BRANCH"
+    fi
+}
+
+# Check if this is a remote installation (piped from curl/wget)
+# BASH_SOURCE is empty or different when piped
+IS_REMOTE_INSTALL=false
+
+if [ -z "${BASH_SOURCE[0]}" ] || [ "${BASH_SOURCE[0]}" = "bash" ]; then
+    # Script is being piped (curl | bash)
+    IS_REMOTE_INSTALL=true
+elif [ ! -f "${BASH_SOURCE[0]}" ]; then
+    # Script file doesn't exist locally
+    IS_REMOTE_INSTALL=true
+else
+    # Check if we're in a valid FOS directory structure
+    SCRIPT_DIR_CHECK="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+    FOS_DIR_CHECK="$(dirname "$SCRIPT_DIR_CHECK" 2>/dev/null)"
+
+    if [ ! -f "${FOS_DIR_CHECK}/config.php" ] && [ ! -f "${FOS_DIR_CHECK}/composer.json" ]; then
+        # Not in a valid FOS directory, treat as remote install
+        IS_REMOTE_INSTALL=true
+    fi
+fi
+
+# Handle --local flag (set by remote installer after cloning)
+if [ "$1" = "--local" ]; then
+    IS_REMOTE_INSTALL=false
+    INSTALL_BRANCH="${2:-develop}"
+    shift 2 2>/dev/null || shift 1 2>/dev/null || true
+fi
+
+# If remote install, clone repo and re-execute
+if [ "$IS_REMOTE_INSTALL" = true ]; then
+    handle_remote_install
+    exit 0
+fi
 
 # =============================================================================
 # Dynamic Configuration - Detect from environment
@@ -526,6 +714,56 @@ run_bootstrap() {
     log_bootstrap "Starting bootstrap phase..."
 
     # -------------------------------------------------------------------------
+    # Step 0: Fix locale settings (common issue on fresh minimal installs)
+    # -------------------------------------------------------------------------
+    log_bootstrap "Checking locale settings..."
+
+    # Check if locale is broken (common on minimal/container installs)
+    if ! locale 2>/dev/null | grep -q "LC_ALL" || locale 2>&1 | grep -qi "cannot set"; then
+        log_bootstrap "Fixing locale settings..."
+
+        # Set temporary locale to avoid perl warnings during bootstrap
+        export LANG="C.UTF-8"
+        export LC_ALL="C.UTF-8"
+        export LANGUAGE="en_US:en"
+
+        # Install locales package if we can
+        if [ "$EUID" -eq 0 ]; then
+            # Try to install locales package
+            apt-get update -y >/dev/null 2>&1 || true
+            apt-get install -y locales >/dev/null 2>&1 || true
+
+            # Generate en_US.UTF-8 locale if locales is installed
+            if command -v locale-gen &>/dev/null; then
+                # Ensure en_US.UTF-8 is in locale.gen
+                if [ -f /etc/locale.gen ]; then
+                    sed -i 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen 2>/dev/null || true
+                fi
+                locale-gen en_US.UTF-8 >/dev/null 2>&1 || true
+                update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 >/dev/null 2>&1 || true
+            fi
+
+            # Also try dpkg-reconfigure for Debian systems
+            if command -v dpkg-reconfigure &>/dev/null; then
+                echo "en_US.UTF-8 UTF-8" > /etc/locale.gen 2>/dev/null || true
+                dpkg-reconfigure --frontend=noninteractive locales >/dev/null 2>&1 || true
+            fi
+        else
+            # Not root, just set environment variables
+            log_bootstrap "Not root, setting locale environment variables only"
+        fi
+
+        # Set proper locale for this session
+        export LANG="en_US.UTF-8"
+        export LC_ALL="en_US.UTF-8"
+        export LANGUAGE="en_US:en"
+
+        log_success "Locale configured"
+    else
+        log_bootstrap "Locale settings OK"
+    fi
+
+    # -------------------------------------------------------------------------
     # Step 1: Install lsb-release if not available
     # -------------------------------------------------------------------------
     if ! command_exists lsb_release; then
@@ -596,6 +834,26 @@ run_bootstrap() {
                 # Create the user
                 if create_system_user "$new_username"; then
                     log_success "User '$USER' created successfully"
+
+                    # Check if project was cloned to /opt (remote install with no user)
+                    # and move it to the new user's home directory
+                    if [ -d "/opt/${PROJECT_NAME}" ] && [ ! -d "${HOME_DIR}/${PROJECT_NAME}" ]; then
+                        log_bootstrap "Moving project from /opt to user's home directory..."
+                        mv "/opt/${PROJECT_NAME}" "${HOME_DIR}/${PROJECT_NAME}"
+                        chown -R "${USER}:${USER}" "${HOME_DIR}/${PROJECT_NAME}"
+
+                        # Update FOS_DIR and SCRIPT_DIR to new location
+                        FOS_DIR="${HOME_DIR}/${PROJECT_NAME}"
+                        SCRIPT_DIR="${FOS_DIR}/install"
+                        INSTALL_LOG="${SCRIPT_DIR}/install.log"
+                        PORTS_CONFIG="${FOS_DIR}/config/ports.php"
+                        CERTS_DIR="${FOS_DIR}/fospackv69/fos/nginx/conf/certs"
+                        STATE_FILE="${FOS_DIR}/.fos-install-state"
+                        STATE_LOCK="${FOS_DIR}/.fos-install-lock"
+
+                        log_success "Project moved to ${FOS_DIR}"
+                    fi
+
                     echo ""
                     echo -e "${GREEN}================================================================${NC}"
                     echo -e "${GREEN}  User Created Successfully${NC}"
@@ -604,6 +862,7 @@ run_bootstrap() {
                     echo -e "  Username: ${CYAN}${USER}${NC}"
                     echo -e "  Password: ${YELLOW}(will be shown at the end of installation)${NC}"
                     echo -e "  Home:     ${CYAN}${HOME_DIR}${NC}"
+                    echo -e "  Project:  ${CYAN}${FOS_DIR}${NC}"
                     echo ""
                     echo -e "${YELLOW}  IMPORTANT: Save the password when shown at the end!${NC}"
                     echo ""
@@ -673,6 +932,8 @@ run_bootstrap() {
         "tar"
         "gzip"
         "bzip2"
+        "whoami"
+        "whereami"
         "coreutils"
         "lsb-release"
         "ca-certificates"
