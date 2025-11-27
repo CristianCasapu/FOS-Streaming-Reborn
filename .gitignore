@@ -24,6 +24,10 @@
 .env.backup
 .env.production
 
+# Installation Credentials (NEVER commit!)
+install/CREDENTIALS.md
+CREDENTIALS.md
+
 # Composer Dependencies
 /vendor/
 # composer.lock - TRACKED for consistent dependencies across environments

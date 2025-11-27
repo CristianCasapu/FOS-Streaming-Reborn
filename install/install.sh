@@ -67,10 +67,12 @@ PHP_VERSION="8.4"
 MARIADB_VERSION="11.4"
 NODE_VERSION="24"  # LTS version
 
-# Detect current user (may be root during bootstrap)
-ORIGINAL_USER="${SUDO_USER:-$(whoami)}"
-FOS_USER=""
-FOS_USER_HOME=""
+# Directory hierarchy: HOME_DIR > FOS_DIR > SCRIPT_DIR
+# These are populated during bootstrap
+USER=""
+HOME_DIR=""
+# Retrieve created user password from env (passed when switching from root to user)
+CREATED_USER_PASSWORD="${FOS_CREATED_USER_PASSWORD:-}"
 
 # Detect project directory (where this script is located)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -245,6 +247,276 @@ bootstrap_update_packages() {
     return ${PIPESTATUS[0]}
 }
 
+# Generate a strong random password
+generate_password() {
+    local length="${1:-24}"
+    # Use /dev/urandom for cryptographically secure random data
+    # Include uppercase, lowercase, digits, and safe special chars
+    tr -dc 'A-Za-z0-9!@#$%^&*()_+=' < /dev/urandom | head -c "$length"
+}
+
+# Create a new system user with generated password
+# Returns: 0 on success, 1 on failure
+# Sets: USER, HOME_DIR, CREATED_USER_PASSWORD
+create_system_user() {
+    local username="$1"
+
+    # Validate username
+    if [ -z "$username" ]; then
+        log_error "Username cannot be empty"
+        return 1
+    fi
+
+    # Check if username is valid (alphanumeric, lowercase, starts with letter)
+    if ! echo "$username" | grep -qE '^[a-z][a-z0-9_-]{0,31}$'; then
+        log_error "Invalid username. Must start with a letter, contain only lowercase letters, numbers, underscores, and hyphens (max 32 chars)"
+        return 1
+    fi
+
+    # Check if user already exists
+    if id "$username" &>/dev/null; then
+        log_error "User '$username' already exists"
+        return 1
+    fi
+
+    # Generate strong password
+    CREATED_USER_PASSWORD=$(generate_password 24)
+
+    log_bootstrap "Creating user '$username'..."
+
+    # Create user with home directory
+    useradd -m -s /bin/bash "$username" || {
+        log_error "Failed to create user '$username'"
+        return 1
+    }
+
+    # Set password
+    echo "${username}:${CREATED_USER_PASSWORD}" | chpasswd || {
+        log_error "Failed to set password for '$username'"
+        userdel -r "$username" 2>/dev/null
+        return 1
+    }
+
+    # Set global variables
+    USER="$username"
+    HOME_DIR="/home/$username"
+
+    log_success "User '$username' created with home directory: $HOME_DIR"
+
+    # Save password securely for later display (root-only readable)
+    echo "$CREATED_USER_PASSWORD" > "/root/.fos_user_password_${username}"
+    chmod 600 "/root/.fos_user_password_${username}"
+
+    return 0
+}
+
+# Prompt user for username input
+prompt_for_username() {
+    local default_user="fosadmin"
+    local username=""
+
+    echo ""
+    echo -e "${CYAN}================================================================${NC}"
+    echo -e "${CYAN}  User Creation Required${NC}"
+    echo -e "${CYAN}================================================================${NC}"
+    echo ""
+    echo "No regular user found on this system."
+    echo "FOS-Streaming needs a non-root user to run securely."
+    echo ""
+    echo -e "Enter username for FOS-Streaming (default: ${GREEN}${default_user}${NC}): "
+    read -r username
+
+    # Use default if empty
+    if [ -z "$username" ]; then
+        username="$default_user"
+    fi
+
+    echo "$username"
+}
+
+# Generate installation credentials report as markdown file
+generate_credentials_report() {
+    local report_file="${SCRIPT_DIR}/CREDENTIALS.md"
+    local db_password=""
+    local redis_password=""
+    local install_date=$(date '+%Y-%m-%d %H:%M:%S')
+
+    # Read passwords from secure files
+    if [ -f /root/MARIADB_FOS_PASSWORD ]; then
+        db_password=$(sudo cat /root/MARIADB_FOS_PASSWORD 2>/dev/null || echo "See /root/MARIADB_FOS_PASSWORD")
+    else
+        db_password="${SQL_PASSWD:-Not available}"
+    fi
+
+    if [ -f /root/REDIS_PASSWORD ]; then
+        redis_password=$(sudo cat /root/REDIS_PASSWORD 2>/dev/null || echo "See /root/REDIS_PASSWORD")
+    else
+        redis_password="${REDIS_PASSWORD:-Not available}"
+    fi
+
+    cat > "$report_file" <<CREDENTIALS_EOF
+# FOS-Streaming Installation Credentials
+
+> **⚠️ SECURITY WARNING**: This file contains sensitive credentials.
+> Store securely and delete after transferring to a password manager.
+> Generated: ${install_date}
+
+---
+
+## Installation Details
+
+| Setting | Value |
+|---------|-------|
+| Operating System | ${OS_TYPE^} ${OS_VERSION} (${OS_CODENAME}) |
+| Installation User | ${USER} |
+| User Home | ${HOME_DIR} |
+| Project Directory | ${FOS_DIR} |
+| Network Environment | ${NETWORK_ENV:-detected} |
+| Public IP | ${PUBLIC_IP:-N/A} |
+| Domain | ${DOMAIN_NAME:-N/A} |
+
+---
+
+## Web Panel Access
+
+| Setting | Value |
+|---------|-------|
+| URL | ${ADMIN_URL:-https://${DOMAIN_NAME}:${WEB_PORT}/admin} |
+| Default Username | \`admin\` |
+| Default Password | \`admin\` |
+
+> **🔐 Change the default admin password immediately after first login!**
+
+---
+
+## System User Credentials
+CREDENTIALS_EOF
+
+    # Add system user section if a new user was created
+    if [ -n "$CREATED_USER_PASSWORD" ]; then
+        cat >> "$report_file" <<SYSUSER_EOF
+
+A new system user was created during installation:
+
+| Setting | Value |
+|---------|-------|
+| Username | \`${USER}\` |
+| Password | \`${CREATED_USER_PASSWORD}\` |
+| Home Directory | ${HOME_DIR} |
+
+**SSH Access:**
+\`\`\`bash
+ssh ${USER}@${PUBLIC_IP:-<server-ip>}
+\`\`\`
+
+SYSUSER_EOF
+    else
+        cat >> "$report_file" <<EXISTINGUSER_EOF
+
+Using existing system user: \`${USER}\`
+
+EXISTINGUSER_EOF
+    fi
+
+    cat >> "$report_file" <<DB_EOF
+---
+
+## Database Credentials (MariaDB)
+
+| Setting | Value |
+|---------|-------|
+| Host | \`localhost\` |
+| Database | \`fos_streaming\` |
+| Username | \`fos\` |
+| Password | \`${db_password}\` |
+
+**Root Access** (uses unix_socket authentication):
+\`\`\`bash
+sudo mariadb
+\`\`\`
+
+**Application User Access:**
+\`\`\`bash
+mariadb -u fos -p'${db_password}' fos_streaming
+\`\`\`
+
+---
+
+## Redis Credentials
+
+| Setting | Value |
+|---------|-------|
+| Host | \`127.0.0.1\` |
+| Port | \`6379\` |
+| Password | \`${redis_password}\` |
+
+**Test Connection:**
+\`\`\`bash
+redis-cli -a '${redis_password}' ping
+\`\`\`
+
+---
+
+## Service Ports
+
+| Service | Port |
+|---------|------|
+| Web Panel (HTTPS) | ${WEB_PORT} |
+| Streaming | ${STREAM_PORT} |
+| RTMP | ${RTMP_PORT} |
+
+---
+
+## Configuration Files
+
+| File | Purpose |
+|------|---------|
+| \`${FOS_DIR}/.env\` | Environment configuration (contains all credentials) |
+| \`${FOS_DIR}/config/ports.php\` | Port configuration |
+| \`/root/MARIADB_FOS_PASSWORD\` | Database password backup |
+| \`/root/REDIS_PASSWORD\` | Redis password backup |
+
+---
+
+## Service Management
+
+\`\`\`bash
+# Core Services
+systemctl status fos-nginx
+systemctl status php${PHP_VERSION}-fpm
+systemctl status mariadb
+systemctl status redis-server
+
+# PM2 Background Workers
+npm run pm2:status
+npm run pm2:logs
+npm run pm2:restart
+\`\`\`
+
+---
+
+## Post-Installation Checklist
+
+- [ ] Access web panel and verify it loads
+- [ ] Change default admin password (admin/admin)
+- [ ] Verify 'Web IP' setting is correct
+- [ ] Configure your first stream
+- [ ] Set up SSL certificate (Let's Encrypt or Cloudflare)
+- [ ] **Delete this file after saving credentials securely**
+
+---
+
+*Generated by FOS-Streaming Installer v70*
+DB_EOF
+
+    # Set secure permissions (readable only by owner)
+    chmod 600 "$report_file"
+    chown ${USER}:${USER} "$report_file" 2>/dev/null || true
+
+    log_success "Credentials report saved to: ${report_file}"
+    echo "$report_file"
+}
+
 # Bootstrap: Ensure essential tools are available
 run_bootstrap() {
     log_step "Bootstrap Phase: Ensuring Essential Prerequisites"
@@ -299,50 +571,74 @@ run_bootstrap() {
     fi
 
     # -------------------------------------------------------------------------
-    # Step 3: Determine the installation user
+    # Step 3: Determine or create the installation user
     # -------------------------------------------------------------------------
     if [ "$EUID" -eq 0 ]; then
         # Running as root - need to determine target user
         if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
-            FOS_USER="$SUDO_USER"
+            USER="$SUDO_USER"
+            HOME_DIR="$(eval echo ~$USER)"
         else
             # Check if there's a non-root user in the system
             local potential_user=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 && $7 !~ /nologin|false/ {print $1; exit}')
             if [ -n "$potential_user" ]; then
                 log_warn "Running as root. Will set up for user: $potential_user"
-                FOS_USER="$potential_user"
+                USER="$potential_user"
+                HOME_DIR="$(eval echo ~$USER)"
             else
-                log_error "Running as root with no regular user detected."
-                log_info "Please create a user first and run this script as that user."
-                log_info "  adduser myuser"
-                log_info "  su - myuser"
-                log_info "  ./install/install.sh"
-                exit 1
+                # No regular user exists - create one
+                log_bootstrap "No regular user found on system. Creating one..."
+
+                # Prompt for username
+                local new_username
+                new_username=$(prompt_for_username)
+
+                # Create the user
+                if create_system_user "$new_username"; then
+                    log_success "User '$USER' created successfully"
+                    echo ""
+                    echo -e "${GREEN}================================================================${NC}"
+                    echo -e "${GREEN}  User Created Successfully${NC}"
+                    echo -e "${GREEN}================================================================${NC}"
+                    echo ""
+                    echo -e "  Username: ${CYAN}${USER}${NC}"
+                    echo -e "  Password: ${YELLOW}(will be shown at the end of installation)${NC}"
+                    echo -e "  Home:     ${CYAN}${HOME_DIR}${NC}"
+                    echo ""
+                    echo -e "${YELLOW}  IMPORTANT: Save the password when shown at the end!${NC}"
+                    echo ""
+                    echo -e "${GREEN}================================================================${NC}"
+                    echo ""
+                    sleep 3
+                else
+                    log_error "Failed to create user. Cannot continue."
+                    exit 1
+                fi
             fi
         fi
     else
-        FOS_USER="$(whoami)"
+        USER="$(whoami)"
+        HOME_DIR="$(eval echo ~$USER)"
     fi
 
-    FOS_USER_HOME="$(eval echo ~$FOS_USER)"
-    log_bootstrap "Installation user: $FOS_USER (home: $FOS_USER_HOME)"
+    log_bootstrap "Installation user: $USER (home: $HOME_DIR)"
 
     # -------------------------------------------------------------------------
     # Step 4: Set up sudoers for the installation user (EARLY - before anything else)
     # -------------------------------------------------------------------------
-    log_bootstrap "Configuring sudo access for ${FOS_USER}..."
+    log_bootstrap "Configuring sudo access for ${USER}..."
 
-    local sudoers_file="/etc/sudoers.d/${FOS_USER}"
-    local sudoers_content="${FOS_USER} ALL=(ALL) NOPASSWD: ALL"
+    local sudoers_file="/etc/sudoers.d/${USER}"
+    local sudoers_content="${USER} ALL=(ALL) NOPASSWD: ALL"
 
     if [ "$EUID" -eq 0 ]; then
         # Running as root
         if [ ! -f "$sudoers_file" ] || ! grep -q "NOPASSWD: ALL" "$sudoers_file" 2>/dev/null; then
             echo "$sudoers_content" > "$sudoers_file"
             chmod 0440 "$sudoers_file"
-            log_success "${FOS_USER} added to sudoers with NOPASSWD"
+            log_success "${USER} added to sudoers with NOPASSWD"
         else
-            log_bootstrap "${FOS_USER} already has sudo NOPASSWD access"
+            log_bootstrap "${USER} already has sudo NOPASSWD access"
         fi
     else
         # Running as user - check if we already have sudo access
@@ -351,13 +647,13 @@ run_bootstrap() {
             if [ ! -f "$sudoers_file" ]; then
                 echo "$sudoers_content" | sudo tee "$sudoers_file" > /dev/null
                 sudo chmod 0440 "$sudoers_file"
-                log_success "${FOS_USER} added to sudoers with NOPASSWD"
+                log_success "${USER} added to sudoers with NOPASSWD"
             else
-                log_bootstrap "${FOS_USER} already has sudo configuration"
+                log_bootstrap "${USER} already has sudo configuration"
             fi
         else
             log_error "Cannot configure sudoers - no sudo access"
-            log_error "Please run: su -c 'echo \"${FOS_USER} ALL=(ALL) NOPASSWD: ALL\" > /etc/sudoers.d/${FOS_USER}'"
+            log_error "Please run: su -c 'echo \"${USER} ALL=(ALL) NOPASSWD: ALL\" > /etc/sudoers.d/${USER}'"
             exit 1
         fi
     fi
@@ -371,6 +667,14 @@ run_bootstrap() {
         "curl"
         "wget"
         "gnupg"
+        "git"
+        "zip"
+        "unzip"
+        "tar"
+        "gzip"
+        "bzip2"
+        "coreutils"
+        "lsb-release"
         "ca-certificates"
         "apt-transport-https"
         "software-properties-common"
@@ -392,12 +696,17 @@ run_bootstrap() {
     # -------------------------------------------------------------------------
     # Step 6: If running as root, switch to target user for remaining installation
     # -------------------------------------------------------------------------
-    if [ "$EUID" -eq 0 ] && [ "$FOS_USER" != "root" ]; then
-        log_bootstrap "Switching to user ${FOS_USER} for remaining installation..."
+    if [ "$EUID" -eq 0 ] && [ "$USER" != "root" ]; then
+        log_bootstrap "Switching to user ${USER} for remaining installation..."
 
         # Re-execute the script as the target user
+        # Pass the created user password via environment variable if set
         cd "${FOS_DIR}"
-        exec sudo -u "$FOS_USER" -H bash "${SCRIPT_DIR}/install.sh" "$@"
+        if [ -n "$CREATED_USER_PASSWORD" ]; then
+            exec sudo -u "$USER" -H FOS_CREATED_USER_PASSWORD="$CREATED_USER_PASSWORD" bash "${SCRIPT_DIR}/install.sh" "$@"
+        else
+            exec sudo -u "$USER" -H bash "${SCRIPT_DIR}/install.sh" "$@"
+        fi
         exit 0
     fi
 
@@ -1067,7 +1376,7 @@ setup_ubuntu_repositories() {
 install_nvm_nodejs() {
     log_step "Installing NVM and Node.js ${NODE_VERSION}"
 
-    export NVM_DIR="${FOS_USER_HOME}/.nvm"
+    export NVM_DIR="${HOME_DIR}/.nvm"
 
     # Install NVM
     log_info "Installing NVM (Node Version Manager)..."
@@ -1084,12 +1393,12 @@ install_nvm_nodejs() {
 
     # Add NVM to shell profile if not already present
     local shell_profile=""
-    if [ -f "${FOS_USER_HOME}/.bashrc" ]; then
-        shell_profile="${FOS_USER_HOME}/.bashrc"
-    elif [ -f "${FOS_USER_HOME}/.bash_profile" ]; then
-        shell_profile="${FOS_USER_HOME}/.bash_profile"
-    elif [ -f "${FOS_USER_HOME}/.profile" ]; then
-        shell_profile="${FOS_USER_HOME}/.profile"
+    if [ -f "${HOME_DIR}/.bashrc" ]; then
+        shell_profile="${HOME_DIR}/.bashrc"
+    elif [ -f "${HOME_DIR}/.bash_profile" ]; then
+        shell_profile="${HOME_DIR}/.bash_profile"
+    elif [ -f "${HOME_DIR}/.profile" ]; then
+        shell_profile="${HOME_DIR}/.profile"
     fi
 
     if [ -n "$shell_profile" ]; then
@@ -1231,18 +1540,18 @@ run_bootstrap
 
 # After bootstrap, verify we're running as the correct user
 if [ "$EUID" -eq 0 ]; then
-    log_error "After bootstrap, script should be running as ${FOS_USER}, not root"
+    log_error "After bootstrap, script should be running as ${USER}, not root"
     exit 1
 fi
 
-# Verify FOS_USER is set correctly
-if [ -z "$FOS_USER" ]; then
-    FOS_USER="$(whoami)"
-    FOS_USER_HOME="$(eval echo ~$FOS_USER)"
+# Verify USER is set correctly
+if [ -z "$USER" ]; then
+    USER="$(whoami)"
+    HOME_DIR="$(eval echo ~$USER)"
 fi
 
 # Verify sudo access
-log_info "Verifying sudo access for ${FOS_USER}..."
+log_info "Verifying sudo access for ${USER}..."
 while ! sudo -v; do
     log_error "Failed to obtain sudo privileges. Please try again."
     if ! read_confirm "Retry sudo authentication?"; then
@@ -1360,8 +1669,8 @@ log_info "PHP Version: ${PHP_VERSION}"
 log_info "MariaDB Version: ${MARIADB_VERSION}"
 log_info "Node.js Version: ${NODE_VERSION} LTS"
 log_info "Project Directory: ${FOS_DIR}"
-log_info "Running as user: ${FOS_USER}"
-log_info "User home: ${FOS_USER_HOME}"
+log_info "Running as user: ${USER}"
+log_info "User home: ${HOME_DIR}"
 log_info "Installation log: ${INSTALL_LOG}"
 echo ""
 
@@ -1925,7 +2234,7 @@ if [ $RESUME_STEP -le 7 ]; then
 else
     log_info "Skipping Step 7 (already completed)"
     # Still need to load NVM for subsequent steps
-    export NVM_DIR="${FOS_USER_HOME}/.nvm"
+    export NVM_DIR="${HOME_DIR}/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 fi
 
@@ -1944,11 +2253,11 @@ if [ $RESUME_STEP -le 8 ]; then
     log_info "Configuring PHP-FPM pool..."
     sudo tee /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf > /dev/null <<EOF
 [php84]
-user = ${FOS_USER}
-group = ${FOS_USER}
+user = ${USER}
+group = ${USER}
 listen = 127.0.0.1:9002
-listen.owner = ${FOS_USER}
-listen.group = ${FOS_USER}
+listen.owner = ${USER}
+listen.group = ${USER}
 pm = ondemand
 pm.max_children = 300
 pm.start_servers = 10
@@ -2015,12 +2324,12 @@ if [ $RESUME_STEP -le 9 ]; then
     fi
 
     # Sudoers already configured in bootstrap, verify it's still there
-    if [ ! -f "/etc/sudoers.d/${FOS_USER}" ]; then
-        echo "${FOS_USER} ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/${FOS_USER} > /dev/null
-        sudo chmod 0440 /etc/sudoers.d/${FOS_USER}
-        log_info "${FOS_USER} added to sudoers with NOPASSWD"
+    if [ ! -f "/etc/sudoers.d/${USER}" ]; then
+        echo "${USER} ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/${USER} > /dev/null
+        sudo chmod 0440 /etc/sudoers.d/${USER}
+        log_info "${USER} added to sudoers with NOPASSWD"
     else
-        log_info "${FOS_USER} already has sudo configuration"
+        log_info "${USER} already has sudo configuration"
     fi
 
     # Restart PHP-FPM
@@ -2062,9 +2371,9 @@ if [ $RESUME_STEP -le 10 ]; then
     fi
 
     # Add to current user's profile if not already present
-    if [ -f "${FOS_USER_HOME}/.bashrc" ]; then
-        if ! grep -q "MARIADB_BIN" "${FOS_USER_HOME}/.bashrc" 2>/dev/null; then
-            cat >> "${FOS_USER_HOME}/.bashrc" <<'MARIADB_PATH_EOF'
+    if [ -f "${HOME_DIR}/.bashrc" ]; then
+        if ! grep -q "MARIADB_BIN" "${HOME_DIR}/.bashrc" 2>/dev/null; then
+            cat >> "${HOME_DIR}/.bashrc" <<'MARIADB_PATH_EOF'
 
 # MariaDB PATH
 export PATH="/usr/bin:$PATH"
@@ -2073,7 +2382,7 @@ alias mysqldump='mariadb-dump'
 alias mysqlcheck='mariadb-check'
 alias mysqladmin='mariadb-admin'
 MARIADB_PATH_EOF
-            log_info "Added MariaDB aliases to ${FOS_USER_HOME}/.bashrc"
+            log_info "Added MariaDB aliases to ${HOME_DIR}/.bashrc"
         fi
     fi
 
@@ -2390,7 +2699,7 @@ APP_TIMEZONE=UTC
 
 # Installation Info
 FOS_DIR=${FOS_DIR}
-FOS_USER=${FOS_USER}
+USER=${USER}
 PUBLIC_IP=${PUBLIC_IP}
 
 # =============================================================================
@@ -2522,7 +2831,7 @@ DEBUGBAR_ENABLED=false
 ENV_EOF
 
     chmod 600 "${FOS_DIR}/.env"
-    chown ${FOS_USER}:${FOS_USER} "${FOS_DIR}/.env"
+    chown ${USER}:${USER} "${FOS_DIR}/.env"
 
     log_success "Production .env file created with Redis configuration"
     log_info "Redis, Cache, Session, and Queue configured to use Redis"
@@ -2551,7 +2860,7 @@ if [ $RESUME_STEP -le 15 ]; then
         cd "${FOS_DIR}"
 
         # Load NVM for this shell
-        export NVM_DIR="${FOS_USER_HOME}/.nvm"
+        export NVM_DIR="${HOME_DIR}/.nvm"
         [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
         # Install PM2 globally (required for background workers)
@@ -2578,8 +2887,8 @@ if [ $RESUME_STEP -le 15 ]; then
                 NPM_PREFIX=$(npm config get prefix 2>/dev/null || echo "/usr/local")
                 if [ -d "$NPM_PREFIX/lib/node_modules" ]; then
                     log_info "Fixing npm global directory permissions..."
-                    sudo chown -R ${FOS_USER}:${FOS_USER} "$NPM_PREFIX/lib/node_modules" 2>/dev/null || true
-                    sudo chown -R ${FOS_USER}:${FOS_USER} "$NPM_PREFIX/bin" 2>/dev/null || true
+                    sudo chown -R ${USER}:${USER} "$NPM_PREFIX/lib/node_modules" 2>/dev/null || true
+                    sudo chown -R ${USER}:${USER} "$NPM_PREFIX/bin" 2>/dev/null || true
 
                     # Retry after fixing permissions
                     if npm install -g pm2 2>&1 | tee -a "$INSTALL_LOG"; then
@@ -2711,11 +3020,11 @@ PORTS_EOF
 
     # Set permissions - use current user, not hardcoded
     log_info "Setting permissions..."
-    chown -R ${FOS_USER}:${FOS_USER} "${FOS_DIR}"
+    chown -R ${USER}:${USER} "${FOS_DIR}"
 
     # Ensure fospackv69 nginx has correct ownership
     if [ -d "${FOS_DIR}/fospackv69/fos/nginx" ]; then
-        chown -R ${FOS_USER}:${FOS_USER} "${FOS_DIR}/fospackv69/fos/nginx"
+        chown -R ${USER}:${USER} "${FOS_DIR}/fospackv69/fos/nginx"
     fi
 
     save_state 16
@@ -2842,10 +3151,10 @@ if [ $RESUME_STEP -le 17 ]; then
 # FOS-Streaming Low Latency Optimizations
 # Increase file descriptor limits for high-concurrency streaming
 
-${FOS_USER}     soft    nofile          65535
-${FOS_USER}     hard    nofile          65535
-${FOS_USER}     soft    nproc           65535
-${FOS_USER}     hard    nproc           65535
+${USER}     soft    nofile          65535
+${USER}     hard    nofile          65535
+${USER}     soft    nproc           65535
+${USER}     hard    nproc           65535
 root            soft    nofile          65535
 root            hard    nofile          65535
 *               soft    memlock         unlimited
@@ -2942,9 +3251,9 @@ FFMPEG_WRAPPER_EOF
 
     sudo tee /etc/sudoers.d/fos-ffmpeg > /dev/null <<SUDOERS_EOF
 # FOS-Streaming FFmpeg sudo access
-${FOS_USER} ALL = (root) NOPASSWD: ${FFMPEG_BIN}
-${FOS_USER} ALL = (root) NOPASSWD: ${FFPROBE_BIN}
-${FOS_USER} ALL = (root) NOPASSWD: /usr/local/bin/ffmpeg-stream
+${USER} ALL = (root) NOPASSWD: ${FFMPEG_BIN}
+${USER} ALL = (root) NOPASSWD: ${FFPROBE_BIN}
+${USER} ALL = (root) NOPASSWD: /usr/local/bin/ffmpeg-stream
 SUDOERS_EOF
 
     sudo chmod 0440 /etc/sudoers.d/fos-ffmpeg
@@ -3217,7 +3526,7 @@ if [ $RESUME_STEP -le 19 ]; then
             sudo sed -i "s/listen 1935;/listen ${RTMP_PORT};/g" "${NGINX_CONF}" 2>/dev/null || true
 
             # Set ownership
-            sudo chown -R ${FOS_USER}:${FOS_USER} "${NGINX_DIR}"
+            sudo chown -R ${USER}:${USER} "${NGINX_DIR}"
         else
             log_warn "Nginx config not found at ${NGINX_CONF}"
         fi
@@ -3246,8 +3555,8 @@ After=network.target
 
 [Service]
 Type=forking
-User=${FOS_USER}
-Group=${FOS_USER}
+User=${USER}
+Group=${USER}
 PIDFile=${NGINX_DIR}/pid/nginx.pid
 ExecStartPre=${NGINX_BIN} -t -c ${NGINX_CONF}
 ExecStart=${NGINX_BIN} -c ${NGINX_CONF}
@@ -3291,10 +3600,10 @@ SYSCTL_EOF
     log_info "Configuring user limits for high concurrency..."
     sudo tee /etc/security/limits.d/99-fos-streaming.conf > /dev/null <<LIMITS_EOF
 # FOS-Streaming User Limits
-${FOS_USER} soft nofile 1000000
-${FOS_USER} hard nofile 1000000
-${FOS_USER} soft nproc 65535
-${FOS_USER} hard nproc 65535
+${USER} soft nofile 1000000
+${USER} hard nofile 1000000
+${USER} soft nproc 65535
+${USER} hard nproc 65535
 * soft nofile 65535
 * hard nofile 65535
 LIMITS_EOF
@@ -3533,7 +3842,7 @@ if [ $RESUME_STEP -le 23 ]; then
     cd "${FOS_DIR}"
 
     # Load NVM for this shell
-    export NVM_DIR="${FOS_USER_HOME}/.nvm"
+    export NVM_DIR="${HOME_DIR}/.nvm"
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
     # Determine PM2 command (global or local)
@@ -3632,7 +3941,7 @@ Summary:
 - Node.js Version: ${NODE_VERSION}
 - OS: ${OS_TYPE} ${OS_VERSION} (${OS_CODENAME})
 - Network Environment: ${NETWORK_ENV:-detected}
-- Installation User: ${FOS_USER}
+- Installation User: ${USER}
 - Project Directory: ${FOS_DIR}
 - Domain/Address: ${DOMAIN_NAME}
 - Ports: Web=${WEB_PORT}, Stream=${STREAM_PORT}, RTMP=${RTMP_PORT}
@@ -3816,9 +4125,9 @@ cat <<COMPLETE_EOF
 
   Operating System:  ${OS_TYPE^} ${OS_VERSION} (${OS_CODENAME})
   Network Env:       ${NETWORK_ENV:-detected}
-  Installation User: ${FOS_USER}
+  Installation User: ${USER}
   Project Directory: ${FOS_DIR}
-  User Home:         ${FOS_USER_HOME}
+  User Home:         ${HOME_DIR}
   Installation Log:  ${INSTALL_LOG}
 
 ================================================================
@@ -3892,7 +4201,7 @@ cat <<COMPLETE_EOF
   pm2 logs               # PM2 worker logs
 
 ================================================================
-  NVM Usage (for ${FOS_USER}):
+  NVM Usage (for ${USER}):
 ================================================================
 
   To use NVM in new shells, add to ~/.bashrc:
@@ -3909,8 +4218,49 @@ cat <<COMPLETE_EOF
 
 COMPLETE_EOF
 
+# Generate credentials report markdown file
+CREDENTIALS_FILE=$(generate_credentials_report)
+
+# Display prominent notice about credentials file
+echo ""
+echo -e "${GREEN}================================================================${NC}"
+echo -e "${GREEN}  📄 CREDENTIALS SAVED TO FILE${NC}"
+echo -e "${GREEN}================================================================${NC}"
+echo ""
+echo -e "  All credentials have been saved to:"
+echo -e "  ${CYAN}${CREDENTIALS_FILE}${NC}"
+echo ""
+echo -e "  ${YELLOW}⚠️  IMPORTANT:${NC}"
+echo -e "  1. View the file: ${CYAN}cat ${CREDENTIALS_FILE}${NC}"
+echo -e "  2. Save credentials to a password manager"
+echo -e "  3. Delete the file: ${CYAN}rm ${CREDENTIALS_FILE}${NC}"
+echo ""
+echo -e "${GREEN}================================================================${NC}"
+
+# Display created user credentials prominently if a new user was created
+if [ -n "$CREATED_USER_PASSWORD" ]; then
+    echo ""
+    echo -e "${RED}================================================================${NC}"
+    echo -e "${RED}  ⚠️  IMPORTANT: SYSTEM USER CREDENTIALS  ⚠️${NC}"
+    echo -e "${RED}================================================================${NC}"
+    echo ""
+    echo -e "  A new system user was created for this installation."
+    echo -e "  ${YELLOW}SAVE THESE CREDENTIALS NOW!${NC}"
+    echo ""
+    echo -e "  ${CYAN}Username:${NC} ${USER}"
+    echo -e "  ${CYAN}Password:${NC} ${CREATED_USER_PASSWORD}"
+    echo ""
+    echo -e "  ${GREEN}To login:${NC}"
+    echo -e "    ssh ${USER}@${PUBLIC_IP:-<server-ip>}"
+    echo -e "    su - ${USER}"
+    echo ""
+    echo -e "${RED}================================================================${NC}"
+    echo ""
+fi
+
 log_success "Installation script finished successfully!"
-log_info "Installation log saved to: ${INSTALL_LOG}"
+log_info "Credentials file: ${CREDENTIALS_FILE}"
+log_info "Installation log: ${INSTALL_LOG}"
 log_info "Project directory: ${FOS_DIR}"
 log_info "Run 'npm run dev' to start the development server"
 log_info "Enjoy your FOS-Streaming installation!"
