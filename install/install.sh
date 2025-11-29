@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090,SC1091  # Dynamic source files
+# shellcheck disable=SC2016  # Intentional single quotes for PATH export
+# shellcheck disable=SC2015  # Using A && B || C pattern intentionally for logging
 ################################################################################
 # FOS-Streaming v70 - Unified Installation Script
 #
@@ -104,12 +107,12 @@ handle_remote_install() {
         # Running as root
         if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
             target_user="$SUDO_USER"
-            target_home=$(eval echo ~$SUDO_USER)
+            target_home=$(eval echo ~"$SUDO_USER")
         else
             # Check for existing non-root user
             target_user=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 && $7 !~ /nologin|false/ {print $1; exit}')
             if [ -n "$target_user" ]; then
-                target_home=$(eval echo ~$target_user)
+                target_home=$(eval echo ~"$target_user")
             else
                 # No user exists - will create one during bootstrap
                 # Clone to /opt temporarily, installer will move it later
@@ -159,7 +162,7 @@ handle_remote_install() {
 
         if [ -f "${fos_dir}/install/install.sh" ]; then
             echo -e "${GREEN}[INFO]${NC} Found existing installation, updating..."
-            cd "$fos_dir"
+            cd "$fos_dir" || exit 1
 
             # Fetch and checkout the requested branch
             git fetch origin >/dev/null 2>&1 || true
@@ -203,7 +206,7 @@ handle_remote_install() {
     echo ""
 
     # Change to the project directory and run the local installer
-    cd "$fos_dir"
+    cd "$fos_dir" || exit 1
 
     # Execute the local install script
     if [ "$EUID" -eq 0 ]; then
@@ -269,9 +272,9 @@ FOS_DIR="$(dirname "$SCRIPT_DIR")"  # Parent of install/ directory
 # Installation log file (non-sensitive information only)
 INSTALL_LOG="${SCRIPT_DIR}/install.log"
 
-# Configuration paths
-PORTS_CONFIG="${FOS_DIR}/config/ports.php"
-CERTS_DIR="${FOS_DIR}/fospackv69/fos/nginx/conf/certs"
+# Configuration paths (exported for use by sourced scripts)
+export PORTS_CONFIG="${FOS_DIR}/config/ports.php"
+export CERTS_DIR="${FOS_DIR}/fospackv69/fos/nginx/conf/certs"
 STATE_FILE="${FOS_DIR}/.fos-install-state"
 STATE_LOCK="${FOS_DIR}/.fos-install-lock"
 
@@ -283,6 +286,7 @@ RTMP_PORT=""
 # Installation state tracking
 CURRENT_STEP=0
 TOTAL_STEPS=23
+# shellcheck disable=SC2034  # Reserved for future state tracking
 declare -A INSTALL_STATE
 
 # =============================================================================
@@ -320,7 +324,8 @@ log_to_file() {
     local message="$2"
 
     # Sanitize message - remove potential passwords and sensitive data
-    local sanitized_msg=$(echo "$message" | sed -E \
+    local sanitized_msg
+    sanitized_msg=$(echo "$message" | sed -E \
         -e 's/(password|passwd|pwd|secret|key|token)[=:][^ ]*/\1=***REDACTED***/gi' \
         -e 's/-p[^ ]+/-p***REDACTED***/g' \
         -e "s/'[^']{8,}'/'***REDACTED***'/g")
@@ -361,7 +366,8 @@ log_progress() {
 log_cmd() {
     local cmd="$1"
     # Sanitize command before logging
-    local sanitized_cmd=$(echo "$cmd" | sed -E \
+    local sanitized_cmd
+    sanitized_cmd=$(echo "$cmd" | sed -E \
         -e 's/(password|passwd|pwd|secret|key|token)[=:][^ ]*/\1=***REDACTED***/gi' \
         -e 's/-p[^ ]+/-p***REDACTED***/g')
     log_to_file "CMD" "Executing: $sanitized_cmd"
@@ -370,6 +376,80 @@ log_cmd() {
 log_bootstrap() {
     echo -e "${MAGENTA}[BOOTSTRAP]${NC} $1"
     log_to_file "BOOTSTRAP" "$1"
+}
+
+# =============================================================================
+# Quiet Execution Helpers - Suppress output, show only errors
+# =============================================================================
+
+# Run a command quietly, capturing output. Show stderr only on failure.
+# Usage: run_quiet "description" command [args...]
+run_quiet() {
+    local description="$1"
+    shift
+    local cmd_output
+    local exit_code
+
+    log_to_file "CMD" "Executing: $*"
+
+    # Capture both stdout and stderr, preserve exit code
+    cmd_output=$("$@" 2>&1)
+    exit_code=$?
+
+    # Log full output to file
+    if [ -n "$cmd_output" ]; then
+        echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+    fi
+
+    if [ $exit_code -ne 0 ]; then
+        # Show error output to user
+        log_error "$description failed (exit code: $exit_code)"
+        if [ -n "$cmd_output" ]; then
+            # Show last 10 lines of error output
+            echo -e "${RED}[ERROR OUTPUT]${NC}" >&2
+            echo "$cmd_output" | tail -20 >&2
+        fi
+        return $exit_code
+    fi
+
+    return 0
+}
+
+# Run a command quietly with sudo
+# Usage: run_quiet_sudo "description" command [args...]
+run_quiet_sudo() {
+    local description="$1"
+    shift
+    run_quiet "$description" sudo "$@"
+}
+
+# Run apt-get quietly with proper error handling
+# Usage: apt_quiet "description" [apt-get args...]
+apt_quiet() {
+    local description="$1"
+    shift
+    local cmd_output
+    local exit_code
+
+    log_to_file "CMD" "Executing: apt-get $*"
+
+    cmd_output=$(sudo DEBIAN_FRONTEND=noninteractive apt-get "$@" 2>&1)
+    exit_code=$?
+
+    # Log full output to file
+    if [ -n "$cmd_output" ]; then
+        echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+    fi
+
+    if [ $exit_code -ne 0 ]; then
+        log_error "$description failed"
+        # Extract and show relevant error lines
+        echo -e "${RED}[APT ERROR]${NC}" >&2
+        echo "$cmd_output" | grep -iE '(error|failed|unable|cannot|could not|dpkg:)' | head -10 >&2
+        return $exit_code
+    fi
+
+    return 0
 }
 
 # =============================================================================
@@ -384,55 +464,58 @@ command_exists() {
 # Install a package using available package manager (works as root or with sudo)
 bootstrap_install_package() {
     local pkg="$1"
-    local pkg_manager=""
-
-    # Detect package manager
-    if command_exists apt-get; then
-        pkg_manager="apt-get"
-    elif command_exists apt; then
-        pkg_manager="apt"
-    else
-        log_error "No supported package manager found (apt/apt-get)"
-        return 1
-    fi
+    local cmd_output
+    local exit_code
 
     log_bootstrap "Installing $pkg..."
-    log_cmd "$pkg_manager install -y $pkg"
+    log_to_file "CMD" "apt-get install -y $pkg"
 
     if [ "$EUID" -eq 0 ]; then
-        # Running as root
-        DEBIAN_FRONTEND=noninteractive $pkg_manager install -y "$pkg" 2>&1 | tee -a "$INSTALL_LOG"
+        cmd_output=$(DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg" 2>&1)
+        exit_code=$?
     else
-        # Running as user with sudo
-        DEBIAN_FRONTEND=noninteractive sudo $pkg_manager install -y "$pkg" 2>&1 | tee -a "$INSTALL_LOG"
+        cmd_output=$(sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg" 2>&1)
+        exit_code=$?
     fi
 
-    return ${PIPESTATUS[0]}
+    # Log full output to file
+    echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+    if [ $exit_code -ne 0 ]; then
+        log_error "Failed to install $pkg"
+        echo "$cmd_output" | grep -iE '(error|failed|unable|cannot|could not|dpkg:)' | head -5 >&2
+        return $exit_code
+    fi
+
+    return 0
 }
 
 # Update package lists
 bootstrap_update_packages() {
-    local pkg_manager=""
-
-    if command_exists apt-get; then
-        pkg_manager="apt-get"
-    elif command_exists apt; then
-        pkg_manager="apt"
-    else
-        log_error "No supported package manager found"
-        return 1
-    fi
+    local cmd_output
+    local exit_code
 
     log_bootstrap "Updating package lists..."
-    log_cmd "$pkg_manager update"
+    log_to_file "CMD" "apt-get update"
 
     if [ "$EUID" -eq 0 ]; then
-        $pkg_manager update -y 2>&1 | tee -a "$INSTALL_LOG"
+        cmd_output=$(apt-get update -y 2>&1)
+        exit_code=$?
     else
-        sudo $pkg_manager update -y 2>&1 | tee -a "$INSTALL_LOG"
+        cmd_output=$(sudo apt-get update -y 2>&1)
+        exit_code=$?
     fi
 
-    return ${PIPESTATUS[0]}
+    # Log full output to file
+    echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+    if [ $exit_code -ne 0 ]; then
+        log_error "Failed to update package lists"
+        echo "$cmd_output" | grep -iE '(error|failed|unable|cannot)' | head -5 >&2
+        return $exit_code
+    fi
+
+    return 0
 }
 
 # Generate a strong random password
@@ -527,7 +610,8 @@ generate_credentials_report() {
     local report_file="${SCRIPT_DIR}/CREDENTIALS.md"
     local db_password=""
     local redis_password=""
-    local install_date=$(date '+%Y-%m-%d %H:%M:%S')
+    local install_date
+    install_date=$(date '+%Y-%m-%d %H:%M:%S')
 
     # Read passwords from secure files
     if [ -f /root/MARIADB_FOS_PASSWORD ]; then
@@ -699,13 +783,14 @@ DB_EOF
 
     # Set secure permissions (readable only by owner)
     chmod 600 "$report_file"
-    chown ${USER}:${USER} "$report_file" 2>/dev/null || true
+    chown "${USER}":"${USER}" "$report_file" 2>/dev/null || true
 
     log_success "Credentials report saved to: ${report_file}"
     echo "$report_file"
 }
 
 # Bootstrap: Ensure essential tools are available
+# shellcheck disable=SC2120  # Function forwards $@ when re-executing script
 run_bootstrap() {
     log_step "Bootstrap Phase: Ensuring Essential Prerequisites"
 
@@ -815,14 +900,15 @@ run_bootstrap() {
         # Running as root - need to determine target user
         if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
             USER="$SUDO_USER"
-            HOME_DIR="$(eval echo ~$USER)"
+            HOME_DIR="$(eval echo ~"$USER")"
         else
             # Check if there's a non-root user in the system
-            local potential_user=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 && $7 !~ /nologin|false/ {print $1; exit}')
+            local potential_user
+            potential_user=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 && $7 !~ /nologin|false/ {print $1; exit}')
             if [ -n "$potential_user" ]; then
                 log_warn "Running as root. Will set up for user: $potential_user"
                 USER="$potential_user"
-                HOME_DIR="$(eval echo ~$USER)"
+                HOME_DIR="$(eval echo ~"$USER")"
             else
                 # No regular user exists - create one
                 log_bootstrap "No regular user found on system. Creating one..."
@@ -877,7 +963,7 @@ run_bootstrap() {
         fi
     else
         USER="$(whoami)"
-        HOME_DIR="$(eval echo ~$USER)"
+        HOME_DIR="$(eval echo ~"$USER")"
     fi
 
     log_bootstrap "Installation user: $USER (home: $HOME_DIR)"
@@ -973,7 +1059,7 @@ run_bootstrap() {
 
         # Re-execute the script as the target user
         # Pass the created user password via environment variable if set
-        cd "${FOS_DIR}"
+        cd "${FOS_DIR}" || exit 1
         if [ -n "$CREATED_USER_PASSWORD" ]; then
             exec sudo -u "$USER" -H FOS_CREATED_USER_PASSWORD="$CREATED_USER_PASSWORD" bash "${SCRIPT_DIR}/install.sh" "$@"
         else
@@ -1053,6 +1139,8 @@ install_package() {
     local pkg="$1"
     local max_retries="${2:-3}"
     local retry_count=0
+    local cmd_output
+    local exit_code
 
     # Check if already installed
     if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
@@ -1060,22 +1148,30 @@ install_package() {
         return 0
     fi
 
-    while [ $retry_count -lt $max_retries ]; do
-        log_cmd "apt-get install -y $pkg"
+    while [ "$retry_count" -lt "$max_retries" ]; do
+        log_to_file "CMD" "apt-get install -y $pkg"
 
-        if sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg" 2>&1 | tee -a "$INSTALL_LOG"; then
+        cmd_output=$(sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg" 2>&1)
+        exit_code=$?
+
+        # Log full output to file
+        echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+        if [ $exit_code -eq 0 ]; then
             log_info "  ✓ $pkg (installed)"
             return 0
         fi
 
         retry_count=$((retry_count + 1))
-        if [ $retry_count -lt $max_retries ]; then
+        if [ "$retry_count" -lt "$max_retries" ]; then
             log_warn "  ⚠ $pkg failed, retrying ($retry_count/$max_retries)..."
             sleep 2
         fi
     done
 
     log_error "  ✗ $pkg (failed after $max_retries attempts)"
+    # Show relevant error lines
+    echo "$cmd_output" | grep -iE '(error|failed|unable|cannot|could not|dpkg:)' | head -3 >&2
     return 1
 }
 
@@ -1144,10 +1240,10 @@ read_required() {
 
     while true; do
         if [ -n "$default" ]; then
-            read -p "${prompt} [${default}]: " value
+            read -rp "${prompt} [${default}]: " value
             value="${value:-$default}"
         else
-            read -p "${prompt}: " value
+            read -rp "${prompt}: " value
         fi
 
         # Check if empty (and no default)
@@ -1202,10 +1298,10 @@ read_confirm() {
 
     while true; do
         if [ "$default" = "y" ]; then
-            read -p "${prompt} [Y/n]: " response
+            read -rp "${prompt} [Y/n]: " response
             response="${response:-y}"
         else
-            read -p "${prompt} [y/N]: " response
+            read -rp "${prompt} [y/N]: " response
             response="${response:-n}"
         fi
 
@@ -1241,13 +1337,14 @@ read_password() {
     if [ ! -t 0 ]; then
         log_info "Non-interactive mode: generating random password for '${prompt}'"
         local generated_pass
+        # shellcheck disable=SC2034  # Variable used via eval on next line
         generated_pass=$(generate_password 24)
         eval "$var_name=\"\$generated_pass\""
         return 0
     fi
 
     while true; do
-        read -s -p "${prompt}: " pass1
+        read -rs -p "${prompt}: " pass1
         echo
 
         if [ -z "$pass1" ]; then
@@ -1274,7 +1371,7 @@ read_password() {
             continue
         fi
 
-        read -s -p "Confirm password: " pass2
+        read -rs -p "Confirm password: " pass2
         echo
 
         if [ "$pass1" != "$pass2" ]; then
@@ -1344,10 +1441,20 @@ has_systemd() {
 # Usage: service_restart "service_name"
 service_restart() {
     local service="$1"
+    local cmd_output
+    local exit_code
+
+    log_to_file "CMD" "Restarting service: $service"
 
     if has_systemd; then
-        sudo systemctl restart "$service" 2>/dev/null
-        return $?
+        cmd_output=$(sudo systemctl restart "$service" 2>&1)
+        exit_code=$?
+        echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+        if [ $exit_code -ne 0 ] && [ -n "$cmd_output" ]; then
+            log_error "Failed to restart $service"
+            echo "$cmd_output" | head -3 >&2
+        fi
+        return $exit_code
     else
         # Non-systemd environment (WSL, container without systemd)
         log_info "Non-systemd environment: attempting direct service restart for $service"
@@ -1402,10 +1509,19 @@ service_restart() {
 # Usage: service_enable "service_name"
 service_enable() {
     local service="$1"
+    local cmd_output
+    local exit_code
+
+    log_to_file "CMD" "Enabling service: $service"
 
     if has_systemd; then
-        sudo systemctl enable "$service" 2>/dev/null
-        return $?
+        cmd_output=$(sudo systemctl enable "$service" 2>&1)
+        exit_code=$?
+        echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+        if [ $exit_code -ne 0 ] && [ -n "$cmd_output" ]; then
+            log_warn "Could not enable $service"
+        fi
+        return $exit_code
     else
         log_info "Non-systemd environment: skipping enable for $service (no systemd)"
         # In non-systemd environments, services are managed differently
@@ -1418,10 +1534,16 @@ service_enable() {
 # Usage: service_stop "service_name"
 service_stop() {
     local service="$1"
+    local cmd_output
+    local exit_code
+
+    log_to_file "CMD" "Stopping service: $service"
 
     if has_systemd; then
-        sudo systemctl stop "$service" 2>/dev/null
-        return $?
+        cmd_output=$(sudo systemctl stop "$service" 2>&1)
+        exit_code=$?
+        echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+        return $exit_code
     else
         if sudo service "$service" stop 2>/dev/null; then
             return 0
@@ -1438,10 +1560,20 @@ service_stop() {
 # Usage: service_start "service_name"
 service_start() {
     local service="$1"
+    local cmd_output
+    local exit_code
+
+    log_to_file "CMD" "Starting service: $service"
 
     if has_systemd; then
-        sudo systemctl start "$service" 2>/dev/null
-        return $?
+        cmd_output=$(sudo systemctl start "$service" 2>&1)
+        exit_code=$?
+        echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+        if [ $exit_code -ne 0 ] && [ -n "$cmd_output" ]; then
+            log_error "Failed to start $service"
+            echo "$cmd_output" | head -3 >&2
+        fi
+        return $exit_code
     else
         log_info "Non-systemd environment: attempting to start $service"
         if sudo service "$service" start 2>/dev/null; then
@@ -1542,10 +1674,12 @@ get_gateway_ip() {
 
 # Detect if behind NAT (local IP differs from public IP)
 is_behind_nat() {
-    local local_ip=$(get_local_ip)
-    local public_ip=$(curl -s --connect-timeout 3 https://api.ipify.org 2>/dev/null || \
-                      curl -s --connect-timeout 3 https://ifconfig.me 2>/dev/null || \
-                      curl -s --connect-timeout 3 https://icanhazip.com 2>/dev/null)
+    local local_ip
+    local public_ip
+    local_ip=$(get_local_ip)
+    public_ip=$(curl -s --connect-timeout 3 https://api.ipify.org 2>/dev/null || \
+                curl -s --connect-timeout 3 https://ifconfig.me 2>/dev/null || \
+                curl -s --connect-timeout 3 https://icanhazip.com 2>/dev/null)
 
     if [ -z "$public_ip" ]; then
         # Cannot determine public IP - assume behind NAT if local IP is private
@@ -1574,7 +1708,8 @@ detect_network_environment() {
         return 0
     fi
 
-    local local_ip=$(get_local_ip)
+    local local_ip
+    local_ip=$(get_local_ip)
 
     # Check if only loopback is available (no network)
     if [ "$local_ip" = "127.0.0.1" ]; then
@@ -1598,9 +1733,12 @@ detect_network_environment() {
 
 # Display network environment info to user
 display_network_info() {
-    local env_type=$(detect_network_environment)
-    local local_ip=$(get_local_ip)
-    local gateway=$(get_gateway_ip)
+    local env_type
+    local local_ip
+    local gateway
+    env_type=$(detect_network_environment)
+    local_ip=$(get_local_ip)
+    gateway=$(get_gateway_ip)
 
     echo ""
     log_step "Network Environment Detection"
@@ -1640,7 +1778,8 @@ display_network_info() {
             [ -n "$gateway" ] && log_info "Gateway: ${gateway}"
 
             # Try to get public IP
-            local public_ip=$(curl -s --connect-timeout 3 https://api.ipify.org 2>/dev/null)
+            local public_ip
+            public_ip=$(curl -s --connect-timeout 3 https://api.ipify.org 2>/dev/null)
             [ -n "$public_ip" ] && log_info "Public IP: ${public_ip}"
 
             echo ""
@@ -1665,10 +1804,11 @@ display_network_info() {
 
     echo ""
 
-    # Return environment type for further use
-    NETWORK_ENV="$env_type"
-    LOCAL_IP="$local_ip"
-    GATEWAY_IP="$gateway"
+    # Return environment type for further use (exported for potential use)
+    export NETWORK_ENV="$env_type"
+    export LOCAL_IP="$local_ip"
+    # shellcheck disable=SC2034  # May be used by external scripts
+    export GATEWAY_IP="$gateway"
 }
 
 # Validate domain/IP for the detected environment
@@ -1729,18 +1869,34 @@ handle_error() {
     fi
 }
 
-# Wrapper to run commands with error handling
+# Wrapper to run commands with error handling (quiet mode - errors only)
 run_cmd() {
     local step="$1"
     local description="$2"
     shift 2
 
-    log_info "$description"
-    log_cmd "$*"
+    local cmd_output
+    local exit_code
 
-    if ! "$@" 2>&1 | tee -a "$INSTALL_LOG"; then
+    log_info "$description"
+    log_to_file "CMD" "$*"
+
+    cmd_output=$("$@" 2>&1)
+    exit_code=$?
+
+    # Log full output to file
+    echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+    if [ $exit_code -ne 0 ]; then
+        log_error "$description failed"
+        echo "$cmd_output" | grep -iE '(error|failed|unable|cannot|could not|exception)' | head -5 >&2
+
         if read_confirm "Command failed. Retry?"; then
-            if ! "$@" 2>&1 | tee -a "$INSTALL_LOG"; then
+            cmd_output=$("$@" 2>&1)
+            exit_code=$?
+            echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+            if [ $exit_code -ne 0 ]; then
                 handle_error "$step" "$description failed"
                 return 1
             fi
@@ -1921,17 +2077,18 @@ setup_debian_repositories() {
 
         # Add deb-multimedia keyring
         log_info "Adding deb-multimedia GPG key..."
-        sudo curl -fsSL https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb -o /tmp/deb-multimedia-keyring.deb 2>/dev/null && \
-            sudo dpkg -i /tmp/deb-multimedia-keyring.deb 2>/dev/null && \
-            sudo rm -f /tmp/deb-multimedia-keyring.deb || {
+        if sudo curl -fsSL https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb -o /tmp/deb-multimedia-keyring.deb 2>/dev/null && \
+            sudo dpkg -i /tmp/deb-multimedia-keyring.deb 2>/dev/null; then
+            sudo rm -f /tmp/deb-multimedia-keyring.deb
+        else
             # Fallback: manually add key
             log_warn "Keyring package failed, trying manual key import..."
             sudo mkdir -p /etc/apt/keyrings
-            sudo curl -fsSL "https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb" 2>/dev/null | \
-                sudo dpkg-deb --fsys-tarfile /dev/stdin | sudo tar -xOf - ./usr/share/keyrings/deb-multimedia-keyring.gpg > /etc/apt/keyrings/deb-multimedia.gpg 2>/dev/null || {
+            if ! sudo curl -fsSL "https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb" 2>/dev/null | \
+                sudo dpkg-deb --fsys-tarfile /dev/stdin | sudo tar -xOf - ./usr/share/keyrings/deb-multimedia-keyring.gpg | sudo tee /etc/apt/keyrings/deb-multimedia.gpg >/dev/null 2>&1; then
                 log_warn "Could not add deb-multimedia key, FFmpeg will be installed from default repos"
-            }
-        }
+            fi
+        fi
 
         # Add repository
         if [ -f /etc/apt/keyrings/deb-multimedia.gpg ]; then
@@ -1944,7 +2101,7 @@ setup_debian_repositories() {
 
     # Update package lists
     log_info "Updating package lists..."
-    sudo apt-get update -y 2>&1 | tee -a "$INSTALL_LOG"
+    apt_quiet "Package list update" update -y
 }
 
 setup_ubuntu_repositories() {
@@ -1968,6 +2125,7 @@ setup_ubuntu_repositories() {
 
     # PHP Repository (Ondrej PPA)
     log_info "Adding PHP repository (Ondrej PPA)..."
+    # shellcheck disable=SC2010  # Using ls with glob for file detection is appropriate here
     if ls /etc/apt/sources.list.d/*ondrej* 2>/dev/null | grep -q php || [ -f /etc/apt/sources.list.d/ondrej-php.list ]; then
         log_info "Ondrej PHP repository already exists, skipping..."
     else
@@ -2028,6 +2186,7 @@ setup_ubuntu_repositories() {
 
     # FFmpeg Repository (Rob Savoury's PPA - optimized builds with full codec support)
     log_info "Adding FFmpeg repository (Savoury PPA)..."
+    # shellcheck disable=SC2010  # Using ls with glob for file detection is appropriate here
     if ls /etc/apt/sources.list.d/*savoury* 2>/dev/null | grep -q .; then
         log_info "Savoury FFmpeg repository already exists, skipping..."
     elif [ -f /etc/apt/sources.list.d/ffmpeg-savoury.list ]; then
@@ -2040,16 +2199,16 @@ setup_ubuntu_repositories() {
             noble|jammy|focal)
                 ffmpeg_codename="${OS_CODENAME}"
                 ;;
+            bionic)
+                # Bionic is too old for Savoury, use default repos
+                log_info "Ubuntu Bionic will use default FFmpeg packages"
+                ffmpeg_codename=""
+                ;;
             oracular|plucky|*)
                 # Newer versions - fall back to noble (latest LTS with full support)
                 log_warn "Ubuntu ${OS_CODENAME} may not be supported by Savoury FFmpeg PPA"
                 log_info "Falling back to 'noble' (Ubuntu 24.04 LTS) repository"
                 ffmpeg_codename="noble"
-                ;;
-            bionic)
-                # Bionic is too old for Savoury, use default repos
-                log_info "Ubuntu Bionic will use default FFmpeg packages"
-                ffmpeg_codename=""
                 ;;
         esac
 
@@ -2078,7 +2237,7 @@ setup_ubuntu_repositories() {
 
     # Update package lists
     log_info "Updating package lists..."
-    sudo apt-get update -y 2>&1 | tee -a "$INSTALL_LOG"
+    apt_quiet "Package list update" update -y
 }
 
 # =============================================================================
@@ -2092,12 +2251,18 @@ install_nvm_nodejs() {
 
     # Install NVM
     log_info "Installing NVM (Node Version Manager)..."
-    log_cmd "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
+    log_to_file "CMD" "curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash"
 
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash 2>&1 | tee -a "$INSTALL_LOG" || {
+    local nvm_output
+    nvm_output=$(curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh 2>&1 | bash 2>&1)
+    local nvm_exit=$?
+    echo "$nvm_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+    if [ $nvm_exit -ne 0 ]; then
         log_error "Failed to install NVM"
+        echo "$nvm_output" | tail -10 >&2
         return 1
-    }
+    fi
 
     # Load NVM
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -2128,22 +2293,32 @@ NVMRC
 
     # Install Node.js
     log_info "Installing Node.js ${NODE_VERSION} LTS..."
-    log_cmd "nvm install ${NODE_VERSION}"
+    log_to_file "CMD" "nvm install ${NODE_VERSION}"
 
-    nvm install ${NODE_VERSION} 2>&1 | tee -a "$INSTALL_LOG" || {
+    local node_output
+    node_output=$(nvm install ${NODE_VERSION} 2>&1)
+    local node_exit=$?
+    echo "$node_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+    if [ $node_exit -ne 0 ]; then
         log_error "Failed to install Node.js"
+        echo "$node_output" | tail -10 >&2
         return 1
-    }
+    fi
 
-    nvm use ${NODE_VERSION}
-    nvm alias default ${NODE_VERSION}
+    nvm use ${NODE_VERSION} >/dev/null 2>&1
+    nvm alias default ${NODE_VERSION} >/dev/null 2>&1
 
     # Verify installation
-    if ! node --version; then
+    local node_ver npm_ver
+    node_ver=$(node --version 2>/dev/null)
+    npm_ver=$(npm --version 2>/dev/null)
+
+    if [ -z "$node_ver" ]; then
         log_error "Node.js installation verification failed"
         return 1
     fi
-    if ! npm --version; then
+    if [ -z "$npm_ver" ]; then
         log_error "NPM installation verification failed"
         return 1
     fi
@@ -2155,7 +2330,8 @@ NVMRC
     # Also install NVM and Node.js for root user (needed for sudo npm commands)
     log_info "Installing NVM and Node.js for root user (for sudo commands)..."
 
-    sudo bash -c "
+    local root_output
+    root_output=$(sudo bash -c "
         export HOME=/root
         export NVM_DIR=\"/root/.nvm\"
 
@@ -2172,11 +2348,15 @@ NVMRC
 
         # Verify
         node --version && npm --version
-    " 2>&1 | tee -a "$INSTALL_LOG" && {
+    " 2>&1)
+    local root_exit=$?
+    echo "$root_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+    if [ $root_exit -eq 0 ]; then
         log_success "Node.js installed for root user"
-    } || {
+    else
         log_warn "Failed to install Node.js for root (sudo npm commands may not work)"
-    }
+    fi
 
     return 0
 }
@@ -2190,42 +2370,59 @@ install_composer() {
 
     # Check if already installed
     if command_exists composer; then
-        local current_version=$(composer --version 2>/dev/null | head -n1 | awk '{print $3}')
+        local current_version
+        current_version=$(composer --version 2>/dev/null | head -n1 | awk '{print $3}')
         log_info "Composer already installed: ${current_version}"
         return 0
     fi
 
     log_info "Downloading and installing Composer..."
 
-    cd /tmp
+    cd /tmp || return 1
 
     # Download installer
-    log_cmd "curl -sS https://getcomposer.org/installer -o composer-setup.php"
-    curl -sS https://getcomposer.org/installer -o composer-setup.php 2>&1 | tee -a "$INSTALL_LOG" || {
+    log_to_file "CMD" "curl -sS https://getcomposer.org/installer -o composer-setup.php"
+    local dl_output
+    dl_output=$(curl -sS https://getcomposer.org/installer -o composer-setup.php 2>&1)
+    local dl_exit=$?
+    echo "$dl_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+    if [ $dl_exit -ne 0 ]; then
         log_error "Failed to download Composer installer"
+        echo "$dl_output" >&2
         return 1
-    }
+    fi
 
     # Verify installer (optional but recommended)
-    local expected_sig=$(curl -sS https://composer.github.io/installer.sig 2>/dev/null)
-    local actual_sig=$(php -r "echo hash_file('sha384', 'composer-setup.php');" 2>/dev/null)
+    local expected_sig
+    local actual_sig
+    expected_sig=$(curl -sS https://composer.github.io/installer.sig 2>/dev/null)
+    actual_sig=$(php -r "echo hash_file('sha384', 'composer-setup.php');" 2>/dev/null)
 
     if [ "$expected_sig" != "$actual_sig" ]; then
         log_warn "Composer installer signature mismatch, proceeding anyway..."
     fi
 
     # Install Composer
-    log_cmd "php composer-setup.php --install-dir=/usr/local/bin --filename=composer"
-    sudo php composer-setup.php --install-dir=/usr/local/bin --filename=composer 2>&1 | tee -a "$INSTALL_LOG" || {
+    log_to_file "CMD" "php composer-setup.php --install-dir=/usr/local/bin --filename=composer"
+    local inst_output
+    inst_output=$(sudo php composer-setup.php --install-dir=/usr/local/bin --filename=composer 2>&1)
+    local inst_exit=$?
+    echo "$inst_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+    if [ $inst_exit -ne 0 ]; then
         log_error "Failed to install Composer"
+        echo "$inst_output" | tail -5 >&2
         rm -f composer-setup.php
         return 1
-    }
+    fi
 
     rm -f composer-setup.php
 
     # Verify installation
-    if ! composer --version; then
+    local composer_ver
+    composer_ver=$(composer --version 2>/dev/null | head -n1)
+    if [ -z "$composer_ver" ]; then
         log_error "Composer installation verification failed"
         return 1
     fi
@@ -2259,7 +2456,7 @@ fi
 # Verify USER is set correctly
 if [ -z "$USER" ]; then
     USER="$(whoami)"
-    HOME_DIR="$(eval echo ~$USER)"
+    HOME_DIR="$(eval echo ~"$USER")"
 fi
 
 # Verify sudo access
@@ -2278,6 +2475,7 @@ done
     kill -0 "$$" 2>/dev/null || exit
 done) &
 SUDO_KEEPER_PID=$!
+# shellcheck disable=SC2064  # We want $SUDO_KEEPER_PID to expand now, not at signal time
 trap "kill $SUDO_KEEPER_PID 2>/dev/null" EXIT
 
 # Validate we're in a valid project directory
@@ -2349,7 +2547,7 @@ if load_state; then
     echo ""
 
     while true; do
-        read -p "Choose option [1-3]: " choice
+        read -rp "Choose option [1-3]: " choice
         case "$choice" in
             1)
                 RESUME_STEP=$((SAVED_STEP + 1))
@@ -2397,8 +2595,8 @@ fi
 # ============================================================================
 
 is_port_available() {
-    local port=$1
-    if sudo lsof -i :${port} -sTCP:LISTEN -t >/dev/null 2>&1 ; then
+    local port="$1"
+    if sudo lsof -i :"${port}" -sTCP:LISTEN -t >/dev/null 2>&1 ; then
         return 1
     fi
     if sudo netstat -tuln 2>/dev/null | grep -q ":${port} " ; then
@@ -2412,6 +2610,7 @@ get_random_ssl_port() {
     local exclude_ports=("$@")
 
     if command -v shuf &> /dev/null; then
+        # shellcheck disable=SC2207  # Word splitting is intentional here
         cloudflare_ports=($(printf '%s\n' "${cloudflare_ports[@]}" | shuf))
     fi
 
@@ -2424,8 +2623,8 @@ get_random_ssl_port() {
             fi
         done
 
-        if [ $excluded -eq 0 ] && is_port_available $port; then
-            echo $port
+        if [ "$excluded" -eq 0 ] && is_port_available "$port"; then
+            echo "$port"
             return 0
         fi
     done
@@ -2439,8 +2638,8 @@ get_random_ssl_port() {
             fi
         done
 
-        if [ $excluded -eq 0 ] && is_port_available $port; then
-            echo $port
+        if [ "$excluded" -eq 0 ] && is_port_available "$port"; then
+            echo "$port"
             return 0
         fi
     done
@@ -2450,12 +2649,14 @@ get_random_ssl_port() {
 
 get_random_rtmp_port() {
     local exclude_ports=("$@")
+    # shellcheck disable=SC2207  # Word splitting is intentional for array initialization
     local port_ranges=(
         $(seq 1935 1999 | sort -R | head -10)
         $(seq 8000 8999 | sort -R | head -20)
     )
 
     if command -v shuf &> /dev/null; then
+        # shellcheck disable=SC2207  # Word splitting is intentional here
         port_ranges=($(printf '%s\n' "${port_ranges[@]}" | shuf))
     fi
 
@@ -2468,8 +2669,8 @@ get_random_rtmp_port() {
             fi
         done
 
-        if [ $excluded -eq 0 ] && is_port_available $port; then
-            echo $port
+        if [ "$excluded" -eq 0 ] && is_port_available "$port"; then
+            echo "$port"
             return 0
         fi
     done
@@ -2529,8 +2730,8 @@ select_cloudflare_ssl_ports() {
 
 # Function to check if port is available
 port_available() {
-    local port=$1
-    ! sudo lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1
+    local port="$1"
+    ! sudo lsof -Pi :"$port" -sTCP:LISTEN -t >/dev/null 2>&1
 }
 
 # ============================================================================
@@ -2545,13 +2746,11 @@ generate_self_signed_cert() {
 
     sudo mkdir -p "$cert_dir"
 
-    sudo openssl req -x509 -nodes -days 365 -newkey rsa:4096 \
+    if sudo openssl req -x509 -nodes -days 365 -newkey rsa:4096 \
         -keyout "${cert_dir}/privkey.pem" \
         -out "${cert_dir}/fullchain.pem" \
         -subj "/C=US/ST=State/L=City/O=FOS-Streaming/CN=${domain}" \
-        2>/dev/null
-
-    if [ $? -eq 0 ]; then
+        2>/dev/null; then
         log_info "Self-signed certificate generated successfully"
         sudo chmod 600 "${cert_dir}/privkey.pem"
         sudo chmod 644 "${cert_dir}/fullchain.pem"
@@ -2655,7 +2854,7 @@ if [ $RESUME_STEP -le 0 ]; then
     if [ -z "$DOMAIN_NAME" ]; then
         while true; do
             echo ""
-            read -p "Enter your domain name or IP address: " DOMAIN_NAME
+            read -rp "Enter your domain name or IP address: " DOMAIN_NAME
 
             # Validate input
             if [ -z "$DOMAIN_NAME" ]; then
@@ -2772,16 +2971,17 @@ if [ $RESUME_STEP -le 2 ]; then
     log_step "Step 2: Updating System"
     log_progress "Updating system packages"
 
-    log_cmd "apt-get update -y"
-    sudo apt-get update -y 2>&1 | tee -a "$INSTALL_LOG" || handle_error 2 "apt-get update failed"
+    log_info "Refreshing package lists..."
+    apt_quiet "Package list update" update -y || handle_error 2 "apt-get update failed"
 
-    log_cmd "apt-get upgrade -y"
-    sudo apt-get upgrade -y 2>&1 | tee -a "$INSTALL_LOG" || handle_error 2 "apt-get upgrade failed"
+    log_info "Upgrading installed packages..."
+    apt_quiet "Package upgrade" upgrade -y || handle_error 2 "apt-get upgrade failed"
 
-    log_cmd "apt-get dist-upgrade -y"
-    sudo apt-get dist-upgrade -y 2>&1 | tee -a "$INSTALL_LOG" || log_warn "dist-upgrade had issues, continuing..."
+    log_info "Performing distribution upgrade..."
+    apt_quiet "Distribution upgrade" dist-upgrade -y || log_warn "dist-upgrade had issues, continuing..."
 
-    sudo apt-get autoremove -y 2>&1 | tee -a "$INSTALL_LOG" || true
+    log_info "Cleaning up unused packages..."
+    apt_quiet "Autoremove" autoremove -y || true
 
     save_state 2
 else
@@ -3043,8 +3243,8 @@ if [ $RESUME_STEP -le 9 ]; then
 
     # Sudoers already configured in bootstrap, verify it's still there
     if [ ! -f "/etc/sudoers.d/${USER}" ]; then
-        echo "${USER} ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/${USER} > /dev/null
-        sudo chmod 0440 /etc/sudoers.d/${USER}
+        echo "${USER} ALL=(ALL) NOPASSWD: ALL" | sudo tee "/etc/sudoers.d/${USER}" > /dev/null
+        sudo chmod 0440 "/etc/sudoers.d/${USER}"
         log_info "${USER} added to sudoers with NOPASSWD"
     else
         log_info "${USER} already has sudo configuration"
@@ -3089,12 +3289,14 @@ if [ $RESUME_STEP -le 10 ]; then
 
     # Add mariadb to PATH for root and current user
     log_info "Adding MariaDB to PATH..."
+    # shellcheck disable=SC2034  # May be used by external scripts
     MARIADB_BIN_PATH="/usr/bin"
 
     # Ensure mariadb is accessible (create symlinks if needed)
     if [ -x "/usr/bin/mariadb" ]; then
         log_info "MariaDB client found at /usr/bin/mariadb"
     elif [ -x "/usr/local/bin/mariadb" ]; then
+        # shellcheck disable=SC2034  # Reserved for potential PATH additions
         MARIADB_BIN_PATH="/usr/local/bin"
         log_info "MariaDB client found at /usr/local/bin/mariadb"
     fi
@@ -3241,36 +3443,63 @@ if [ $RESUME_STEP -le 11 ]; then
 
     if [ ! -d "$FOSPACK_DIR" ]; then
         log_info "fospackv69 not found in project, cloning..."
-        cd "${FOS_DIR}"
-        git clone --recurse-submodules https://github.com/theraw/fospackv69.git 2>&1 | tee -a "$INSTALL_LOG" || handle_error 11 "Failed to clone fospackv69"
+        cd "${FOS_DIR}" || return 1
+        log_to_file "CMD" "git clone --recurse-submodules https://github.com/theraw/fospackv69.git"
+
+        clone_output=$(git clone --recurse-submodules https://github.com/theraw/fospackv69.git 2>&1)
+        clone_exit=$?
+        echo "$clone_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+        if [ $clone_exit -ne 0 ]; then
+            log_error "Failed to clone fospackv69"
+            echo "$clone_output" | tail -5 >&2
+            handle_error 11 "Failed to clone fospackv69"
+        fi
     else
         log_info "fospackv69 found in project directory"
         # Update submodules if needed
-        cd "$FOSPACK_DIR"
-        git submodule update --init --recursive 2>/dev/null || true
+        cd "$FOSPACK_DIR" || return 1
+        git submodule update --init --recursive >/dev/null 2>&1 || true
     fi
 
     # Build nginx if not already built
     NGINX_BIN="${FOSPACK_DIR}/fos/nginx/sbin/nginx_fos"
     if [ ! -x "$NGINX_BIN" ]; then
         log_info "Building nginx (this will take several minutes)..."
-        cd "${FOSPACK_DIR}/nginx-builder"
+        cd "${FOSPACK_DIR}/nginx-builder" || return 1
 
         # Try OS-specific build script first, then fall back to generic
         if [ "$OS_TYPE" = "ubuntu" ] && [ -f "build-ubuntu.sh" ]; then
             log_info "Using Ubuntu optimized build script..."
-            sudo bash build-ubuntu.sh 2>&1 | tee -a "$INSTALL_LOG" || handle_error 11 "Nginx build failed"
+            log_to_file "CMD" "bash build-ubuntu.sh"
+            build_output=$(sudo bash build-ubuntu.sh 2>&1)
+            build_exit=$?
         elif [ -f "build-debian12.sh" ]; then
             log_info "Using Debian/Ubuntu compatible build script..."
-            sudo bash build-debian12.sh 2>&1 | tee -a "$INSTALL_LOG" || handle_error 11 "Nginx build failed"
+            log_to_file "CMD" "bash build-debian12.sh"
+            build_output=$(sudo bash build-debian12.sh 2>&1)
+            build_exit=$?
         elif [ -f "build-for-project.sh" ]; then
             log_info "Using project build script..."
-            sudo bash build-for-project.sh 2>&1 | tee -a "$INSTALL_LOG" || handle_error 11 "Nginx build failed"
+            log_to_file "CMD" "bash build-for-project.sh"
+            build_output=$(sudo bash build-for-project.sh 2>&1)
+            build_exit=$?
         elif [ -f "build.sh" ]; then
             log_warn "Using generic build script..."
-            sudo bash build.sh 2>&1 | tee -a "$INSTALL_LOG" || handle_error 11 "Nginx build failed"
+            log_to_file "CMD" "bash build.sh"
+            build_output=$(sudo bash build.sh 2>&1)
+            build_exit=$?
         else
             log_warn "No build script found, checking for pre-built binary..."
+            build_exit=0
+        fi
+
+        echo "$build_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+        if [ $build_exit -ne 0 ]; then
+            log_error "Nginx build failed"
+            echo "$build_output" | grep -iE '(error|failed|fatal)' | head -10 >&2
+            handle_error 11 "Nginx build failed"
         fi
     else
         log_info "Nginx binary already exists at ${NGINX_BIN}"
@@ -3302,7 +3531,7 @@ if [ $RESUME_STEP -le 12 ]; then
 
     # The web application IS the current project directory
     # No need to clone - just verify essential files exist
-    cd "${FOS_DIR}"
+    cd "${FOS_DIR}" || return 1
 
     if [ ! -f "config.php" ]; then
         log_warn "config.php not found - checking if this is a fresh clone"
@@ -3332,7 +3561,7 @@ if [ $RESUME_STEP -le 13 ]; then
     log_step "Step 13: Installing PHP Dependencies with Composer"
     log_progress "Installing Composer packages"
 
-    cd "${FOS_DIR}"
+    cd "${FOS_DIR}" || return 1
 
     # Copy .env.example to .env if it doesn't exist (needed for some Laravel operations)
     if [ ! -f ".env" ] && [ -f ".env.example" ]; then
@@ -3341,13 +3570,24 @@ if [ $RESUME_STEP -le 13 ]; then
     fi
 
     log_info "Installing Composer dependencies..."
-    log_cmd "composer install --no-dev --optimize-autoloader --no-interaction"
-    composer install --no-dev --optimize-autoloader --no-interaction 2>&1 | tee -a "$INSTALL_LOG" || handle_error 13 "Composer install failed"
+    log_to_file "CMD" "composer install --no-dev --optimize-autoloader --no-interaction"
+
+    composer_output=$(composer install --no-dev --optimize-autoloader --no-interaction 2>&1)
+    composer_exit=$?
+    echo "$composer_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+    if [ $composer_exit -ne 0 ]; then
+        log_error "Composer install failed"
+        echo "$composer_output" | grep -iE '(error|failed|exception)' | head -5 >&2
+        handle_error 13 "Composer install failed"
+    fi
 
     # Regenerate optimized autoloader
     log_info "Optimizing autoloader..."
-    log_cmd "composer dump-autoload --optimize --no-dev"
-    composer dump-autoload --optimize --no-dev 2>&1 | tee -a "$INSTALL_LOG" || log_warn "Autoloader optimization had warnings"
+    log_to_file "CMD" "composer dump-autoload --optimize --no-dev"
+
+    autoload_output=$(composer dump-autoload --optimize --no-dev 2>&1)
+    echo "$autoload_output" >> "$INSTALL_LOG" 2>/dev/null || true
 
     log_success "Composer dependencies installed and autoloader optimized"
 
@@ -3560,7 +3800,7 @@ DEBUGBAR_ENABLED=false
 ENV_EOF
 
     chmod 600 "${FOS_DIR}/.env"
-    chown ${USER}:${USER} "${FOS_DIR}/.env"
+    chown "${USER}":"${USER}" "${FOS_DIR}/.env"
 
     log_success "Production .env file created with Redis configuration"
     log_info "Redis, Cache, Session, and Queue configured to use Redis"
@@ -3586,7 +3826,7 @@ if [ $RESUME_STEP -le 15 ]; then
     if [ -f "${FOS_DIR}/package.json" ]; then
         log_info "package.json found, installing NPM dependencies..."
 
-        cd "${FOS_DIR}"
+        cd "${FOS_DIR}" || return 1
 
         # Load NVM for this shell
         export NVM_DIR="${HOME_DIR}/.nvm"
@@ -3616,8 +3856,8 @@ if [ $RESUME_STEP -le 15 ]; then
                 NPM_PREFIX=$(npm config get prefix 2>/dev/null || echo "/usr/local")
                 if [ -d "$NPM_PREFIX/lib/node_modules" ]; then
                     log_info "Fixing npm global directory permissions..."
-                    sudo chown -R ${USER}:${USER} "$NPM_PREFIX/lib/node_modules" 2>/dev/null || true
-                    sudo chown -R ${USER}:${USER} "$NPM_PREFIX/bin" 2>/dev/null || true
+                    sudo chown -R "${USER}":"${USER}" "$NPM_PREFIX/lib/node_modules" 2>/dev/null || true
+                    sudo chown -R "${USER}":"${USER}" "$NPM_PREFIX/bin" 2>/dev/null || true
 
                     # Retry after fixing permissions
                     if npm install -g pm2 2>&1 | tee -a "$INSTALL_LOG"; then
@@ -3644,8 +3884,17 @@ if [ $RESUME_STEP -le 15 ]; then
 
         # Install project dependencies
         log_info "Installing NPM dependencies..."
-        log_cmd "npm install"
-        npm install 2>&1 | tee -a "$INSTALL_LOG" || handle_error 15 "npm install failed"
+        log_to_file "CMD" "npm install"
+
+        npm_output=$(npm install 2>&1)
+        npm_exit=$?
+        echo "$npm_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+        if [ $npm_exit -ne 0 ]; then
+            log_error "npm install failed"
+            echo "$npm_output" | grep -iE '(error|ERR!|failed)' | head -10 >&2
+            handle_error 15 "npm install failed"
+        fi
 
         # Update frontend config with admin path
         if [ -f "resources/js/config.js" ]; then
@@ -3657,8 +3906,17 @@ if [ $RESUME_STEP -le 15 ]; then
         # Build production assets
         if grep -q "\"build\":" package.json; then
             log_info "Running npm run build..."
-            log_cmd "npm run build"
-            npm run build 2>&1 | tee -a "$INSTALL_LOG" || handle_error 15 "npm build failed"
+            log_to_file "CMD" "npm run build"
+
+            npm_build_output=$(npm run build 2>&1)
+            npm_build_exit=$?
+            echo "$npm_build_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+            if [ $npm_build_exit -ne 0 ]; then
+                log_error "npm build failed"
+                echo "$npm_build_output" | grep -iE '(error|failed)' | head -10 >&2
+                handle_error 15 "npm build failed"
+            fi
             log_success "Frontend assets built successfully"
         else
             log_warn "No build script found in package.json, skipping build step"
@@ -3700,7 +3958,7 @@ if [ $RESUME_STEP -le 16 ]; then
     log_step "Step 16: Configuring FOS-Streaming Application"
     log_progress "Setting up application configuration"
 
-    cd "${FOS_DIR}"
+    cd "${FOS_DIR}" || return 1
 
     # Update database configuration in config.php if it exists and has placeholders
     if [ -f "config.php" ]; then
@@ -3749,11 +4007,11 @@ PORTS_EOF
 
     # Set permissions - use current user, not hardcoded
     log_info "Setting permissions..."
-    chown -R ${USER}:${USER} "${FOS_DIR}"
+    chown -R "${USER}":"${USER}" "${FOS_DIR}"
 
     # Ensure fospackv69 nginx has correct ownership
     if [ -d "${FOS_DIR}/fospackv69/fos/nginx" ]; then
-        chown -R ${USER}:${USER} "${FOS_DIR}/fospackv69/fos/nginx"
+        chown -R "${USER}":"${USER}" "${FOS_DIR}/fospackv69/fos/nginx"
     fi
 
     save_state 16
@@ -3775,7 +4033,8 @@ if [ $RESUME_STEP -le 17 ]; then
     # -------------------------------------------------------------------------
     detect_ffmpeg_path() {
         # Try 'which' first
-        local detected=$(which ffmpeg 2>/dev/null)
+        local detected
+        detected=$(which ffmpeg 2>/dev/null)
         if [ -n "$detected" ] && [ -x "$detected" ]; then
             echo "$detected"
             return 0
@@ -3793,7 +4052,8 @@ if [ $RESUME_STEP -le 17 ]; then
 
     detect_ffprobe_path() {
         # Try 'which' first
-        local detected=$(which ffprobe 2>/dev/null)
+        local detected
+        detected=$(which ffprobe 2>/dev/null)
         if [ -n "$detected" ] && [ -x "$detected" ]; then
             echo "$detected"
             return 0
@@ -4368,7 +4628,7 @@ if [ $RESUME_STEP -le 19 ]; then
             sudo sed -i "s/listen 1935;/listen ${RTMP_PORT};/g" "${NGINX_CONF}" 2>/dev/null || true
 
             # Set ownership
-            sudo chown -R ${USER}:${USER} "${NGINX_DIR}"
+            sudo chown -R "${USER}":"${USER}" "${NGINX_DIR}"
         else
             log_warn "Nginx config not found at ${NGINX_CONF}"
         fi
@@ -4464,7 +4724,7 @@ if [ $RESUME_STEP -le 21 ]; then
     log_step "Step 21: Initializing Database"
     log_progress "Running database migrations and seeders via artisan"
 
-    cd "${FOS_DIR}"
+    cd "${FOS_DIR}" || return 1
 
     if [ ! -f "artisan" ]; then
         handle_error 21 "Artisan CLI not found at ${FOS_DIR}/artisan"
@@ -4621,13 +4881,13 @@ if [ $RESUME_STEP -le 22 ]; then
 
             # CRITICAL: Allow SSH first to prevent lockout
             log_warn "Allowing SSH access (port ${SSH_PORT}) to prevent lockout..."
-            sudo ufw allow ${SSH_PORT}/tcp comment 'SSH Access' 2>/dev/null || true
+            sudo ufw allow "${SSH_PORT}"/tcp comment 'SSH Access' 2>/dev/null || true
 
             # FOS Streaming ports
             log_info "Allowing FOS-Streaming ports..."
-            sudo ufw allow ${WEB_PORT}/tcp comment 'FOS Web Panel' 2>/dev/null || true
-            sudo ufw allow ${STREAM_PORT}/tcp comment 'FOS Streaming' 2>/dev/null || true
-            sudo ufw allow ${RTMP_PORT}/tcp comment 'FOS RTMP Ingest' 2>/dev/null || true
+            sudo ufw allow "${WEB_PORT}"/tcp comment 'FOS Web Panel' 2>/dev/null || true
+            sudo ufw allow "${STREAM_PORT}"/tcp comment 'FOS Streaming' 2>/dev/null || true
+            sudo ufw allow "${RTMP_PORT}"/tcp comment 'FOS RTMP Ingest' 2>/dev/null || true
 
             # Standard web ports
             sudo ufw allow 80/tcp comment 'HTTP' 2>/dev/null || true
@@ -4681,7 +4941,7 @@ if [ $RESUME_STEP -le 23 ]; then
     log_step "Step 23: Starting PM2 Background Workers"
     log_progress "Initializing background workers"
 
-    cd "${FOS_DIR}"
+    cd "${FOS_DIR}" || return 1
 
     # Load NVM for this shell
     export NVM_DIR="${HOME_DIR}/.nvm"
