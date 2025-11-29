@@ -3614,6 +3614,143 @@ MARIADB_ROOT_PATH_EOF
         fi
     fi
 
+    # -------------------------------------------------------------------------
+    # MariaDB connection helper with socket/TCP fallback
+    # Usage: mariadb_exec "SQL COMMAND" or mariadb_exec_quiet "SQL COMMAND"
+    # -------------------------------------------------------------------------
+    MARIADB_CONNECTION_METHOD=""  # Will be set to "socket" or "tcp"
+    MARIADB_ROOT_PASSWORD=""      # Will be set if TCP auth is needed
+
+    # Test MariaDB connection and determine best method
+    test_mariadb_connection() {
+        # Method 1: Try socket authentication (preferred)
+        if sudo mariadb -e "SELECT 1;" &>/dev/null; then
+            MARIADB_CONNECTION_METHOD="socket"
+            log_info "MariaDB connection via socket authentication works"
+            return 0
+        fi
+
+        # Method 2: Try mysql command via socket
+        if sudo mysql -e "SELECT 1;" &>/dev/null; then
+            MARIADB_CONNECTION_METHOD="socket_mysql"
+            log_info "MariaDB connection via mysql socket works"
+            return 0
+        fi
+
+        # Method 3: Try TCP connection without password (fresh install)
+        if mariadb -h 127.0.0.1 -P 3306 -u root -e "SELECT 1;" &>/dev/null; then
+            MARIADB_CONNECTION_METHOD="tcp_nopass"
+            log_info "MariaDB connection via TCP (no password) works"
+            return 0
+        fi
+
+        # Method 4: Try TCP connection with empty password
+        if mariadb -h 127.0.0.1 -P 3306 -u root -p'' -e "SELECT 1;" &>/dev/null 2>&1; then
+            MARIADB_CONNECTION_METHOD="tcp_empty"
+            log_info "MariaDB connection via TCP (empty password) works"
+            return 0
+        fi
+
+        # Method 5: Check if there's a saved root password
+        if [ -f /root/MARIADB_ROOT_PASSWORD ]; then
+            local saved_pass
+            saved_pass=$(sudo cat /root/MARIADB_ROOT_PASSWORD 2>/dev/null)
+            if [ -n "$saved_pass" ] && mariadb -h 127.0.0.1 -P 3306 -u root -p"${saved_pass}" -e "SELECT 1;" &>/dev/null 2>&1; then
+                MARIADB_CONNECTION_METHOD="tcp_password"
+                MARIADB_ROOT_PASSWORD="$saved_pass"
+                log_info "MariaDB connection via TCP (saved password) works"
+                return 0
+            fi
+        fi
+
+        # Method 6: Prompt for password as last resort
+        log_warn "Cannot connect to MariaDB via socket or TCP without password"
+        log_info "Please enter the MariaDB root password (or press Enter if none):"
+        read -rsp "MariaDB root password: " MARIADB_ROOT_PASSWORD
+        echo ""
+
+        if [ -z "$MARIADB_ROOT_PASSWORD" ]; then
+            # Empty password entered
+            if mariadb -h 127.0.0.1 -P 3306 -u root -e "SELECT 1;" &>/dev/null; then
+                MARIADB_CONNECTION_METHOD="tcp_nopass"
+                return 0
+            fi
+        else
+            if mariadb -h 127.0.0.1 -P 3306 -u root -p"${MARIADB_ROOT_PASSWORD}" -e "SELECT 1;" &>/dev/null 2>&1; then
+                MARIADB_CONNECTION_METHOD="tcp_password"
+                # Save password for future use in this session
+                echo "$MARIADB_ROOT_PASSWORD" | sudo tee /root/MARIADB_ROOT_PASSWORD > /dev/null
+                sudo chmod 600 /root/MARIADB_ROOT_PASSWORD
+                return 0
+            fi
+        fi
+
+        return 1
+    }
+
+    # Execute MariaDB command using the determined connection method
+    mariadb_exec() {
+        local sql="$1"
+        case "$MARIADB_CONNECTION_METHOD" in
+            socket)
+                sudo mariadb -e "$sql"
+                ;;
+            socket_mysql)
+                sudo mysql -e "$sql"
+                ;;
+            tcp_nopass)
+                mariadb -h 127.0.0.1 -P 3306 -u root -e "$sql"
+                ;;
+            tcp_empty)
+                mariadb -h 127.0.0.1 -P 3306 -u root -p'' -e "$sql" 2>/dev/null
+                ;;
+            tcp_password)
+                mariadb -h 127.0.0.1 -P 3306 -u root -p"${MARIADB_ROOT_PASSWORD}" -e "$sql" 2>/dev/null
+                ;;
+            *)
+                # Default: try socket first, then TCP
+                if sudo mariadb -e "$sql" 2>/dev/null; then
+                    return 0
+                elif mariadb -h 127.0.0.1 -P 3306 -u root -e "$sql" 2>/dev/null; then
+                    return 0
+                else
+                    return 1
+                fi
+                ;;
+        esac
+    }
+
+    # Execute MariaDB command silently (suppress output, return result)
+    mariadb_exec_quiet() {
+        local sql="$1"
+        mariadb_exec "$sql" &>/dev/null
+    }
+
+    # Execute MariaDB command and return single value
+    mariadb_get_value() {
+        local sql="$1"
+        case "$MARIADB_CONNECTION_METHOD" in
+            socket)
+                sudo mariadb -N -e "$sql" 2>/dev/null
+                ;;
+            socket_mysql)
+                sudo mysql -N -e "$sql" 2>/dev/null
+                ;;
+            tcp_nopass)
+                mariadb -h 127.0.0.1 -P 3306 -u root -N -e "$sql" 2>/dev/null
+                ;;
+            tcp_empty)
+                mariadb -h 127.0.0.1 -P 3306 -u root -p'' -N -e "$sql" 2>/dev/null
+                ;;
+            tcp_password)
+                mariadb -h 127.0.0.1 -P 3306 -u root -p"${MARIADB_ROOT_PASSWORD}" -N -e "$sql" 2>/dev/null
+                ;;
+            *)
+                sudo mariadb -N -e "$sql" 2>/dev/null || mariadb -h 127.0.0.1 -P 3306 -u root -N -e "$sql" 2>/dev/null
+                ;;
+        esac
+    }
+
     # Generate strong password for FOS application user (only if not already set from resume)
     if [ -z "$SQL_PASSWD" ]; then
         log_info "Generating MariaDB password for FOS application user..."
@@ -3708,84 +3845,98 @@ MARIADB_ROOT_PATH_EOF
         fi
     fi
 
-    # Wait for MariaDB socket to be ready (important for socket auth)
+    # Wait for MariaDB to be ready and test connection
     log_info "Waiting for MariaDB to be fully ready..."
     SOCKET_WAIT=0
     SOCKET_MAX_WAIT=30
     while [ $SOCKET_WAIT -lt $SOCKET_MAX_WAIT ]; do
+        # Try socket first, then TCP
         if sudo mariadb -e "SELECT 1;" &>/dev/null; then
+            break
+        elif mariadb -h 127.0.0.1 -P 3306 -u root -e "SELECT 1;" &>/dev/null; then
             break
         fi
         sleep 1
         SOCKET_WAIT=$((SOCKET_WAIT + 1))
     done
 
-    # Verify we can connect before proceeding
-    if ! sudo mariadb -e "SELECT 1;" &>/dev/null; then
-        # Try mysql command as fallback
-        if ! sudo mysql -e "SELECT 1;" &>/dev/null; then
-            log_error "Cannot connect to MariaDB server"
-            log_info "Checking what's on port 3306..."
-            ss -tlnp 2>/dev/null | grep ":3306 " || netstat -tlnp 2>/dev/null | grep ":3306 " || true
-            log_info "Checking for MariaDB socket..."
-            ls -la /var/run/mysqld/ 2>/dev/null || true
-            ls -la /run/mysqld/ 2>/dev/null || true
-            handle_error 10 "MariaDB connection failed"
-        fi
+    # Test and determine best connection method (socket vs TCP)
+    log_info "Testing MariaDB connection methods..."
+    if ! test_mariadb_connection; then
+        log_error "Cannot connect to MariaDB server"
+        log_info "Checking what's on port 3306..."
+        ss -tlnp 2>/dev/null | grep ":3306 " || netstat -tlnp 2>/dev/null | grep ":3306 " || true
+        log_info "Checking for MariaDB socket..."
+        ls -la /var/run/mysqld/ 2>/dev/null || true
+        ls -la /run/mysqld/ 2>/dev/null || true
+        handle_error 10 "MariaDB connection failed - cannot connect via socket or TCP"
     fi
 
+    log_success "MariaDB connection established (method: ${MARIADB_CONNECTION_METHOD})"
+
     # -------------------------------------------------------------------------
-    # Configure unix_socket authentication for root user
+    # Configure unix_socket authentication for root user (if using socket)
     # This allows passwordless access via sudo (more secure than password auth)
     # -------------------------------------------------------------------------
-    log_info "Securing MariaDB installation with unix_socket authentication..."
+    if [[ "$MARIADB_CONNECTION_METHOD" == socket* ]]; then
+        log_info "Socket authentication already working - ensuring it stays configured..."
 
-    # Ensure unix_socket plugin is loaded
-    sudo mariadb -e "INSTALL PLUGIN IF NOT EXISTS unix_socket SONAME 'auth_socket';" 2>/dev/null || true
+        # Ensure unix_socket plugin is loaded
+        mariadb_exec_quiet "INSTALL PLUGIN IF NOT EXISTS unix_socket SONAME 'auth_socket';" || true
 
-    # Configure root to use unix_socket authentication (passwordless via sudo)
-    # This is the recommended approach for local root access
-    log_info "Configuring root user for socket authentication..."
-    sudo mariadb -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket;" 2>/dev/null || {
-        # Fallback: try alternative syntax for older MariaDB versions
-        sudo mariadb -e "UPDATE mysql.user SET plugin='unix_socket' WHERE User='root' AND Host='localhost';" 2>/dev/null || true
-        sudo mariadb -e "FLUSH PRIVILEGES;" 2>/dev/null || true
-    }
+        # Verify root uses unix_socket
+        mariadb_exec_quiet "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket;" || {
+            mariadb_exec_quiet "UPDATE mysql.user SET plugin='unix_socket' WHERE User='root' AND Host='localhost';" || true
+            mariadb_exec_quiet "FLUSH PRIVILEGES;" || true
+        }
 
-    # Verify socket authentication works
-    if sudo mariadb -e "SELECT CURRENT_USER();" &>/dev/null; then
-        log_success "unix_socket authentication configured successfully"
-        log_info "Root can now connect with: sudo mariadb"
+        log_success "unix_socket authentication confirmed"
+        log_info "Root can connect with: sudo mariadb"
     else
-        log_warn "unix_socket authentication may not be fully configured"
-        log_info "Continuing with installation..."
+        log_info "Using TCP authentication (socket auth not available)"
+        log_info "Root can connect with: mariadb -h 127.0.0.1 -P 3306 -u root -p"
+
+        # Try to enable socket auth for future use
+        log_info "Attempting to enable socket authentication for future use..."
+        mariadb_exec_quiet "INSTALL PLUGIN IF NOT EXISTS unix_socket SONAME 'auth_socket';" || true
+
+        # For TCP connections, also set up socket as an alternative
+        mariadb_exec_quiet "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('${MARIADB_ROOT_PASSWORD:-}');" 2>/dev/null || {
+            # Older MariaDB may not support OR syntax
+            log_info "Keeping current authentication method"
+        }
     fi
+
+    # Secure MariaDB installation
+    log_info "Securing MariaDB installation..."
 
     # Remove anonymous users
     log_info "Removing anonymous users..."
-    sudo mariadb -e "DELETE FROM mysql.user WHERE User='';" 2>/dev/null || true
+    mariadb_exec_quiet "DELETE FROM mysql.user WHERE User='';" || true
 
     # Remove remote root login
     log_info "Disabling remote root login..."
-    sudo mariadb -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');" 2>/dev/null || true
+    mariadb_exec_quiet "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');" || true
 
     # Remove test database
     log_info "Removing test database..."
-    sudo mariadb -e "DROP DATABASE IF EXISTS test;" 2>/dev/null || true
-    sudo mariadb -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';" 2>/dev/null || true
+    mariadb_exec_quiet "DROP DATABASE IF EXISTS test;" || true
+    mariadb_exec_quiet "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';" || true
 
     # Flush privileges
-    sudo mariadb -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+    mariadb_exec_quiet "FLUSH PRIVILEGES;" || true
 
     # Create FOS database and application user
     log_info "Creating FOS database..."
-    sudo mariadb -e "CREATE DATABASE IF NOT EXISTS fos_streaming CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" || handle_error 10 "Failed to create database"
+    if ! mariadb_exec "CREATE DATABASE IF NOT EXISTS fos_streaming CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"; then
+        handle_error 10 "Failed to create database"
+    fi
 
     log_info "Creating FOS application user..."
     # Create user with password authentication (for application connections)
-    sudo mariadb -e "CREATE USER IF NOT EXISTS 'fos'@'localhost' IDENTIFIED BY '${SQL_PASSWD}';"
-    sudo mariadb -e "GRANT ALL PRIVILEGES ON fos_streaming.* TO 'fos'@'localhost';"
-    sudo mariadb -e "FLUSH PRIVILEGES;"
+    mariadb_exec "CREATE USER IF NOT EXISTS 'fos'@'localhost' IDENTIFIED BY '${SQL_PASSWD}';" || true
+    mariadb_exec "GRANT ALL PRIVILEGES ON fos_streaming.* TO 'fos'@'localhost';" || handle_error 10 "Failed to grant privileges"
+    mariadb_exec "FLUSH PRIVILEGES;" || true
 
     log_success "FOS database and user created successfully"
 
@@ -3867,8 +4018,8 @@ MARIADB_EOF
     }
 
     if ! restart_mariadb_service; then
-        # Check if MariaDB is actually running anyway
-        if ! sudo mariadb -e "SELECT 1;" &>/dev/null; then
+        # Check if MariaDB is actually running anyway (try both socket and TCP)
+        if ! sudo mariadb -e "SELECT 1;" &>/dev/null && ! mariadb -h 127.0.0.1 -P 3306 -u root -e "SELECT 1;" &>/dev/null; then
             handle_error 10 "Failed to restart MariaDB"
         else
             log_info "MariaDB is responding after restart attempt"
@@ -3884,25 +4035,38 @@ MARIADB_EOF
     sleep 2
     SOCKET_WAIT=0
     while [ $SOCKET_WAIT -lt 15 ]; do
+        # Try socket first, then TCP
         if sudo mariadb -e "SELECT 1;" &>/dev/null; then
+            break
+        elif mariadb -h 127.0.0.1 -P 3306 -u root -e "SELECT 1;" &>/dev/null; then
             break
         fi
         sleep 1
         SOCKET_WAIT=$((SOCKET_WAIT + 1))
     done
 
-    # Verify MariaDB is accessible via socket
-    log_info "Verifying MariaDB installation and socket authentication..."
-    if sudo mariadb -e "SELECT VERSION();" > /dev/null 2>&1; then
-        MARIADB_VER=$(sudo mariadb -N -e "SELECT VERSION();")
-        log_success "MariaDB ${MARIADB_VER} is running and accessible via socket"
+    # Re-test connection method after restart (may have changed)
+    test_mariadb_connection &>/dev/null || true
 
-        # Verify socket auth works for root
-        CURRENT_USER=$(sudo mariadb -N -e "SELECT CURRENT_USER();" 2>/dev/null || echo "unknown")
+    # Verify MariaDB is accessible
+    log_info "Verifying MariaDB installation..."
+    MARIADB_VER=$(mariadb_get_value "SELECT VERSION();" || echo "unknown")
+    if [ "$MARIADB_VER" != "unknown" ] && [ -n "$MARIADB_VER" ]; then
+        log_success "MariaDB ${MARIADB_VER} is running and accessible"
+
+        # Show connection method and current user
+        CURRENT_USER=$(mariadb_get_value "SELECT CURRENT_USER();" || echo "unknown")
         if [[ "$CURRENT_USER" == *"root"* ]]; then
-            log_success "Socket authentication working: ${CURRENT_USER}"
+            log_success "Connected as: ${CURRENT_USER} (method: ${MARIADB_CONNECTION_METHOD})"
         else
-            log_info "Current database user: ${CURRENT_USER}"
+            log_info "Connected as: ${CURRENT_USER} (method: ${MARIADB_CONNECTION_METHOD})"
+        fi
+
+        # Provide connection instructions based on method
+        if [[ "$MARIADB_CONNECTION_METHOD" == socket* ]]; then
+            log_info "Connect using: sudo mariadb"
+        else
+            log_info "Connect using: mariadb -h 127.0.0.1 -P 3306 -u root -p"
         fi
     else
         handle_error 10 "MariaDB verification failed"
