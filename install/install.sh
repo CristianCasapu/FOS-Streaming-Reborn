@@ -3163,32 +3163,54 @@ if [ $RESUME_STEP -le 8 ]; then
     sudo mkdir -p "${FOS_DIR}/logs"
 
     log_info "Configuring PHP-FPM pool..."
+
+    # Create socket directory if it doesn't exist
+    sudo mkdir -p /run/php
+    sudo chown "${USER}":"${USER}" /run/php
+
+    # Create FOS PHP-FPM socket directory
+    FOS_PHP_SOCKET_DIR="${FOS_DIR}/fospackv69/fos/php"
+    sudo mkdir -p "${FOS_PHP_SOCKET_DIR}"
+    sudo chown "${USER}":"${USER}" "${FOS_PHP_SOCKET_DIR}"
+
+    # Configure PHP-FPM pool with Unix socket (more efficient than TCP)
     sudo tee /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf > /dev/null <<EOF
-[php84]
+[www]
 user = ${USER}
 group = ${USER}
-listen = 127.0.0.1:9002
+
+; Use Unix socket for better performance
+listen = /run/php/php${PHP_VERSION}-fpm.sock
 listen.owner = ${USER}
 listen.group = ${USER}
-pm = ondemand
+listen.mode = 0660
+
+pm = dynamic
 pm.max_children = 300
 pm.start_servers = 10
-pm.min_spare_servers = 10
-pm.max_spare_servers = 100
-pm.process_idle_timeout = 3s
+pm.min_spare_servers = 5
+pm.max_spare_servers = 35
+pm.process_idle_timeout = 10s
 pm.max_requests = 500
+
 security.limit_extensions = .php
+
+; Logging
 php_admin_value[error_log] = ${FOS_DIR}/logs/php-fpm.log
 php_admin_flag[log_errors] = on
-php_admin_value[memory_limit] = 1128M
-php_admin_value[upload_max_filesize] = 10M
-php_admin_value[post_max_size] = 10M
+catch_workers_output = yes
+decorate_workers_output = no
+
+; PHP Settings
+php_admin_value[memory_limit] = 512M
+php_admin_value[upload_max_filesize] = 100M
+php_admin_value[post_max_size] = 100M
 php_admin_value[max_execution_time] = 300
 php_admin_value[max_input_time] = 300
 
 ; Session security
 php_admin_value[session.cookie_httponly] = 1
-php_admin_value[session.cookie_samesite] = "Strict"
+php_admin_value[session.cookie_samesite] = "Lax"
 php_admin_value[session.use_strict_mode] = 1
 php_admin_value[session.use_only_cookies] = 1
 php_admin_value[session.cookie_secure] = 0
@@ -3197,8 +3219,14 @@ php_admin_value[session.cookie_secure] = 0
 php_admin_value[expose_php] = Off
 php_admin_value[display_errors] = Off
 php_admin_value[log_errors] = On
-php_admin_value[error_reporting] = E_ALL
+php_admin_value[error_reporting] = E_ALL & ~E_DEPRECATED & ~E_STRICT
 EOF
+
+    # Create a symbolic link for the streaming PHP-FPM socket (for custom nginx)
+    log_info "Creating PHP-FPM socket symlink for streaming nginx..."
+    if [ ! -e "${FOS_PHP_SOCKET_DIR}/php-fpm-streaming.socket" ]; then
+        sudo ln -sf "/run/php/php${PHP_VERSION}-fpm.sock" "${FOS_PHP_SOCKET_DIR}/php-fpm-streaming.socket"
+    fi
 
     log_info "Configuring php.ini..."
     PHP_INI="/etc/php/${PHP_VERSION}/fpm/php.ini"
@@ -4617,21 +4645,320 @@ if [ $RESUME_STEP -le 19 ]; then
         log_info "Generating self-signed certificate for ${DOMAIN_NAME}..."
         generate_self_signed_cert "${DOMAIN_NAME}" "${CERTS_DIR}"
 
-        if [ -f "${NGINX_CONF}" ]; then
-            log_info "Configuring nginx with domain: ${DOMAIN_NAME}, ports - Web: ${WEB_PORT}, Stream: ${STREAM_PORT}, RTMP: ${RTMP_PORT}..."
+        # Generate comprehensive nginx configuration
+        log_info "Generating nginx configuration..."
+        log_info "Domain: ${DOMAIN_NAME}, Web Port: ${WEB_PORT}, Stream Port: ${STREAM_PORT}, RTMP Port: ${RTMP_PORT}"
 
-            # Update HTTPS ports in nginx config
-            sudo sed -i "s/listen 8000;/listen ${STREAM_PORT} ssl http2;/g" "${NGINX_CONF}" 2>/dev/null || true
-            sudo sed -i "s/listen \[::\]:8000;/listen [::]:${STREAM_PORT} ssl http2;/g" "${NGINX_CONF}" 2>/dev/null || true
-            sudo sed -i "s/listen 7777;/listen ${WEB_PORT} ssl http2;/g" "${NGINX_CONF}" 2>/dev/null || true
-            sudo sed -i "s/listen \[::\]:7777;/listen [::]:${WEB_PORT} ssl http2;/g" "${NGINX_CONF}" 2>/dev/null || true
-            sudo sed -i "s/listen 1935;/listen ${RTMP_PORT};/g" "${NGINX_CONF}" 2>/dev/null || true
+        # Create required directories
+        sudo mkdir -p "${NGINX_DIR}/conf"
+        sudo mkdir -p "${NGINX_DIR}/logs"
+        sudo mkdir -p "${NGINX_DIR}/pid"
+        sudo mkdir -p "${FOS_DIR}/fospackv69/fos/streams/hls"
+        sudo mkdir -p "${FOS_DIR}/fospackv69/fos/streams/dash"
+        sudo mkdir -p "${FOS_DIR}/fospackv69/fos/logs"
 
-            # Set ownership
-            sudo chown -R "${USER}":"${USER}" "${NGINX_DIR}"
-        else
-            log_warn "Nginx config not found at ${NGINX_CONF}"
-        fi
+        # Generate complete nginx.conf with both web and streaming
+        sudo tee "${NGINX_CONF}" > /dev/null <<NGINX_CONF_EOF
+#############################################################################
+# FOS-Streaming v70 - Unified Nginx Configuration
+# Generated: $(date '+%Y-%m-%d %H:%M:%S')
+#
+# User: ${USER}:${USER}
+# Web Interface: Port ${WEB_PORT}
+# Streaming: Port ${STREAM_PORT}
+# RTMP: Port ${RTMP_PORT}
+#############################################################################
+
+user ${USER} ${USER};
+worker_processes auto;
+worker_cpu_affinity auto;
+worker_rlimit_nofile 1000000;
+error_log ${FOS_DIR}/fospackv69/fos/logs/nginx-error.log warn;
+pid ${NGINX_DIR}/pid/nginx.pid;
+
+events {
+    worker_connections 100000;
+    use epoll;
+    multi_accept on;
+    accept_mutex off;
+}
+
+http {
+    include mime.types;
+    default_type application/octet-stream;
+
+    types {
+        application/dash+xml mpd;
+        application/vnd.apple.mpegurl m3u8;
+        video/mp2t ts;
+        video/mp4 m4s mp4;
+        audio/mp4 m4a;
+    }
+
+    log_format main '\$remote_addr - \$remote_user [\$time_local] '
+                    '"\$request" \$status \$body_bytes_sent '
+                    '"\$http_referer" "\$http_user_agent"';
+
+    log_format streaming '\$remote_addr - \$remote_user [\$time_local] '
+                         '"\$request" \$status \$body_bytes_sent '
+                         '"\$http_referer" "\$http_user_agent" '
+                         'rt=\$request_time';
+
+    access_log ${FOS_DIR}/fospackv69/fos/logs/nginx-access.log main buffer=256k flush=5m;
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    keepalive_requests 10000;
+    reset_timedout_connection on;
+    client_body_timeout 60;
+    client_header_timeout 60;
+    send_timeout 60;
+    client_body_buffer_size 128k;
+    client_max_body_size 100m;
+    output_buffers 2 512k;
+    server_tokens off;
+
+    # Gzip for web interface (disabled for streaming)
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css text/xml text/javascript
+               application/json application/javascript application/xml+rss
+               application/rss+xml font/truetype font/opentype
+               application/vnd.ms-fontobject image/svg+xml;
+
+    # Rate limiting zones
+    limit_conn_zone \$binary_remote_addr zone=conn_limit:50m;
+    limit_req_zone \$binary_remote_addr zone=req_limit:50m rate=100r/s;
+
+    # PHP-FPM upstream (uses system PHP-FPM socket)
+    upstream php_fpm {
+        server unix:/run/php/php${PHP_VERSION}-fpm.sock;
+        keepalive 128;
+    }
+
+    # Also create alias for streaming (same socket, different name for compatibility)
+    upstream php_fpm_streaming {
+        server unix:/run/php/php${PHP_VERSION}-fpm.sock;
+        keepalive 128;
+    }
+
+    # =========================================================================
+    # Web Admin Interface - Port ${WEB_PORT}
+    # =========================================================================
+    server {
+        listen ${WEB_PORT} reuseport;
+        listen [::]:${WEB_PORT} reuseport;
+        server_name ${DOMAIN_NAME} _;
+        root ${FOS_DIR}/public;
+        index index.php index.html;
+
+        access_log ${FOS_DIR}/fospackv69/fos/logs/web-access.log main;
+        error_log ${FOS_DIR}/fospackv69/fos/logs/web-error.log;
+
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "no-referrer-when-downgrade" always;
+
+        # Deny access to hidden files and sensitive files
+        location ~ /\. {
+            deny all;
+        }
+        location ~ /(composer\.(json|lock)|package(-lock)?\.json|\.env|\.git) {
+            deny all;
+        }
+
+        # Serve static files directly with caching
+        location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff|woff2|ttf|eot)$ {
+            expires 30d;
+            add_header Cache-Control "public, immutable";
+            try_files \$uri =404;
+        }
+
+        # Vite/build assets
+        location /build/ {
+            alias ${FOS_DIR}/public/build/;
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+
+        # PHP handling
+        location ~ \.php$ {
+            try_files \$uri =404;
+            fastcgi_split_path_info ^(.+\.php)(/.+)$;
+            fastcgi_pass php_fpm;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+            include fastcgi_params;
+            fastcgi_keep_conn on;
+            fastcgi_buffers 256 16k;
+            fastcgi_buffer_size 128k;
+            fastcgi_connect_timeout 300s;
+            fastcgi_send_timeout 300s;
+            fastcgi_read_timeout 300s;
+            fastcgi_hide_header X-Powered-By;
+        }
+
+        # Front controller pattern for Vue SPA
+        location / {
+            try_files \$uri \$uri/ /index.php?\$query_string;
+        }
+
+        # Health check endpoint
+        location /health {
+            access_log off;
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+    }
+
+    # =========================================================================
+    # Streaming Gateway - Port ${STREAM_PORT}
+    # =========================================================================
+    server {
+        listen ${STREAM_PORT} reuseport;
+        listen [::]:${STREAM_PORT} reuseport;
+        server_name _;
+        root ${FOS_DIR}/public;
+        index stream.php;
+
+        access_log ${FOS_DIR}/fospackv69/fos/logs/streaming-access.log streaming buffer=256k flush=5m;
+        error_log ${FOS_DIR}/fospackv69/fos/logs/streaming-error.log;
+
+        # Streaming-specific settings
+        chunked_transfer_encoding off;
+        gzip off;
+
+        limit_conn conn_limit 50;
+        limit_req zone=req_limit burst=200 nodelay;
+
+        # CORS headers for streaming
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods 'GET, POST, OPTIONS' always;
+        add_header Access-Control-Allow-Headers 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' always;
+
+        # Stream URL rewrites
+        rewrite ^/live/(.*)/(.*)/(.*)$ /stream.php?username=\$1&password=\$2&stream=\$3 break;
+        rewrite ^/live/(.*)/(.*)/(.*)\.(m3u8|mpd|ts|m4s)$ /stream.php?username=\$1&password=\$2&stream=\$3&format=\$4 break;
+
+        # DASH segments
+        location /dash {
+            alias ${FOS_DIR}/fospackv69/fos/streams/dash;
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Access-Control-Allow-Origin * always;
+            aio on;
+            directio 512;
+            sendfile on;
+            access_log off;
+        }
+
+        # HLS segments
+        location /hls {
+            alias ${FOS_DIR}/fospackv69/fos/streams/hls;
+            default_type application/vnd.apple.mpegurl;
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+            add_header Access-Control-Allow-Origin * always;
+            aio on;
+            directio 512;
+            sendfile on;
+            access_log off;
+        }
+
+        # PHP handling for stream authentication
+        location ~ \.php$ {
+            try_files \$uri =404;
+            fastcgi_split_path_info ^(.+\.php)(/.+)$;
+            fastcgi_pass php_fpm_streaming;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+            include fastcgi_params;
+            fastcgi_keep_conn on;
+            fastcgi_buffers 256 16k;
+            fastcgi_hide_header X-Powered-By;
+        }
+
+        # Health check
+        location /health {
+            access_log off;
+            return 200 'OK';
+            add_header Content-Type text/plain;
+        }
+
+        # Nginx status (localhost only)
+        location /nginx_status {
+            stub_status on;
+            access_log off;
+            allow 127.0.0.1;
+            deny all;
+        }
+    }
+}
+
+# =========================================================================
+# RTMP Streaming Configuration - Port ${RTMP_PORT}
+# =========================================================================
+rtmp {
+    server {
+        listen ${RTMP_PORT};
+        chunk_size 4096;
+        max_streams 128;
+        ping 30s;
+        ping_timeout 15s;
+        drop_idle_publisher 30s;
+
+        application live {
+            live on;
+            record off;
+            gop_cache on;
+
+            # Only allow local publishing
+            allow publish 127.0.0.1;
+            allow publish ::1;
+            deny publish all;
+            allow play all;
+
+            # HLS output
+            hls on;
+            hls_path ${FOS_DIR}/fospackv69/fos/streams/hls;
+            hls_fragment 3s;
+            hls_playlist_length 60s;
+            hls_sync 100ms;
+            hls_continuous on;
+            hls_cleanup on;
+            hls_nested on;
+
+            # DASH output
+            dash on;
+            dash_path ${FOS_DIR}/fospackv69/fos/streams/dash;
+            dash_fragment 4s;
+            dash_playlist_length 30s;
+            dash_cleanup on;
+            dash_nested on;
+        }
+
+        application transcoded {
+            live on;
+            record off;
+            hls on;
+            hls_path ${FOS_DIR}/fospackv69/fos/streams/hls_transcoded;
+            hls_fragment 3s;
+            hls_playlist_length 60s;
+        }
+    }
+}
+NGINX_CONF_EOF
+
+        # Set ownership
+        sudo chown -R "${USER}":"${USER}" "${NGINX_DIR}"
+        sudo chown -R "${USER}":"${USER}" "${FOS_DIR}/fospackv69/fos/streams"
+        sudo chown -R "${USER}":"${USER}" "${FOS_DIR}/fospackv69/fos/logs"
+
+        log_success "Nginx configuration generated successfully"
     fi
 
     save_state 19
@@ -5020,6 +5347,274 @@ if [ $RESUME_STEP -le 23 ]; then
     save_state 23
 else
     log_info "Skipping Step 23 (already completed)"
+fi
+
+# ============================================================================
+# STEP 24: Verify Installation - Command Availability and Configuration
+# ============================================================================
+CURRENT_STEP=24
+
+if [ $RESUME_STEP -le 24 ]; then
+    log_step "Step 24: Verifying Installation"
+    log_progress "Testing command availability and configuration"
+
+    cd "${FOS_DIR}" || return 1
+
+    VERIFY_PASS=0
+    VERIFY_FAIL=0
+    VERIFY_WARN=0
+
+    # Helper function to track verification results
+    verify_check() {
+        local description="$1"
+        local status="$2"
+        local details="$3"
+
+        case "$status" in
+            pass)
+                log_success "✓ $description${details:+: $details}"
+                ((VERIFY_PASS++))
+                ;;
+            fail)
+                log_error "✗ $description${details:+: $details}"
+                ((VERIFY_FAIL++))
+                ;;
+            warn)
+                log_warn "⚠ $description${details:+: $details}"
+                ((VERIFY_WARN++))
+                ;;
+        esac
+    }
+
+    log_info ""
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info " VERIFICATION: PHP & Composer"
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Verify PHP
+    if command -v php &>/dev/null; then
+        PHP_VER_INSTALLED=$(php -r 'echo PHP_VERSION;' 2>/dev/null)
+        verify_check "PHP installed" "pass" "v${PHP_VER_INSTALLED}"
+    else
+        verify_check "PHP installed" "fail" "php command not found"
+    fi
+
+    # Verify Composer
+    if command -v composer &>/dev/null; then
+        COMPOSER_VER_INSTALLED=$(composer --version 2>/dev/null | head -1 | grep -oP '\d+\.\d+\.\d+' | head -1)
+        verify_check "Composer installed" "pass" "v${COMPOSER_VER_INSTALLED}"
+
+        # Test composer works in project
+        if composer dump-autoload --dry-run --quiet 2>/dev/null; then
+            verify_check "Composer autoload" "pass" "autoloader functional"
+        else
+            verify_check "Composer autoload" "warn" "may need 'composer install'"
+        fi
+    else
+        verify_check "Composer installed" "fail" "composer command not found in PATH"
+        log_info "  → Ensure /usr/local/bin is in PATH"
+    fi
+
+    # Verify PHP Artisan
+    if [ -f "${FOS_DIR}/artisan" ]; then
+        if php artisan --version 2>/dev/null | grep -q "Laravel\|FOS"; then
+            ARTISAN_VER=$(php artisan --version 2>/dev/null | head -1)
+            verify_check "Artisan CLI" "pass" "${ARTISAN_VER}"
+        else
+            # Try a simpler test
+            if php artisan list --quiet 2>/dev/null; then
+                verify_check "Artisan CLI" "pass" "functional"
+            else
+                verify_check "Artisan CLI" "warn" "artisan may need dependencies"
+            fi
+        fi
+    else
+        verify_check "Artisan CLI" "warn" "artisan file not found in ${FOS_DIR}"
+    fi
+
+    log_info ""
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info " VERIFICATION: Node.js & NPM (via NVM)"
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Load NVM for verification
+    export NVM_DIR="${HOME_DIR}/.nvm"
+    if [ -s "$NVM_DIR/nvm.sh" ]; then
+        # shellcheck source=/dev/null
+        \. "$NVM_DIR/nvm.sh"
+        verify_check "NVM installed" "pass" "${NVM_DIR}"
+    else
+        verify_check "NVM installed" "fail" "nvm.sh not found at ${NVM_DIR}"
+    fi
+
+    # Verify Node.js
+    if command -v node &>/dev/null; then
+        NODE_VER_INSTALLED=$(node --version 2>/dev/null)
+        verify_check "Node.js installed" "pass" "${NODE_VER_INSTALLED}"
+    else
+        verify_check "Node.js installed" "fail" "node command not found"
+    fi
+
+    # Verify NPM
+    if command -v npm &>/dev/null; then
+        NPM_VER_INSTALLED=$(npm --version 2>/dev/null)
+        verify_check "NPM installed" "pass" "v${NPM_VER_INSTALLED}"
+
+        # Test npm works in project
+        if [ -f "${FOS_DIR}/package.json" ]; then
+            if npm list --depth=0 --silent 2>/dev/null | head -1 | grep -q "fos-streaming"; then
+                verify_check "NPM dependencies" "pass" "node_modules present"
+            else
+                verify_check "NPM dependencies" "warn" "may need 'npm install'"
+            fi
+        fi
+    else
+        verify_check "NPM installed" "fail" "npm command not found"
+    fi
+
+    # Verify PM2
+    if command -v pm2 &>/dev/null || [ -x "${FOS_DIR}/node_modules/.bin/pm2" ]; then
+        PM2_VER=$(pm2 --version 2>/dev/null || "${FOS_DIR}/node_modules/.bin/pm2" --version 2>/dev/null)
+        verify_check "PM2 installed" "pass" "v${PM2_VER}"
+    else
+        verify_check "PM2 installed" "warn" "pm2 not in PATH (can use npx pm2)"
+    fi
+
+    log_info ""
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info " VERIFICATION: Services & Sockets"
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Verify PHP-FPM socket
+    PHP_FPM_SOCKET="/run/php/php${PHP_VERSION}-fpm.sock"
+    if [ -S "$PHP_FPM_SOCKET" ]; then
+        verify_check "PHP-FPM socket" "pass" "$PHP_FPM_SOCKET"
+    elif has_systemd; then
+        # Check if PHP-FPM service is running
+        if systemctl is-active --quiet "php${PHP_VERSION}-fpm" 2>/dev/null; then
+            verify_check "PHP-FPM service" "pass" "running (socket will be created)"
+        else
+            verify_check "PHP-FPM socket" "warn" "socket not found, service may be stopped"
+        fi
+    else
+        verify_check "PHP-FPM socket" "warn" "cannot verify (non-systemd environment)"
+    fi
+
+    # Verify streaming socket symlink
+    FOS_STREAMING_SOCKET="${FOS_PHP_SOCKET_DIR:-${FOS_DIR}/fospackv69/fos/php}/php-fpm-streaming.socket"
+    if [ -S "$FOS_STREAMING_SOCKET" ] || [ -L "$FOS_STREAMING_SOCKET" ]; then
+        if [ -L "$FOS_STREAMING_SOCKET" ]; then
+            SYMLINK_TARGET=$(readlink -f "$FOS_STREAMING_SOCKET" 2>/dev/null)
+            verify_check "Streaming socket symlink" "pass" "→ $SYMLINK_TARGET"
+        else
+            verify_check "Streaming socket" "pass" "$FOS_STREAMING_SOCKET"
+        fi
+    else
+        verify_check "Streaming socket symlink" "warn" "not found at ${FOS_STREAMING_SOCKET}"
+    fi
+
+    # Verify MariaDB
+    if has_systemd && systemctl is-active --quiet mariadb 2>/dev/null; then
+        verify_check "MariaDB service" "pass" "running"
+    elif command -v mariadb &>/dev/null; then
+        verify_check "MariaDB" "pass" "installed"
+    else
+        verify_check "MariaDB service" "warn" "cannot verify status"
+    fi
+
+    # Verify Redis
+    if has_systemd && systemctl is-active --quiet redis-server 2>/dev/null; then
+        verify_check "Redis service" "pass" "running"
+    elif command -v redis-cli &>/dev/null; then
+        verify_check "Redis" "pass" "installed"
+    else
+        verify_check "Redis service" "warn" "cannot verify status"
+    fi
+
+    log_info ""
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info " VERIFICATION: Nginx Configuration"
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Verify custom FOS nginx config
+    FOS_NGINX_CONF="${FOS_DIR}/fospackv69/fos/nginx/conf/nginx.conf"
+    if [ -f "$FOS_NGINX_CONF" ]; then
+        verify_check "FOS Nginx config" "pass" "exists"
+
+        # Test nginx configuration syntax
+        FOS_NGINX_BIN="${FOS_DIR}/fospackv69/fos/nginx/sbin/nginx_fos"
+        if [ -x "$FOS_NGINX_BIN" ]; then
+            if $FOS_NGINX_BIN -t -c "$FOS_NGINX_CONF" 2>&1 | grep -q "syntax is ok"; then
+                verify_check "FOS Nginx config syntax" "pass" "valid"
+            else
+                CONFIG_ERR=$($FOS_NGINX_BIN -t -c "$FOS_NGINX_CONF" 2>&1 | head -3)
+                verify_check "FOS Nginx config syntax" "warn" "$CONFIG_ERR"
+            fi
+        else
+            verify_check "FOS Nginx binary" "warn" "not found at $FOS_NGINX_BIN"
+        fi
+    else
+        verify_check "FOS Nginx config" "fail" "not found at $FOS_NGINX_CONF"
+    fi
+
+    log_info ""
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info " VERIFICATION: PATH Configuration"
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Check shell profile for NVM
+    SHELL_PROFILE=""
+    if [ -f "${HOME_DIR}/.bashrc" ]; then
+        SHELL_PROFILE="${HOME_DIR}/.bashrc"
+    elif [ -f "${HOME_DIR}/.bash_profile" ]; then
+        SHELL_PROFILE="${HOME_DIR}/.bash_profile"
+    elif [ -f "${HOME_DIR}/.profile" ]; then
+        SHELL_PROFILE="${HOME_DIR}/.profile"
+    fi
+
+    if [ -n "$SHELL_PROFILE" ]; then
+        if grep -q "NVM_DIR" "$SHELL_PROFILE" 2>/dev/null; then
+            verify_check "NVM in shell profile" "pass" "$SHELL_PROFILE"
+        else
+            verify_check "NVM in shell profile" "warn" "not found in $SHELL_PROFILE"
+            log_info "  → Add to $SHELL_PROFILE:"
+            log_info '    export NVM_DIR="$HOME/.nvm"'
+            log_info '    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"'
+        fi
+    fi
+
+    # Check if /usr/local/bin is in PATH
+    if echo "$PATH" | grep -q "/usr/local/bin"; then
+        verify_check "/usr/local/bin in PATH" "pass" ""
+    else
+        verify_check "/usr/local/bin in PATH" "warn" "composer may not be accessible"
+    fi
+
+    log_info ""
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info " VERIFICATION SUMMARY"
+    log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info ""
+    echo -e "  ${GREEN}Passed:${NC}   ${VERIFY_PASS}"
+    echo -e "  ${YELLOW}Warnings:${NC} ${VERIFY_WARN}"
+    echo -e "  ${RED}Failed:${NC}   ${VERIFY_FAIL}"
+    log_info ""
+
+    if [ "$VERIFY_FAIL" -eq 0 ]; then
+        if [ "$VERIFY_WARN" -eq 0 ]; then
+            log_success "All verification checks passed!"
+        else
+            log_success "Verification completed with ${VERIFY_WARN} warning(s)"
+            log_info "Warnings are non-critical but may need attention"
+        fi
+    else
+        log_warn "Verification completed with ${VERIFY_FAIL} failure(s)"
+        log_info "Review the failures above and fix before using the platform"
+    fi
+
+    save_state 24
+else
+    log_info "Skipping Step 24 (already completed)"
 fi
 
 # ============================================================================
