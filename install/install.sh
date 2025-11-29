@@ -3763,85 +3763,22 @@ MARIADB_ROOT_PATH_EOF
     sudo chmod 600 /root/MARIADB_FOS_PASSWORD
 
     # -------------------------------------------------------------------------
-    # Start MariaDB (only if not already running)
-    # Uses systemctl first, then falls back to service command for WSL/containers
+    # Ensure MariaDB is running (already started by apt after install)
     # -------------------------------------------------------------------------
-    start_mariadb_service() {
-        local started=false
-
-        # Method 1: Try systemctl if available (preferred)
-        if command -v systemctl &>/dev/null; then
-            log_info "Trying systemctl to start MariaDB..."
-            if sudo systemctl enable mariadb 2>/dev/null; then
-                log_info "MariaDB enabled via systemctl"
-            fi
-            if sudo systemctl start mariadb 2>/dev/null; then
-                log_success "MariaDB started via systemctl"
-                started=true
-            else
-                log_info "systemctl start failed, trying fallback methods..."
-            fi
-        fi
-
-        # Method 2: Try service command (for WSL/containers without systemd)
-        if [ "$started" = false ]; then
-            log_info "Trying service command to start MariaDB..."
-            if sudo service mariadb start 2>/dev/null; then
-                log_success "MariaDB started via service command"
-                started=true
-            elif sudo service mysql start 2>/dev/null; then
-                log_success "MariaDB started via service mysql command"
-                started=true
-            fi
-        fi
-
-        # Method 3: Try init.d script directly
-        if [ "$started" = false ] && [ -x /etc/init.d/mariadb ]; then
-            log_info "Trying init.d script to start MariaDB..."
-            if sudo /etc/init.d/mariadb start 2>/dev/null; then
-                log_success "MariaDB started via init.d script"
-                started=true
-            fi
-        fi
-
-        # Method 4: Try mysqld_safe as last resort
-        if [ "$started" = false ]; then
-            log_info "Trying mysqld_safe as last resort..."
-            if command -v mysqld_safe &>/dev/null; then
-                sudo mysqld_safe --user=mysql &>/dev/null &
-                sleep 3
-                if sudo mariadb -e "SELECT 1;" &>/dev/null; then
-                    log_success "MariaDB started via mysqld_safe"
-                    started=true
-                fi
-            fi
-        fi
-
-        if [ "$started" = true ]; then
-            return 0
-        else
-            return 1
-        fi
-    }
-
     if [ "$MARIADB_ALREADY_RUNNING" = true ]; then
-        log_info "MariaDB is already running - skipping service start"
+        log_info "MariaDB is already running"
     else
-        log_info "Starting MariaDB service..."
-        # Don't stop if something is already on port 3306
-        if ! ss -tlnp 2>/dev/null | grep -q ":3306 " && ! netstat -tlnp 2>/dev/null | grep -q ":3306 "; then
-            if ! start_mariadb_service; then
-                # If start fails, check if it's actually running anyway
-                if sudo mariadb -e "SELECT 1;" &>/dev/null; then
-                    log_info "MariaDB is responding despite service start issues"
-                    MARIADB_ALREADY_RUNNING=true
-                else
-                    handle_error 10 "Failed to start MariaDB using any method"
-                fi
+        # MariaDB should auto-start after installation, but verify
+        log_info "Verifying MariaDB service is running..."
+        if ! sudo mariadb -e "SELECT 1;" &>/dev/null; then
+            # Try to start it
+            log_info "Starting MariaDB service..."
+            if has_systemd; then
+                sudo systemctl start mariadb 2>/dev/null || sudo service mariadb start 2>/dev/null || true
+            else
+                sudo service mariadb start 2>/dev/null || sudo service mysql start 2>/dev/null || true
             fi
-        else
-            log_info "Port 3306 already in use - assuming MariaDB is running"
-            MARIADB_ALREADY_RUNNING=true
+            sleep 2
         fi
     fi
 
@@ -3875,58 +3812,69 @@ MARIADB_ROOT_PATH_EOF
     log_success "MariaDB connection established (method: ${MARIADB_CONNECTION_METHOD})"
 
     # -------------------------------------------------------------------------
-    # Configure unix_socket authentication for root user (if using socket)
-    # This allows passwordless access via sudo (more secure than password auth)
+    # Run mariadb-secure-installation interactively
+    # Let the user configure root password and security settings
     # -------------------------------------------------------------------------
-    if [[ "$MARIADB_CONNECTION_METHOD" == socket* ]]; then
-        log_info "Socket authentication already working - ensuring it stays configured..."
+    echo ""
+    log_info "=========================================="
+    log_info "MariaDB Secure Installation"
+    log_info "=========================================="
+    echo ""
+    log_info "You will now run mariadb-secure-installation to secure your MariaDB server."
+    log_info "This is an interactive process where you can:"
+    log_info "  - Set/change the root password"
+    log_info "  - Remove anonymous users"
+    log_info "  - Disallow remote root login"
+    log_info "  - Remove test database"
+    echo ""
+    log_warn "IMPORTANT: Remember the root password you set!"
+    log_info "You will need it to connect to MariaDB later."
+    echo ""
 
-        # Ensure unix_socket plugin is loaded
-        mariadb_exec_quiet "INSTALL PLUGIN IF NOT EXISTS unix_socket SONAME 'auth_socket';" || true
+    # Check if mariadb-secure-installation exists
+    if command -v mariadb-secure-installation &>/dev/null; then
+        log_info "Starting mariadb-secure-installation..."
+        echo ""
 
-        # Verify root uses unix_socket
-        mariadb_exec_quiet "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket;" || {
-            mariadb_exec_quiet "UPDATE mysql.user SET plugin='unix_socket' WHERE User='root' AND Host='localhost';" || true
-            mariadb_exec_quiet "FLUSH PRIVILEGES;" || true
-        }
+        # Run interactively - user will see all prompts and respond
+        sudo mariadb-secure-installation
 
-        log_success "unix_socket authentication confirmed"
-        log_info "Root can connect with: sudo mariadb"
+        echo ""
+        log_success "mariadb-secure-installation completed"
+    elif command -v mysql_secure_installation &>/dev/null; then
+        log_info "Starting mysql_secure_installation..."
+        echo ""
+
+        # Run interactively - user will see all prompts and respond
+        sudo mysql_secure_installation
+
+        echo ""
+        log_success "mysql_secure_installation completed"
     else
-        log_info "Using TCP authentication (socket auth not available)"
-        log_info "Root can connect with: mariadb -h 127.0.0.1 -P 3306 -u root -p"
-
-        # Try to enable socket auth for future use
-        log_info "Attempting to enable socket authentication for future use..."
-        mariadb_exec_quiet "INSTALL PLUGIN IF NOT EXISTS unix_socket SONAME 'auth_socket';" || true
-
-        # For TCP connections, also set up socket as an alternative
-        mariadb_exec_quiet "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket OR mysql_native_password USING PASSWORD('${MARIADB_ROOT_PASSWORD:-}');" 2>/dev/null || {
-            # Older MariaDB may not support OR syntax
-            log_info "Keeping current authentication method"
-        }
+        log_warn "mariadb-secure-installation not found"
+        log_info "You should run it manually later: sudo mariadb-secure-installation"
     fi
 
-    # Secure MariaDB installation
-    log_info "Securing MariaDB installation..."
+    # Re-test connection after secure installation (password may have changed)
+    echo ""
+    log_info "Testing MariaDB connection after secure installation..."
+    MARIADB_CONNECTION_METHOD=""  # Reset to re-detect
+    if ! test_mariadb_connection; then
+        log_error "Cannot connect to MariaDB after secure installation"
+        log_info "This may be because a root password was set."
+        log_info "Please enter the MariaDB root password you just configured."
 
-    # Remove anonymous users
-    log_info "Removing anonymous users..."
-    mariadb_exec_quiet "DELETE FROM mysql.user WHERE User='';" || true
+        # Try again with password prompt
+        if ! test_mariadb_connection; then
+            handle_error 10 "MariaDB connection failed after secure installation"
+        fi
+    fi
 
-    # Remove remote root login
-    log_info "Disabling remote root login..."
-    mariadb_exec_quiet "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');" || true
+    log_success "MariaDB connection re-established (method: ${MARIADB_CONNECTION_METHOD})"
 
-    # Remove test database
-    log_info "Removing test database..."
-    mariadb_exec_quiet "DROP DATABASE IF EXISTS test;" || true
-    mariadb_exec_quiet "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';" || true
-
-    # Flush privileges
-    mariadb_exec_quiet "FLUSH PRIVILEGES;" || true
-
+    # -------------------------------------------------------------------------
     # Create FOS database and application user
+    # -------------------------------------------------------------------------
     log_info "Creating FOS database..."
     if ! mariadb_exec "CREATE DATABASE IF NOT EXISTS fos_streaming CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"; then
         handle_error 10 "Failed to create database"
@@ -3969,107 +3917,25 @@ default-character-set = utf8mb4
 MARIADB_EOF
 
     # Restart MariaDB to apply configuration changes
-    # Uses the same fallback chain as start
     log_info "Restarting MariaDB to apply configuration..."
-    restart_mariadb_service() {
-        local restarted=false
-
-        # Method 1: Try systemctl if available (preferred)
-        if command -v systemctl &>/dev/null && has_systemd; then
-            if sudo systemctl restart mariadb 2>/dev/null; then
-                log_info "MariaDB restarted via systemctl"
-                restarted=true
-            fi
-        fi
-
-        # Method 2: Try service command
-        if [ "$restarted" = false ]; then
-            if sudo service mariadb restart 2>/dev/null; then
-                log_info "MariaDB restarted via service command"
-                restarted=true
-            elif sudo service mysql restart 2>/dev/null; then
-                log_info "MariaDB restarted via service mysql command"
-                restarted=true
-            fi
-        fi
-
-        # Method 3: Try init.d script directly
-        if [ "$restarted" = false ] && [ -x /etc/init.d/mariadb ]; then
-            if sudo /etc/init.d/mariadb restart 2>/dev/null; then
-                log_info "MariaDB restarted via init.d script"
-                restarted=true
-            fi
-        fi
-
-        # Method 4: Stop and start as last resort
-        if [ "$restarted" = false ]; then
-            log_info "Trying stop/start sequence..."
-            sudo pkill -f mysqld 2>/dev/null || true
-            sleep 2
-            start_mariadb_service
-            restarted=$?
-        fi
-
-        if [ "$restarted" = true ]; then
-            return 0
-        else
-            return 1
-        fi
-    }
-
-    if ! restart_mariadb_service; then
-        # Check if MariaDB is actually running anyway (try both socket and TCP)
-        if ! sudo mariadb -e "SELECT 1;" &>/dev/null && ! mariadb -h 127.0.0.1 -P 3306 -u root -e "SELECT 1;" &>/dev/null; then
-            handle_error 10 "Failed to restart MariaDB"
-        else
-            log_info "MariaDB is responding after restart attempt"
-        fi
-    fi
-
-    # Enable MariaDB to start on boot (if systemd available)
     if has_systemd; then
+        sudo systemctl restart mariadb 2>/dev/null || sudo service mariadb restart 2>/dev/null || true
         sudo systemctl enable mariadb 2>/dev/null || true
+    else
+        sudo service mariadb restart 2>/dev/null || sudo service mysql restart 2>/dev/null || true
     fi
 
-    # Wait for MariaDB to be fully ready after restart
+    # Brief wait for restart
     sleep 2
-    SOCKET_WAIT=0
-    while [ $SOCKET_WAIT -lt 15 ]; do
-        # Try socket first, then TCP
-        if sudo mariadb -e "SELECT 1;" &>/dev/null; then
-            break
-        elif mariadb -h 127.0.0.1 -P 3306 -u root -e "SELECT 1;" &>/dev/null; then
-            break
-        fi
-        sleep 1
-        SOCKET_WAIT=$((SOCKET_WAIT + 1))
-    done
 
-    # Re-test connection method after restart (may have changed)
-    test_mariadb_connection &>/dev/null || true
-
-    # Verify MariaDB is accessible
+    # Final verification
     log_info "Verifying MariaDB installation..."
-    MARIADB_VER=$(mariadb_get_value "SELECT VERSION();" || echo "unknown")
-    if [ "$MARIADB_VER" != "unknown" ] && [ -n "$MARIADB_VER" ]; then
+    if test_mariadb_connection; then
+        MARIADB_VER=$(mariadb_get_value "SELECT VERSION();" || echo "unknown")
         log_success "MariaDB ${MARIADB_VER} is running and accessible"
-
-        # Show connection method and current user
-        CURRENT_USER=$(mariadb_get_value "SELECT CURRENT_USER();" || echo "unknown")
-        if [[ "$CURRENT_USER" == *"root"* ]]; then
-            log_success "Connected as: ${CURRENT_USER} (method: ${MARIADB_CONNECTION_METHOD})"
-        else
-            log_info "Connected as: ${CURRENT_USER} (method: ${MARIADB_CONNECTION_METHOD})"
-        fi
-
-        # Provide connection instructions based on method
-        if [[ "$MARIADB_CONNECTION_METHOD" == socket* ]]; then
-            log_info "Connect using: sudo mariadb"
-        else
-            log_info "Connect using: mariadb -h 127.0.0.1 -P 3306 -u root -p"
-        fi
+        log_info "Connection method: ${MARIADB_CONNECTION_METHOD}"
     else
-        handle_error 10 "MariaDB verification failed"
+        handle_error 10 "MariaDB verification failed after restart"
     fi
 
     save_state 10
@@ -4888,18 +4754,18 @@ if [ $RESUME_STEP -le 17 ]; then
 
     # Create required directories
     log_info "Creating application directories..."
-    mkdir -p "${FOS_DIR}/config"
-    mkdir -p "${FOS_DIR}/lib"
-    mkdir -p "${FOS_DIR}/hl"
-    chmod 777 "${FOS_DIR}/hl"
-    mkdir -p "${FOS_DIR}/cache"
-    chmod 777 "${FOS_DIR}/cache"
-    mkdir -p "${FOS_DIR}/storage/framework/cache"
-    mkdir -p "${FOS_DIR}/storage/framework/sessions"
-    mkdir -p "${FOS_DIR}/storage/framework/views"
-    mkdir -p "${FOS_DIR}/storage/logs"
-    chmod -R 775 "${FOS_DIR}/storage"
-    mkdir -p "${FOS_DIR}/logs"
+    sudo mkdir -p "${FOS_DIR}/config"
+    sudo mkdir -p "${FOS_DIR}/lib"
+    sudo mkdir -p "${FOS_DIR}/hl"
+    sudo chmod 777 "${FOS_DIR}/hl"
+    sudo mkdir -p "${FOS_DIR}/cache"
+    sudo chmod 777 "${FOS_DIR}/cache"
+    sudo mkdir -p "${FOS_DIR}/storage/framework/cache"
+    sudo mkdir -p "${FOS_DIR}/storage/framework/sessions"
+    sudo mkdir -p "${FOS_DIR}/storage/framework/views"
+    sudo mkdir -p "${FOS_DIR}/storage/logs"
+    sudo chmod -R 775 "${FOS_DIR}/storage"
+    sudo mkdir -p "${FOS_DIR}/logs"
 
     # Save port configuration
     log_info "Saving port configuration..."
@@ -4917,7 +4783,7 @@ return [
 ];
 PORTS_EOF
 
-    chmod 644 "${FOS_DIR}/config/ports.php"
+    sudo chmod 644 "${FOS_DIR}/config/ports.php"
 
     # Create PHP symlink
     sudo mkdir -p "${FOS_DIR}/php/bin"
@@ -4925,11 +4791,11 @@ PORTS_EOF
 
     # Set permissions - use current user, not hardcoded
     log_info "Setting permissions..."
-    chown -R "${USER}":"${USER}" "${FOS_DIR}"
+    sudo chown -R "${USER}":"${USER}" "${FOS_DIR}"
 
     # Ensure fospackv69 nginx has correct ownership
     if [ -d "${FOS_DIR}/fospackv69/fos/nginx" ]; then
-        chown -R "${USER}":"${USER}" "${FOS_DIR}/fospackv69/fos/nginx"
+        sudo chown -R "${USER}":"${USER}" "${FOS_DIR}/fospackv69/fos/nginx"
     fi
 
     save_state 17
@@ -5019,7 +4885,7 @@ if [ $RESUME_STEP -le 18 ]; then
 
     # Install FFmpeg packages (some may not be available on all systems)
     for pkg in "${FFMPEG_PACKAGES[@]}"; do
-        install_package_with_retry "$pkg" || {
+        install_package "$pkg" || {
             log_warn "Package $pkg not available, skipping..."
         }
     done
