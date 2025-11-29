@@ -2852,14 +2852,42 @@ if [ $RESUME_STEP -le 0 ]; then
 
     # Only prompt if not already set from resume
     if [ -z "$DOMAIN_NAME" ]; then
+        # Detect default IP to suggest based on network environment
+        DEFAULT_IP=""
+        case "$NETWORK_ENV" in
+            public)
+                # Server has public IP - use the local IP (which is public)
+                DEFAULT_IP="$LOCAL_IP"
+                ;;
+            nat)
+                # Behind NAT - try to get external IP, fallback to local
+                DEFAULT_IP=$(curl -s --connect-timeout 3 https://api.ipify.org 2>/dev/null || \
+                            curl -s --connect-timeout 3 https://ifconfig.me 2>/dev/null || \
+                            curl -s --connect-timeout 3 https://icanhazip.com 2>/dev/null || \
+                            echo "$LOCAL_IP")
+                ;;
+            local|*)
+                # Local/LAN environment - use local IP
+                DEFAULT_IP="$LOCAL_IP"
+                ;;
+        esac
+
+        # Clean up the default IP (remove whitespace)
+        DEFAULT_IP=$(echo "$DEFAULT_IP" | tr -d '[:space:]')
+
+        log_info "Detected IP: ${DEFAULT_IP}"
+        log_info "Press Enter to use the default, or type a different domain/IP"
+        echo ""
+
         while true; do
             echo ""
-            read -rp "Enter your domain name or IP address: " DOMAIN_NAME
+            # Use read -e -i to allow editing the default value
+            read -rep "Enter your domain name or IP address [${DEFAULT_IP}]: " DOMAIN_NAME
 
-            # Validate input
+            # Use default if empty
             if [ -z "$DOMAIN_NAME" ]; then
-                log_error "This field is required. Please enter a value."
-                continue
+                DOMAIN_NAME="$DEFAULT_IP"
+                log_info "Using default: ${DOMAIN_NAME}"
             fi
 
             if ! validate_domain_or_ip "$DOMAIN_NAME"; then
@@ -5254,6 +5282,94 @@ if [ $RESUME_STEP -le 22 ]; then
     [ -f "${FOS_DIR}/.env" ] && chmod 600 "${FOS_DIR}/.env"
     [ -f "/root/MARIADB_FOS_PASSWORD" ] && sudo chmod 600 /root/MARIADB_FOS_PASSWORD
 
+    # -------------------------------------------------------------------------
+    # Ensure Bash is Default Shell for SSH Sessions
+    # -------------------------------------------------------------------------
+    log_info "Configuring bash as default shell for SSH sessions..."
+
+    # Get bash path
+    BASH_PATH=$(command -v bash 2>/dev/null)
+    if [ -z "$BASH_PATH" ]; then
+        BASH_PATH="/bin/bash"
+    fi
+
+    # Verify bash exists and is executable
+    if [ -x "$BASH_PATH" ]; then
+        # Ensure bash is in /etc/shells (required for chsh)
+        if ! grep -qxF "$BASH_PATH" /etc/shells 2>/dev/null; then
+            log_info "Adding ${BASH_PATH} to /etc/shells..."
+            echo "$BASH_PATH" | sudo tee -a /etc/shells > /dev/null
+        fi
+
+        # Change default shell for current user to bash
+        CURRENT_SHELL=$(getent passwd "${USER}" 2>/dev/null | cut -d: -f7)
+        if [ "$CURRENT_SHELL" != "$BASH_PATH" ]; then
+            log_info "Setting bash as default shell for ${USER}..."
+            if sudo chsh -s "$BASH_PATH" "${USER}" 2>/dev/null; then
+                log_success "Default shell changed to bash for ${USER}"
+            else
+                log_warn "Could not change default shell - may require manual configuration"
+                log_info "Run: sudo chsh -s ${BASH_PATH} ${USER}"
+            fi
+        else
+            log_info "Bash is already the default shell for ${USER}"
+        fi
+
+        # Configure SSH to use bash explicitly (covers edge cases)
+        SSHRC_FILE="/etc/ssh/sshrc"
+        if [ ! -f "$SSHRC_FILE" ] || ! grep -q "exec.*bash" "$SSHRC_FILE" 2>/dev/null; then
+            log_info "Configuring SSH to force bash shell..."
+            # Don't overwrite if file exists with other content
+            if [ ! -f "$SSHRC_FILE" ]; then
+                sudo tee "$SSHRC_FILE" > /dev/null <<'SSHRC_EOF'
+#!/bin/bash
+# Force bash shell for SSH sessions
+# Added by FOS-Streaming installer
+if [ -n "$BASH_VERSION" ]; then
+    : # Already in bash
+elif [ -x /bin/bash ]; then
+    exec /bin/bash --login
+fi
+SSHRC_EOF
+                sudo chmod 755 "$SSHRC_FILE"
+                log_success "SSH configured to use bash shell"
+            fi
+        fi
+
+        # Ensure user's .profile and .bashrc properly set up for interactive bash
+        if [ -f "${HOME_DIR}/.profile" ]; then
+            if ! grep -q "SHELL.*bash\|exec.*bash" "${HOME_DIR}/.profile" 2>/dev/null; then
+                log_info "Adding bash preference to ${HOME_DIR}/.profile..."
+                cat >> "${HOME_DIR}/.profile" <<'PROFILE_BASH_EOF'
+
+# Ensure bash is used for interactive sessions
+if [ -n "$PS1" ] && [ -z "$BASH_VERSION" ] && [ -x /bin/bash ]; then
+    export SHELL=/bin/bash
+    exec /bin/bash --login
+fi
+PROFILE_BASH_EOF
+            fi
+        fi
+
+        # Add to .bash_profile if it exists (takes precedence over .profile for bash)
+        if [ -f "${HOME_DIR}/.bash_profile" ]; then
+            if ! grep -q "source.*bashrc\|\. .*bashrc" "${HOME_DIR}/.bash_profile" 2>/dev/null; then
+                log_info "Ensuring .bash_profile sources .bashrc..."
+                cat >> "${HOME_DIR}/.bash_profile" <<'BASH_PROFILE_EOF'
+
+# Source .bashrc for interactive login shells
+if [ -f "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+fi
+BASH_PROFILE_EOF
+            fi
+        fi
+
+        log_success "Bash shell configuration complete"
+    else
+        log_warn "Bash not found at expected path - shell configuration skipped"
+    fi
+
     save_state 22
 else
     log_info "Skipping Step 22 (already completed)"
@@ -5588,6 +5704,15 @@ if [ $RESUME_STEP -le 24 ]; then
         verify_check "/usr/local/bin in PATH" "pass" ""
     else
         verify_check "/usr/local/bin in PATH" "warn" "composer may not be accessible"
+    fi
+
+    # Check if bash is the default shell
+    USER_SHELL=$(getent passwd "${USER}" 2>/dev/null | cut -d: -f7)
+    if [ "$USER_SHELL" = "/bin/bash" ] || [ "$USER_SHELL" = "/usr/bin/bash" ]; then
+        verify_check "Bash is default shell" "pass" "${USER_SHELL}"
+    else
+        verify_check "Bash is default shell" "warn" "current: ${USER_SHELL:-unknown}"
+        log_info "  → Run: sudo chsh -s /bin/bash ${USER}"
     fi
 
     log_info ""
