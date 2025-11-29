@@ -2075,28 +2075,96 @@ setup_debian_repositories() {
                 ;;
         esac
 
-        # Add deb-multimedia keyring
+        # Add deb-multimedia keyring - multiple methods for robustness
         log_info "Adding deb-multimedia GPG key..."
-        if sudo curl -fsSL https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb -o /tmp/deb-multimedia-keyring.deb 2>/dev/null && \
-            sudo dpkg -i /tmp/deb-multimedia-keyring.deb 2>/dev/null; then
-            sudo rm -f /tmp/deb-multimedia-keyring.deb
-        else
-            # Fallback: manually add key
-            log_warn "Keyring package failed, trying manual key import..."
-            sudo mkdir -p /etc/apt/keyrings
-            if ! sudo curl -fsSL "https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb" 2>/dev/null | \
-                sudo dpkg-deb --fsys-tarfile /dev/stdin | sudo tar -xOf - ./usr/share/keyrings/deb-multimedia-keyring.gpg | sudo tee /etc/apt/keyrings/deb-multimedia.gpg >/dev/null 2>&1; then
-                log_warn "Could not add deb-multimedia key, FFmpeg will be installed from default repos"
+        sudo mkdir -p /etc/apt/keyrings
+        local key_added=false
+
+        # Method 1: Download and install keyring .deb package
+        if [ "$key_added" = false ]; then
+            log_info "Trying keyring package installation..."
+            if sudo curl -fsSL https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2024.9.1_all.deb -o /tmp/deb-multimedia-keyring.deb 2>/dev/null; then
+                if sudo dpkg -i /tmp/deb-multimedia-keyring.deb 2>/dev/null; then
+                    key_added=true
+                    log_success "Keyring package installed successfully"
+                fi
+                sudo rm -f /tmp/deb-multimedia-keyring.deb
             fi
         fi
 
-        # Add repository
-        if [ -f /etc/apt/keyrings/deb-multimedia.gpg ]; then
-            echo "deb [signed-by=/etc/apt/keyrings/deb-multimedia.gpg] https://www.deb-multimedia.org ${ffmpeg_codename} main non-free" | sudo tee /etc/apt/sources.list.d/deb-multimedia.list
-        else
-            echo "deb https://www.deb-multimedia.org ${ffmpeg_codename} main non-free" | sudo tee /etc/apt/sources.list.d/deb-multimedia.list
+        # Method 2: Extract key from .deb using ar (more reliable than dpkg-deb pipe)
+        if [ "$key_added" = false ]; then
+            log_info "Trying to extract key from package..."
+            if sudo curl -fsSL https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2024.9.1_all.deb -o /tmp/deb-multimedia-keyring.deb 2>/dev/null; then
+                # Extract using ar and tar
+                cd /tmp || true
+                if sudo ar x deb-multimedia-keyring.deb data.tar.xz 2>/dev/null || sudo ar x deb-multimedia-keyring.deb data.tar.gz 2>/dev/null; then
+                    if sudo tar -xf data.tar.* 2>/dev/null; then
+                        if [ -f ./usr/share/keyrings/deb-multimedia-keyring.gpg ]; then
+                            sudo cp ./usr/share/keyrings/deb-multimedia-keyring.gpg /etc/apt/keyrings/deb-multimedia.gpg
+                            sudo chmod 644 /etc/apt/keyrings/deb-multimedia.gpg
+                            key_added=true
+                            log_success "Key extracted from package successfully"
+                        fi
+                    fi
+                fi
+                sudo rm -rf /tmp/deb-multimedia-keyring.deb /tmp/data.tar.* /tmp/usr /tmp/control.tar.* /tmp/debian-binary 2>/dev/null || true
+                cd - >/dev/null || true
+            fi
         fi
-        log_info "FFmpeg deb-multimedia repository added for ${ffmpeg_codename}"
+
+        # Method 3: Fetch key directly from keyserver
+        if [ "$key_added" = false ]; then
+            log_info "Trying to fetch key from keyserver..."
+            # deb-multimedia key fingerprint: A401FF99368FA1F98152DE755C808C2B65558117
+            if command -v gpg &>/dev/null; then
+                if sudo gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys A401FF99368FA1F98152DE755C808C2B65558117 2>/dev/null; then
+                    sudo gpg --batch --export A401FF99368FA1F98152DE755C808C2B65558117 | sudo tee /etc/apt/keyrings/deb-multimedia.gpg >/dev/null
+                    key_added=true
+                    log_success "Key fetched from keyserver"
+                fi
+            fi
+        fi
+
+        # Method 4: Try alternate keyservers
+        if [ "$key_added" = false ]; then
+            log_info "Trying alternate keyservers..."
+            for keyserver in "hkps://keys.openpgp.org" "hkp://pgp.mit.edu:80" "hkps://keyserver.ubuntu.com"; do
+                if command -v gpg &>/dev/null; then
+                    if sudo gpg --batch --keyserver "$keyserver" --recv-keys A401FF99368FA1F98152DE755C808C2B65558117 2>/dev/null; then
+                        sudo gpg --batch --export A401FF99368FA1F98152DE755C808C2B65558117 | sudo tee /etc/apt/keyrings/deb-multimedia.gpg >/dev/null
+                        key_added=true
+                        log_success "Key fetched from ${keyserver}"
+                        break
+                    fi
+                fi
+            done
+        fi
+
+        # Method 5: Download key directly from deb-multimedia.org
+        if [ "$key_added" = false ]; then
+            log_info "Trying direct key download..."
+            if sudo curl -fsSL "https://www.deb-multimedia.org/archive-keyring.gpg" -o /etc/apt/keyrings/deb-multimedia.gpg 2>/dev/null; then
+                sudo chmod 644 /etc/apt/keyrings/deb-multimedia.gpg
+                key_added=true
+                log_success "Key downloaded directly"
+            fi
+        fi
+
+        # Add repository based on whether we got the key
+        if [ "$key_added" = true ] && [ -f /etc/apt/keyrings/deb-multimedia.gpg ]; then
+            echo "deb [signed-by=/etc/apt/keyrings/deb-multimedia.gpg] https://www.deb-multimedia.org ${ffmpeg_codename} main non-free" | sudo tee /etc/apt/sources.list.d/deb-multimedia.list >/dev/null
+            log_info "FFmpeg deb-multimedia repository added for ${ffmpeg_codename}"
+        elif [ -f /usr/share/keyrings/deb-multimedia-keyring.gpg ]; then
+            # Keyring package installed to default location
+            echo "deb [signed-by=/usr/share/keyrings/deb-multimedia-keyring.gpg] https://www.deb-multimedia.org ${ffmpeg_codename} main non-free" | sudo tee /etc/apt/sources.list.d/deb-multimedia.list >/dev/null
+            log_info "FFmpeg deb-multimedia repository added for ${ffmpeg_codename}"
+        else
+            log_warn "Could not add deb-multimedia GPG key after all attempts"
+            log_warn "FFmpeg will be installed from default Debian repositories"
+            log_info "You can manually add the key later: sudo apt-get install deb-multimedia-keyring"
+            # Don't add repo without valid key - will cause apt errors
+        fi
     fi
 
     # Update package lists
