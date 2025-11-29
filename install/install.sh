@@ -583,19 +583,21 @@ create_system_user() {
 }
 
 # Prompt user for username input
+# Note: All prompts go to stderr so only the username goes to stdout
 prompt_for_username() {
     local default_user="fosadmin"
     local username=""
 
-    echo ""
-    echo -e "${CYAN}================================================================${NC}"
-    echo -e "${CYAN}  User Creation Required${NC}"
-    echo -e "${CYAN}================================================================${NC}"
-    echo ""
-    echo "No regular user found on this system."
-    echo "FOS-Streaming needs a non-root user to run securely."
-    echo ""
-    echo -e "Enter username for FOS-Streaming (default: ${GREEN}${default_user}${NC}): "
+    # All output to stderr so it doesn't get captured
+    echo "" >&2
+    echo -e "${CYAN}================================================================${NC}" >&2
+    echo -e "${CYAN}  User Creation Required${NC}" >&2
+    echo -e "${CYAN}================================================================${NC}" >&2
+    echo "" >&2
+    echo "No regular user found on this system." >&2
+    echo "FOS-Streaming needs a non-root user to run securely." >&2
+    echo "" >&2
+    echo -ne "Enter username for FOS-Streaming (default: ${GREEN}${default_user}${NC}): " >&2
     read -r username
 
     # Use default if empty
@@ -603,6 +605,7 @@ prompt_for_username() {
         username="$default_user"
     fi
 
+    # Only the username goes to stdout (for capture)
     echo "$username"
 }
 
