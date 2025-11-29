@@ -1039,7 +1039,6 @@ run_bootstrap() {
 
     for pkg in "${essential_packages[@]}"; do
         if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
-            log_bootstrap "Installing $pkg..."
             bootstrap_install_package "$pkg" || {
                 log_warn "Failed to install $pkg, continuing..."
             }
@@ -1051,7 +1050,6 @@ run_bootstrap() {
     # Install optional packages silently
     for pkg in "${optional_packages[@]}"; do
         if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
-            log_bootstrap "Installing optional: $pkg..."
             bootstrap_install_package "$pkg" 2>/dev/null || true
         fi
     done
