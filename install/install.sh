@@ -15,12 +15,13 @@
 #   - Comprehensive logging: All steps logged to install/install.log
 #   - PHP 8.4 with all modern extensions
 #   - MariaDB 11.4 (latest stable) with UTF8MB4 support
+#   - phpMyAdmin 5.2.x for database management (port 8080)
 #   - Nginx 1.26.x with HTTP-FLV, HTTP/2, HTTP/3 support
 #   - FFmpeg with low-latency streaming optimizations
 #   - NVM + Node.js 20 LTS for Vue.js frontend builds
 #   - Composer 2.x for Laravel components
 #   - Laravel Eloquent ORM integration
-#   - Vue.js 3 + Vite 5 admin panel
+#   - Vue.js 3 + Vite 7 admin panel
 #   - Enhanced security configurations
 #   - Automated setup and deployment
 #   - Environment-based configuration (.env)
@@ -3403,13 +3404,63 @@ if [ $RESUME_STEP -le 10 ]; then
     log_step "Step 10: Installing MariaDB ${MARIADB_VERSION}"
     log_progress "Installing and configuring MariaDB"
 
-    # Install MariaDB packages individually
-    MARIADB_PACKAGES=(
-        "mariadb-server"
-        "mariadb-client"
-    )
+    # -------------------------------------------------------------------------
+    # Check if MariaDB is already installed and running
+    # -------------------------------------------------------------------------
+    MARIADB_ALREADY_RUNNING=false
+    MARIADB_NEEDS_INSTALL=true
 
-    install_packages_individually "${MARIADB_PACKAGES[@]}" || handle_error 10 "Failed to install MariaDB"
+    # First, check if MariaDB is already accessible
+    if sudo mariadb -e "SELECT 1;" &>/dev/null; then
+        MARIADB_ALREADY_RUNNING=true
+        EXISTING_VERSION=$(sudo mariadb -N -e "SELECT VERSION();" 2>/dev/null || echo "unknown")
+        log_info "MariaDB is already running and accessible (version: ${EXISTING_VERSION})"
+
+        # Check if mariadb-server package is installed
+        if dpkg -l mariadb-server 2>/dev/null | grep -q "^ii"; then
+            MARIADB_NEEDS_INSTALL=false
+            log_info "MariaDB server package is already installed"
+        fi
+    elif command -v mariadb &>/dev/null || command -v mysql &>/dev/null; then
+        # MariaDB client exists but server might not be running
+        log_info "MariaDB client found, checking server status..."
+
+        # Check if port 3306 is in use
+        if ss -tlnp 2>/dev/null | grep -q ":3306 " || netstat -tlnp 2>/dev/null | grep -q ":3306 "; then
+            log_info "Port 3306 is in use - MariaDB/MySQL server appears to be running"
+            # Try to connect
+            if sudo mariadb -e "SELECT 1;" &>/dev/null; then
+                MARIADB_ALREADY_RUNNING=true
+                EXISTING_VERSION=$(sudo mariadb -N -e "SELECT VERSION();" 2>/dev/null || echo "unknown")
+                log_success "Connected to existing MariaDB server (version: ${EXISTING_VERSION})"
+            elif sudo mysql -e "SELECT 1;" &>/dev/null; then
+                MARIADB_ALREADY_RUNNING=true
+                EXISTING_VERSION=$(sudo mysql -N -e "SELECT VERSION();" 2>/dev/null || echo "unknown")
+                log_success "Connected to existing MySQL/MariaDB server (version: ${EXISTING_VERSION})"
+            else
+                log_warn "Database server is running on port 3306 but cannot connect"
+                log_info "Will attempt to use existing installation"
+                MARIADB_ALREADY_RUNNING=true
+            fi
+            MARIADB_NEEDS_INSTALL=false
+        fi
+    fi
+
+    # Install MariaDB packages if needed
+    if [ "$MARIADB_NEEDS_INSTALL" = true ]; then
+        log_info "Installing MariaDB packages..."
+        MARIADB_PACKAGES=(
+            "mariadb-server"
+            "mariadb-client"
+        )
+        install_packages_individually "${MARIADB_PACKAGES[@]}" || handle_error 10 "Failed to install MariaDB"
+    else
+        log_info "Skipping MariaDB package installation - already installed"
+        # Ensure client is installed for our use
+        if ! command -v mariadb &>/dev/null; then
+            install_package "mariadb-client" || log_warn "Could not install mariadb-client"
+        fi
+    fi
 
     # Add mariadb to PATH for root and current user
     log_info "Adding MariaDB to PATH..."
@@ -3468,10 +3519,40 @@ MARIADB_ROOT_PATH_EOF
     echo "$SQL_PASSWD" | sudo tee /root/MARIADB_FOS_PASSWORD > /dev/null
     sudo chmod 600 /root/MARIADB_FOS_PASSWORD
 
-    # Start MariaDB
-    log_info "Starting MariaDB service..."
-    service_stop "mariadb"
-    service_start "mariadb" || handle_error 10 "Failed to start MariaDB"
+    # -------------------------------------------------------------------------
+    # Start MariaDB (only if not already running)
+    # -------------------------------------------------------------------------
+    if [ "$MARIADB_ALREADY_RUNNING" = true ]; then
+        log_info "MariaDB is already running - skipping service start"
+    else
+        log_info "Starting MariaDB service..."
+        # Don't stop if something is already on port 3306
+        if ! ss -tlnp 2>/dev/null | grep -q ":3306 " && ! netstat -tlnp 2>/dev/null | grep -q ":3306 "; then
+            service_start "mariadb" || {
+                # If start fails, check if it's actually running anyway
+                if sudo mariadb -e "SELECT 1;" &>/dev/null; then
+                    log_info "MariaDB is responding despite service start issues"
+                    MARIADB_ALREADY_RUNNING=true
+                else
+                    handle_error 10 "Failed to start MariaDB"
+                fi
+            }
+        else
+            log_info "Port 3306 already in use - assuming MariaDB is running"
+            MARIADB_ALREADY_RUNNING=true
+        fi
+    fi
+
+    # Verify we can connect before proceeding
+    if ! sudo mariadb -e "SELECT 1;" &>/dev/null; then
+        # Try mysql command as fallback
+        if ! sudo mysql -e "SELECT 1;" &>/dev/null; then
+            log_error "Cannot connect to MariaDB server"
+            log_info "Checking what's on port 3306..."
+            ss -tlnp 2>/dev/null | grep ":3306 " || netstat -tlnp 2>/dev/null | grep ":3306 " || true
+            handle_error 10 "MariaDB connection failed"
+        fi
+    fi
 
     # Secure MariaDB installation using unix_socket authentication for root
     # This allows passwordless access via sudo (more secure than password auth)
@@ -3554,12 +3635,247 @@ else
 fi
 
 # ============================================================================
-# STEP 11: Setup Nginx from fospackv69
+# STEP 11: Install phpMyAdmin
 # ============================================================================
 CURRENT_STEP=11
 
 if [ $RESUME_STEP -le 11 ]; then
-    log_step "Step 11: Setting up Nginx with HTTP-FLV Module"
+    log_step "Step 11: Installing phpMyAdmin"
+    log_progress "Installing and configuring phpMyAdmin for database management"
+
+    # Determine phpMyAdmin version to install (latest stable)
+    PHPMYADMIN_VERSION="5.2.1"
+    PHPMYADMIN_DIR="/usr/share/phpmyadmin"
+    PHPMYADMIN_TMP="/tmp/phpmyadmin"
+
+    # Check if phpMyAdmin is already installed
+    if [ -d "$PHPMYADMIN_DIR" ] && [ -f "$PHPMYADMIN_DIR/index.php" ]; then
+        log_info "phpMyAdmin already installed at ${PHPMYADMIN_DIR}"
+    else
+        log_info "Downloading phpMyAdmin ${PHPMYADMIN_VERSION}..."
+
+        # Clean up any previous download attempts
+        sudo rm -rf "$PHPMYADMIN_TMP" "${PHPMYADMIN_DIR}"
+        mkdir -p "$PHPMYADMIN_TMP"
+
+        # Download phpMyAdmin
+        PHPMYADMIN_URL="https://files.phpmyadmin.net/phpMyAdmin/${PHPMYADMIN_VERSION}/phpMyAdmin-${PHPMYADMIN_VERSION}-all-languages.tar.gz"
+        if curl -fsSL "$PHPMYADMIN_URL" -o "${PHPMYADMIN_TMP}/phpmyadmin.tar.gz"; then
+            log_success "phpMyAdmin downloaded successfully"
+        else
+            # Try alternate URL
+            PHPMYADMIN_URL="https://www.phpmyadmin.net/downloads/phpMyAdmin-latest-all-languages.tar.gz"
+            if curl -fsSL "$PHPMYADMIN_URL" -o "${PHPMYADMIN_TMP}/phpmyadmin.tar.gz"; then
+                log_success "phpMyAdmin downloaded (latest version)"
+            else
+                log_warn "Failed to download phpMyAdmin - skipping installation"
+                log_info "You can install it manually later from https://www.phpmyadmin.net/"
+                save_state 11
+                # Skip to next step
+                PHPMYADMIN_SKIP=true
+            fi
+        fi
+
+        if [ "${PHPMYADMIN_SKIP:-false}" != "true" ]; then
+            # Extract phpMyAdmin
+            log_info "Extracting phpMyAdmin..."
+            cd "$PHPMYADMIN_TMP" || handle_error 11 "Cannot change to temp directory"
+            tar -xzf phpmyadmin.tar.gz
+            EXTRACTED_DIR=$(ls -d phpMyAdmin-* 2>/dev/null | head -1)
+
+            if [ -n "$EXTRACTED_DIR" ] && [ -d "$EXTRACTED_DIR" ]; then
+                sudo mv "$EXTRACTED_DIR" "$PHPMYADMIN_DIR"
+                log_success "phpMyAdmin extracted to ${PHPMYADMIN_DIR}"
+            else
+                handle_error 11 "Failed to extract phpMyAdmin"
+            fi
+
+            # Clean up
+            rm -rf "$PHPMYADMIN_TMP"
+            cd - >/dev/null || true
+        fi
+    fi
+
+    # Configure phpMyAdmin (if installed)
+    if [ -d "$PHPMYADMIN_DIR" ]; then
+        log_info "Configuring phpMyAdmin..."
+
+        # Create phpMyAdmin temp directory
+        sudo mkdir -p "${PHPMYADMIN_DIR}/tmp"
+        sudo chmod 777 "${PHPMYADMIN_DIR}/tmp"
+
+        # Generate blowfish secret for cookie authentication
+        BLOWFISH_SECRET=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-32)
+
+        # Create config.inc.php
+        sudo tee "${PHPMYADMIN_DIR}/config.inc.php" > /dev/null <<PHPMYADMIN_CONFIG
+<?php
+/**
+ * phpMyAdmin configuration for FOS-Streaming
+ * Generated by installer on $(date '+%Y-%m-%d %H:%M:%S')
+ */
+
+// Blowfish secret for cookie authentication
+\$cfg['blowfish_secret'] = '${BLOWFISH_SECRET}';
+
+// Server configuration
+\$i = 0;
+\$i++;
+
+// Server 1: localhost
+\$cfg['Servers'][\$i]['auth_type'] = 'cookie';
+\$cfg['Servers'][\$i]['host'] = 'localhost';
+\$cfg['Servers'][\$i]['compress'] = false;
+\$cfg['Servers'][\$i]['AllowNoPassword'] = false;
+
+// Directories
+\$cfg['UploadDir'] = '';
+\$cfg['SaveDir'] = '';
+\$cfg['TempDir'] = '${PHPMYADMIN_DIR}/tmp';
+
+// Security settings
+\$cfg['LoginCookieValidity'] = 3600;
+\$cfg['LoginCookieStore'] = 0;
+\$cfg['LoginCookieDeleteAll'] = true;
+
+// Interface settings
+\$cfg['MaxRows'] = 100;
+\$cfg['DefaultLang'] = 'en';
+\$cfg['ServerDefault'] = 1;
+\$cfg['ThemeDefault'] = 'pmahomme';
+
+// Export defaults
+\$cfg['Export']['method'] = 'custom-no-form';
+\$cfg['Export']['compression'] = 'gzip';
+
+// Import settings
+\$cfg['Import']['charset'] = 'utf-8';
+PHPMYADMIN_CONFIG
+
+        sudo chmod 640 "${PHPMYADMIN_DIR}/config.inc.php"
+        sudo chown www-data:www-data "${PHPMYADMIN_DIR}/config.inc.php" 2>/dev/null || \
+            sudo chown root:root "${PHPMYADMIN_DIR}/config.inc.php"
+
+        # Set proper ownership
+        sudo chown -R www-data:www-data "$PHPMYADMIN_DIR" 2>/dev/null || \
+            sudo chown -R root:root "$PHPMYADMIN_DIR"
+        sudo chmod -R 755 "$PHPMYADMIN_DIR"
+
+        log_success "phpMyAdmin configured successfully"
+
+        # Install system nginx if not present (for phpMyAdmin)
+        if ! command -v nginx &>/dev/null; then
+            log_info "Installing system nginx for phpMyAdmin..."
+            install_package "nginx" || log_warn "Failed to install nginx"
+        fi
+
+        # Create nginx configuration for phpMyAdmin
+        log_info "Creating nginx configuration for phpMyAdmin..."
+
+        # Determine PHP-FPM socket path
+        PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
+        if [ ! -S "$PHP_FPM_SOCK" ]; then
+            PHP_FPM_SOCK="/var/run/php/php${PHP_VERSION}-fpm.sock"
+        fi
+
+        # Create phpMyAdmin nginx config
+        sudo tee /etc/nginx/sites-available/phpmyadmin > /dev/null <<NGINX_PMA
+# phpMyAdmin nginx configuration
+# Generated by FOS-Streaming installer
+
+server {
+    listen 8080;
+    listen [::]:8080;
+    server_name _;
+
+    root ${PHPMYADMIN_DIR};
+    index index.php index.html;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # Logging
+    access_log /var/log/nginx/phpmyadmin-access.log;
+    error_log /var/log/nginx/phpmyadmin-error.log;
+
+    # Deny access to sensitive files
+    location ~ /\\.ht {
+        deny all;
+    }
+
+    location ~ /(config\\.inc\\.php|libraries|setup) {
+        deny all;
+    }
+
+    # PHP handling
+    location ~ \\.php\$ {
+        try_files \$uri =404;
+        fastcgi_pass unix:${PHP_FPM_SOCK};
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+
+        fastcgi_connect_timeout 60s;
+        fastcgi_send_timeout 300s;
+        fastcgi_read_timeout 300s;
+        fastcgi_buffer_size 128k;
+        fastcgi_buffers 256 16k;
+    }
+
+    # Static files
+    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 1d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+}
+NGINX_PMA
+
+        # Enable phpMyAdmin site
+        if [ -d /etc/nginx/sites-enabled ]; then
+            sudo ln -sf /etc/nginx/sites-available/phpmyadmin /etc/nginx/sites-enabled/phpmyadmin
+        fi
+
+        # Test and reload nginx
+        if sudo nginx -t 2>/dev/null; then
+            service_restart "nginx" || log_warn "Failed to restart nginx"
+            log_success "phpMyAdmin nginx configuration enabled"
+        else
+            log_warn "Nginx configuration test failed - check /etc/nginx/sites-available/phpmyadmin"
+        fi
+
+        # Display access information
+        log_info ""
+        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log_info " phpMyAdmin Installation Complete"
+        log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        log_info ""
+        log_info "  Access URL: http://${DOMAIN_NAME:-localhost}:8080/"
+        log_info "  Login with MariaDB credentials:"
+        log_info "    Username: fos"
+        log_info "    Password: (stored in /root/MARIADB_FOS_PASSWORD)"
+        log_info ""
+        log_info "  Or use root with unix_socket (via SSH tunnel only)"
+        log_info ""
+    fi
+
+    save_state 11
+else
+    log_info "Skipping Step 11 (already completed)"
+fi
+
+# ============================================================================
+# STEP 12: Setup Nginx from fospackv69
+# ============================================================================
+CURRENT_STEP=12
+
+if [ $RESUME_STEP -le 12 ]; then
+    log_step "Step 12: Setting up Nginx with HTTP-FLV Module"
     log_progress "Configuring Nginx from fospackv69"
 
     # Check if fospackv69 exists in project directory
@@ -3623,7 +3939,7 @@ if [ $RESUME_STEP -le 11 ]; then
         if [ $build_exit -ne 0 ]; then
             log_error "Nginx build failed"
             echo "$build_output" | grep -iE '(error|failed|fatal)' | head -10 >&2
-            handle_error 11 "Nginx build failed"
+            handle_error 12 "Nginx build failed"
         fi
     else
         log_info "Nginx binary already exists at ${NGINX_BIN}"
@@ -3639,18 +3955,18 @@ if [ $RESUME_STEP -le 11 ]; then
     sudo mkdir -p "${FOS_DIR}/storage/framework/views"
     sudo mkdir -p "${FOS_DIR}/storage/logs"
 
-    save_state 11
+    save_state 12
 else
-    log_info "Skipping Step 11 (already completed)"
+    log_info "Skipping Step 12 (already completed)"
 fi
 
 # ============================================================================
-# STEP 12: Verify Web Application Files
+# STEP 13: Verify Web Application Files
 # ============================================================================
-CURRENT_STEP=12
+CURRENT_STEP=13
 
-if [ $RESUME_STEP -le 12 ]; then
-    log_step "Step 12: Verifying Web Application"
+if [ $RESUME_STEP -le 13 ]; then
+    log_step "Step 13: Verifying Web Application"
     log_progress "Checking web application files"
 
     # The web application IS the current project directory
@@ -3666,23 +3982,23 @@ if [ $RESUME_STEP -le 12 ]; then
     fi
 
     if [ ! -f "composer.json" ]; then
-        handle_error 12 "composer.json not found - this doesn't appear to be a valid FOS-Streaming installation"
+        handle_error 13 "composer.json not found - this doesn't appear to be a valid FOS-Streaming installation"
     fi
 
     log_success "Web application files verified"
 
-    save_state 12
+    save_state 13
 else
-    log_info "Skipping Step 12 (already completed)"
+    log_info "Skipping Step 13 (already completed)"
 fi
 
 # ============================================================================
-# STEP 13: Install Composer Dependencies
+# STEP 14: Install Composer Dependencies
 # ============================================================================
-CURRENT_STEP=13
+CURRENT_STEP=14
 
-if [ $RESUME_STEP -le 13 ]; then
-    log_step "Step 13: Installing PHP Dependencies with Composer"
+if [ $RESUME_STEP -le 14 ]; then
+    log_step "Step 14: Installing PHP Dependencies with Composer"
     log_progress "Installing Composer packages"
 
     cd "${FOS_DIR}" || return 1
@@ -3703,7 +4019,7 @@ if [ $RESUME_STEP -le 13 ]; then
     if [ $composer_exit -ne 0 ]; then
         log_error "Composer install failed"
         echo "$composer_output" | grep -iE '(error|failed|exception)' | head -5 >&2
-        handle_error 13 "Composer install failed"
+        handle_error 14 "Composer install failed"
     fi
 
     # Regenerate optimized autoloader
@@ -3715,18 +4031,18 @@ if [ $RESUME_STEP -le 13 ]; then
 
     log_success "Composer dependencies installed and autoloader optimized"
 
-    save_state 13
+    save_state 14
 else
-    log_info "Skipping Step 13 (already completed)"
+    log_info "Skipping Step 14 (already completed)"
 fi
 
 # ============================================================================
-# STEP 14: Setup Production Environment
+# STEP 15: Setup Production Environment
 # ============================================================================
-CURRENT_STEP=14
+CURRENT_STEP=15
 
-if [ $RESUME_STEP -le 14 ]; then
-    log_step "Step 14: Creating Production .env File"
+if [ $RESUME_STEP -le 15 ]; then
+    log_step "Step 15: Creating Production .env File"
     log_progress "Configuring environment variables"
 
     # Generate app key only if not already set
@@ -3929,9 +4245,9 @@ ENV_EOF
     log_success "Production .env file created with Redis configuration"
     log_info "Redis, Cache, Session, and Queue configured to use Redis"
 
-    save_state 14
+    save_state 15
 else
-    log_info "Skipping Step 14 (already completed)"
+    log_info "Skipping Step 15 (already completed)"
     # Load Redis password if resuming
     if [ -z "$REDIS_PASSWORD" ] && [ -f /root/REDIS_PASSWORD ]; then
         REDIS_PASSWORD=$(sudo cat /root/REDIS_PASSWORD 2>/dev/null || echo "")
@@ -3939,12 +4255,12 @@ else
 fi
 
 # ============================================================================
-# STEP 15: Install NPM Dependencies and Build Frontend
+# STEP 16: Install NPM Dependencies and Build Frontend
 # ============================================================================
-CURRENT_STEP=15
+CURRENT_STEP=16
 
-if [ $RESUME_STEP -le 15 ]; then
-    log_step "Step 15: Installing NPM Dependencies and Building Frontend"
+if [ $RESUME_STEP -le 16 ]; then
+    log_step "Step 16: Installing NPM Dependencies and Building Frontend"
     log_progress "Building frontend assets"
 
     if [ -f "${FOS_DIR}/package.json" ]; then
@@ -4004,6 +4320,41 @@ if [ $RESUME_STEP -le 15 ]; then
             log_success "PM2 version ${PM2_VER} is accessible"
         elif [ -f "./node_modules/.bin/pm2" ]; then
             log_info "PM2 will be available locally after npm install"
+        fi
+
+        # Ensure Vite 7 is installed (latest minor version)
+        log_info "Ensuring Vite 7 (latest) is available..."
+        VITE_REQUIRED_MAJOR=7
+
+        # Check current vite version in package.json
+        if [ -f "package.json" ]; then
+            CURRENT_VITE=$(grep -o '"vite":\s*"[^"]*"' package.json 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "")
+            if [ -n "$CURRENT_VITE" ]; then
+                CURRENT_MAJOR=$(echo "$CURRENT_VITE" | cut -d. -f1)
+                log_info "Current Vite version in package.json: ${CURRENT_VITE}"
+
+                if [ "$CURRENT_MAJOR" -lt "$VITE_REQUIRED_MAJOR" ] 2>/dev/null; then
+                    log_info "Upgrading Vite to version 7..."
+                    npm_vite_output=$(npm install vite@^7 --save-dev 2>&1)
+                    vite_exit=$?
+                    echo "$npm_vite_output" >> "$INSTALL_LOG" 2>/dev/null || true
+
+                    if [ $vite_exit -eq 0 ]; then
+                        NEW_VITE=$(grep -o '"vite":\s*"[^"]*"' package.json 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
+                        log_success "Vite upgraded to ${NEW_VITE}"
+                    else
+                        log_warn "Could not upgrade Vite - will use existing version"
+                    fi
+                else
+                    log_info "Vite ${CURRENT_VITE} meets requirements (>= ${VITE_REQUIRED_MAJOR}.x)"
+                fi
+            else
+                # Vite not in package.json, install it
+                log_info "Installing Vite 7..."
+                npm_vite_output=$(npm install vite@^7 --save-dev 2>&1)
+                echo "$npm_vite_output" >> "$INSTALL_LOG" 2>/dev/null || true
+                log_success "Vite 7 installed"
+            fi
         fi
 
         # Install project dependencies
@@ -4068,18 +4419,18 @@ if [ $RESUME_STEP -le 15 ]; then
         log_info "No package.json found, skipping NPM setup"
     fi
 
-    save_state 15
+    save_state 16
 else
-    log_info "Skipping Step 15 (already completed)"
+    log_info "Skipping Step 16 (already completed)"
 fi
 
 # ============================================================================
-# STEP 16: Configure Application
+# STEP 17: Configure Application
 # ============================================================================
-CURRENT_STEP=16
+CURRENT_STEP=17
 
-if [ $RESUME_STEP -le 16 ]; then
-    log_step "Step 16: Configuring FOS-Streaming Application"
+if [ $RESUME_STEP -le 17 ]; then
+    log_step "Step 17: Configuring FOS-Streaming Application"
     log_progress "Setting up application configuration"
 
     cd "${FOS_DIR}" || return 1
@@ -4138,18 +4489,18 @@ PORTS_EOF
         chown -R "${USER}":"${USER}" "${FOS_DIR}/fospackv69/fos/nginx"
     fi
 
-    save_state 16
+    save_state 17
 else
-    log_info "Skipping Step 16 (already completed)"
+    log_info "Skipping Step 17 (already completed)"
 fi
 
 # ============================================================================
-# STEP 17: Install FFmpeg with Streaming Optimizations
+# STEP 18: Install FFmpeg with Streaming Optimizations
 # ============================================================================
-CURRENT_STEP=17
+CURRENT_STEP=18
 
-if [ $RESUME_STEP -le 17 ]; then
-    log_step "Step 17: Installing FFmpeg with Streaming Optimizations"
+if [ $RESUME_STEP -le 18 ]; then
+    log_step "Step 18: Installing FFmpeg with Streaming Optimizations"
     log_progress "Installing FFmpeg for low-latency streaming"
 
     # -------------------------------------------------------------------------
@@ -4528,9 +4879,9 @@ SUDOERS_EOF
         log_success "Hardware acceleration available: ${HW_ACCEL_AVAILABLE}"
     fi
 
-    save_state 17
+    save_state 18
 else
-    log_info "Skipping Step 17 (already completed)"
+    log_info "Skipping Step 18 (already completed)"
     # Detect FFmpeg paths (may have been installed previously)
     FFMPEG_BIN=$(which ffmpeg 2>/dev/null || echo "/usr/bin/ffmpeg")
     FFPROBE_BIN=$(which ffprobe 2>/dev/null || echo "/usr/bin/ffprobe")
@@ -4546,12 +4897,12 @@ else
 fi
 
 # ============================================================================
-# STEP 18: Install Redis and Streaming Security Tools
+# STEP 19: Install Redis and Streaming Security Tools
 # ============================================================================
-CURRENT_STEP=18
+CURRENT_STEP=19
 
-if [ $RESUME_STEP -le 18 ]; then
-    log_step "Step 18: Installing Redis and Security Tools"
+if [ $RESUME_STEP -le 19 ]; then
+    log_step "Step 19: Installing Redis and Security Tools"
     log_progress "Installing Redis, security and streaming tools"
 
     SECURITY_PACKAGES=(
@@ -4710,9 +5061,9 @@ REDIS_CONF_EOF
         log_info "Skipping automatic V2Ray installation - run manually if needed"
     fi
 
-    save_state 18
+    save_state 19
 else
-    log_info "Skipping Step 18 (already completed)"
+    log_info "Skipping Step 19 (already completed)"
     # Load Redis password from file if resuming
     if [ -f /root/REDIS_PASSWORD ]; then
         REDIS_PASSWORD=$(sudo cat /root/REDIS_PASSWORD 2>/dev/null || echo "null")
@@ -4720,17 +5071,17 @@ else
 fi
 
 # ============================================================================
-# STEP 19: Configure Nginx and SSL Certificates
+# STEP 20: Configure Nginx and SSL Certificates
 # ============================================================================
-CURRENT_STEP=19
+CURRENT_STEP=20
 
 # Define nginx paths based on fospackv69 location
 NGINX_DIR="${FOS_DIR}/fospackv69/fos/nginx"
 NGINX_CONF="${NGINX_DIR}/conf/nginx.conf"
 NGINX_BIN="${NGINX_DIR}/sbin/nginx_fos"
 
-if [ $RESUME_STEP -le 19 ]; then
-    log_step "Step 19: Configuring Nginx and SSL Certificates"
+if [ $RESUME_STEP -le 20 ]; then
+    log_step "Step 20: Configuring Nginx and SSL Certificates"
     log_progress "Setting up SSL and Nginx configuration"
 
     # Check if nginx directory exists
@@ -5057,18 +5408,18 @@ NGINX_CONF_EOF
         log_success "Nginx configuration generated successfully"
     fi
 
-    save_state 19
+    save_state 20
 else
-    log_info "Skipping Step 19 (already completed)"
+    log_info "Skipping Step 20 (already completed)"
 fi
 
 # ============================================================================
-# STEP 20: Configure System Startup
+# STEP 21: Configure System Startup
 # ============================================================================
-CURRENT_STEP=20
+CURRENT_STEP=21
 
-if [ $RESUME_STEP -le 20 ]; then
-    log_step "Step 20: Configuring System Startup"
+if [ $RESUME_STEP -le 21 ]; then
+    log_step "Step 21: Configuring System Startup"
     log_progress "Creating systemd services"
 
     # Only create service if nginx binary exists
@@ -5133,18 +5484,18 @@ ${USER} hard nproc 65535
 * hard nofile 65535
 LIMITS_EOF
 
-    save_state 20
+    save_state 21
 else
-    log_info "Skipping Step 20 (already completed)"
+    log_info "Skipping Step 21 (already completed)"
 fi
 
 # ============================================================================
-# STEP 21: Initialize Database
+# STEP 22: Initialize Database
 # ============================================================================
-CURRENT_STEP=21
+CURRENT_STEP=22
 
-if [ $RESUME_STEP -le 21 ]; then
-    log_step "Step 21: Initializing Database"
+if [ $RESUME_STEP -le 22 ]; then
+    log_step "Step 22: Initializing Database"
     log_progress "Running database migrations and seeders via artisan"
 
     cd "${FOS_DIR}" || return 1
@@ -5220,18 +5571,18 @@ if [ $RESUME_STEP -le 21 ]; then
 
     log_success "Database initialized and verified"
 
-    save_state 21
+    save_state 22
 else
-    log_info "Skipping Step 21 (already completed)"
+    log_info "Skipping Step 22 (already completed)"
 fi
 
 # ============================================================================
-# STEP 22: Setup Cron Job and Security Hardening
+# STEP 23: Setup Cron Job and Security Hardening
 # ============================================================================
-CURRENT_STEP=22
+CURRENT_STEP=23
 
-if [ $RESUME_STEP -le 22 ]; then
-    log_step "Step 22: Setting up Cron Job and Security Hardening"
+if [ $RESUME_STEP -le 23 ]; then
+    log_step "Step 23: Setting up Cron Job and Security Hardening"
     log_progress "Configuring scheduled tasks and security"
 
     log_info "Adding cron job for stream monitoring..."
@@ -5438,18 +5789,18 @@ BASH_PROFILE_EOF
         log_warn "Bash not found at expected path - shell configuration skipped"
     fi
 
-    save_state 22
+    save_state 23
 else
-    log_info "Skipping Step 22 (already completed)"
+    log_info "Skipping Step 23 (already completed)"
 fi
 
 # ============================================================================
-# STEP 23: Start PM2 Background Workers
+# STEP 24: Start PM2 Background Workers
 # ============================================================================
-CURRENT_STEP=23
+CURRENT_STEP=24
 
-if [ $RESUME_STEP -le 23 ]; then
-    log_step "Step 23: Starting PM2 Background Workers"
+if [ $RESUME_STEP -le 24 ]; then
+    log_step "Step 24: Starting PM2 Background Workers"
     log_progress "Initializing background workers"
 
     cd "${FOS_DIR}" || return 1
@@ -5528,18 +5879,18 @@ if [ $RESUME_STEP -le 23 ]; then
         fi
     fi
 
-    save_state 23
+    save_state 24
 else
-    log_info "Skipping Step 23 (already completed)"
+    log_info "Skipping Step 24 (already completed)"
 fi
 
 # ============================================================================
-# STEP 24: Verify Installation - Command Availability and Configuration
+# STEP 25: Verify Installation - Command Availability and Configuration
 # ============================================================================
-CURRENT_STEP=24
+CURRENT_STEP=25
 
-if [ $RESUME_STEP -le 24 ]; then
-    log_step "Step 24: Verifying Installation"
+if [ $RESUME_STEP -le 25 ]; then
+    log_step "Step 25: Verifying Installation"
     log_progress "Testing command availability and configuration"
 
     cd "${FOS_DIR}" || return 1
@@ -5805,9 +6156,9 @@ if [ $RESUME_STEP -le 24 ]; then
         log_info "Review the failures above and fix before using the platform"
     fi
 
-    save_state 24
+    save_state 25
 else
-    log_info "Skipping Step 24 (already completed)"
+    log_info "Skipping Step 25 (already completed)"
 fi
 
 # ============================================================================
