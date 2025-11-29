@@ -1688,29 +1688,7 @@ service_start() {
     fi
 }
 
-# Check service status
-# Usage: service_status "service_name"
-service_status() {
-    local service="$1"
-
-    if has_systemd; then
-        sudo systemctl status "$service" 2>/dev/null
-        return $?
-    else
-        if sudo service "$service" status 2>/dev/null; then
-            return 0
-        fi
-        # Check if process is running
-        if pgrep -f "$service" &>/dev/null; then
-            log_info "$service is running (detected via process)"
-            return 0
-        fi
-        return 1
-    fi
-}
-
 # Reload systemd daemon (only if systemd is available)
-# Usage: systemd_reload
 systemd_reload() {
     if has_systemd; then
         sudo systemctl daemon-reload 2>/dev/null
@@ -1968,45 +1946,6 @@ handle_error() {
     else
         exit 1
     fi
-}
-
-# Wrapper to run commands with error handling (quiet mode - errors only)
-run_cmd() {
-    local step="$1"
-    local description="$2"
-    shift 2
-
-    local cmd_output
-    local exit_code
-
-    log_info "$description"
-    log_to_file "CMD" "$*"
-
-    cmd_output=$("$@" 2>&1)
-    exit_code=$?
-
-    # Log full output to file
-    echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
-
-    if [ $exit_code -ne 0 ]; then
-        log_error "$description failed"
-        echo "$cmd_output" | grep -iE '(error|failed|unable|cannot|could not|exception)' | head -5 >&2
-
-        if read_confirm "Command failed. Retry?"; then
-            cmd_output=$("$@" 2>&1)
-            exit_code=$?
-            echo "$cmd_output" >> "$INSTALL_LOG" 2>/dev/null || true
-
-            if [ $exit_code -ne 0 ]; then
-                handle_error "$step" "$description failed"
-                return 1
-            fi
-        else
-            handle_error "$step" "$description failed"
-            return 1
-        fi
-    fi
-    return 0
 }
 
 # =============================================================================
@@ -2774,79 +2713,6 @@ is_port_available() {
     return 0
 }
 
-get_random_ssl_port() {
-    local cloudflare_ports=(2053 2083 2087 2096 8443)
-    local exclude_ports=("$@")
-
-    if command -v shuf &> /dev/null; then
-        # shellcheck disable=SC2207  # Word splitting is intentional here
-        cloudflare_ports=($(printf '%s\n' "${cloudflare_ports[@]}" | shuf))
-    fi
-
-    for port in "${cloudflare_ports[@]}"; do
-        local excluded=0
-        for exclude_port in "${exclude_ports[@]}"; do
-            if [ "$port" == "$exclude_port" ]; then
-                excluded=1
-                break
-            fi
-        done
-
-        if [ "$excluded" -eq 0 ] && is_port_available "$port"; then
-            echo "$port"
-            return 0
-        fi
-    done
-
-    for port in $(seq 8000 8999 | sort -R | head -20); do
-        local excluded=0
-        for exclude_port in "${exclude_ports[@]}"; do
-            if [ "$port" == "$exclude_port" ]; then
-                excluded=1
-                break
-            fi
-        done
-
-        if [ "$excluded" -eq 0 ] && is_port_available "$port"; then
-            echo "$port"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-get_random_rtmp_port() {
-    local exclude_ports=("$@")
-    # shellcheck disable=SC2207  # Word splitting is intentional for array initialization
-    local port_ranges=(
-        $(seq 1935 1999 | sort -R | head -10)
-        $(seq 8000 8999 | sort -R | head -20)
-    )
-
-    if command -v shuf &> /dev/null; then
-        # shellcheck disable=SC2207  # Word splitting is intentional here
-        port_ranges=($(printf '%s\n' "${port_ranges[@]}" | shuf))
-    fi
-
-    for port in "${port_ranges[@]}"; do
-        local excluded=0
-        for exclude_port in "${exclude_ports[@]}"; do
-            if [ "$port" == "$exclude_port" ]; then
-                excluded=1
-                break
-            fi
-        done
-
-        if [ "$excluded" -eq 0 ] && is_port_available "$port"; then
-            echo "$port"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
 select_cloudflare_ssl_ports() {
     log_step "Port Configuration (Cloudflare SSL Compatible)"
 
@@ -2859,7 +2725,7 @@ select_cloudflare_ssl_ports() {
     # Select Web Port
     WEB_PORT=""
     for port in "${CF_SSL_PORTS[@]}"; do
-        if port_available "$port"; then
+        if is_port_available "$port"; then
             WEB_PORT=$port
             log_info "Selected web port: ${WEB_PORT} (HTTPS, Cloudflare compatible)"
             break
@@ -2870,7 +2736,7 @@ select_cloudflare_ssl_ports() {
     # Select Streaming Port (different from web)
     STREAM_PORT=""
     for port in "${CF_SSL_PORTS[@]}"; do
-        if [ "$port" != "$WEB_PORT" ] && port_available "$port"; then
+        if [ "$port" != "$WEB_PORT" ] && is_port_available "$port"; then
             STREAM_PORT=$port
             log_info "Selected streaming port: ${STREAM_PORT} (HTTPS, Cloudflare compatible)"
             break
@@ -2881,7 +2747,7 @@ select_cloudflare_ssl_ports() {
     # Select RTMP Port (from Cloudflare SSL ports, different from web and streaming)
     RTMP_PORT=""
     for port in "${CF_SSL_PORTS[@]}"; do
-        if [ "$port" != "$WEB_PORT" ] && [ "$port" != "$STREAM_PORT" ] && port_available "$port"; then
+        if [ "$port" != "$WEB_PORT" ] && [ "$port" != "$STREAM_PORT" ] && is_port_available "$port"; then
             RTMP_PORT=$port
             log_info "Selected RTMP port: ${RTMP_PORT} (SSL, Cloudflare compatible)"
             break
@@ -2895,12 +2761,6 @@ select_cloudflare_ssl_ports() {
     log_info "  RTMP (SSL):        ${RTMP_PORT}"
 
     log_to_file "INFO" "Ports selected: Web=${WEB_PORT}, Stream=${STREAM_PORT}, RTMP=${RTMP_PORT}"
-}
-
-# Function to check if port is available
-port_available() {
-    local port="$1"
-    ! sudo lsof -Pi :"$port" -sTCP:LISTEN -t >/dev/null 2>&1
 }
 
 # ============================================================================
