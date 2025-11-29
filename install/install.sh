@@ -1899,6 +1899,49 @@ setup_debian_repositories() {
         log_info "MariaDB repository added for ${mariadb_codename}"
     fi
 
+    # FFmpeg Repository (deb-multimedia.org - optimized builds with full codec support)
+    log_info "Adding FFmpeg repository (deb-multimedia)..."
+    if [ -f /etc/apt/sources.list.d/deb-multimedia.list ] || [ -f /etc/apt/sources.list.d/ffmpeg.list ]; then
+        log_info "FFmpeg/deb-multimedia repository already exists, skipping..."
+    else
+        # Determine supported codename for deb-multimedia repository
+        # Supported: bookworm, bullseye, buster, sid
+        local ffmpeg_codename="${OS_CODENAME}"
+        case "${OS_CODENAME}" in
+            sid|bookworm|bullseye|buster)
+                ffmpeg_codename="${OS_CODENAME}"
+                ;;
+            trixie|forky|*)
+                # Newer/unstable versions - fall back to bookworm (latest stable)
+                log_warn "Debian ${OS_CODENAME} may not be supported by deb-multimedia repository"
+                log_info "Falling back to 'bookworm' (Debian 12) repository"
+                ffmpeg_codename="bookworm"
+                ;;
+        esac
+
+        # Add deb-multimedia keyring
+        log_info "Adding deb-multimedia GPG key..."
+        sudo curl -fsSL https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb -o /tmp/deb-multimedia-keyring.deb 2>/dev/null && \
+            sudo dpkg -i /tmp/deb-multimedia-keyring.deb 2>/dev/null && \
+            sudo rm -f /tmp/deb-multimedia-keyring.deb || {
+            # Fallback: manually add key
+            log_warn "Keyring package failed, trying manual key import..."
+            sudo mkdir -p /etc/apt/keyrings
+            sudo curl -fsSL "https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb" 2>/dev/null | \
+                sudo dpkg-deb --fsys-tarfile /dev/stdin | sudo tar -xOf - ./usr/share/keyrings/deb-multimedia-keyring.gpg > /etc/apt/keyrings/deb-multimedia.gpg 2>/dev/null || {
+                log_warn "Could not add deb-multimedia key, FFmpeg will be installed from default repos"
+            }
+        }
+
+        # Add repository
+        if [ -f /etc/apt/keyrings/deb-multimedia.gpg ]; then
+            echo "deb [signed-by=/etc/apt/keyrings/deb-multimedia.gpg] https://www.deb-multimedia.org ${ffmpeg_codename} main non-free" | sudo tee /etc/apt/sources.list.d/deb-multimedia.list
+        else
+            echo "deb https://www.deb-multimedia.org ${ffmpeg_codename} main non-free" | sudo tee /etc/apt/sources.list.d/deb-multimedia.list
+        fi
+        log_info "FFmpeg deb-multimedia repository added for ${ffmpeg_codename}"
+    fi
+
     # Update package lists
     log_info "Updating package lists..."
     sudo apt-get update -y 2>&1 | tee -a "$INSTALL_LOG"
@@ -1981,6 +2024,56 @@ setup_ubuntu_repositories() {
         }
         echo "deb [arch=amd64,arm64] https://mirrors.xtom.com/mariadb/repo/${MARIADB_VERSION}/ubuntu ${mariadb_codename} main" | sudo tee /etc/apt/sources.list.d/mariadb.list
         log_info "MariaDB repository added for ${mariadb_codename}"
+    fi
+
+    # FFmpeg Repository (Rob Savoury's PPA - optimized builds with full codec support)
+    log_info "Adding FFmpeg repository (Savoury PPA)..."
+    if ls /etc/apt/sources.list.d/*savoury* 2>/dev/null | grep -q .; then
+        log_info "Savoury FFmpeg repository already exists, skipping..."
+    elif [ -f /etc/apt/sources.list.d/ffmpeg-savoury.list ]; then
+        log_info "FFmpeg Savoury repository already exists, skipping..."
+    else
+        # Determine supported codename for Savoury FFmpeg PPA
+        # Supported: noble (24.04), jammy (22.04), focal (20.04)
+        local ffmpeg_codename="${OS_CODENAME}"
+        case "${OS_CODENAME}" in
+            noble|jammy|focal)
+                ffmpeg_codename="${OS_CODENAME}"
+                ;;
+            oracular|plucky|*)
+                # Newer versions - fall back to noble (latest LTS with full support)
+                log_warn "Ubuntu ${OS_CODENAME} may not be supported by Savoury FFmpeg PPA"
+                log_info "Falling back to 'noble' (Ubuntu 24.04 LTS) repository"
+                ffmpeg_codename="noble"
+                ;;
+            bionic)
+                # Bionic is too old for Savoury, use default repos
+                log_info "Ubuntu Bionic will use default FFmpeg packages"
+                ffmpeg_codename=""
+                ;;
+        esac
+
+        if [ -n "$ffmpeg_codename" ]; then
+            # Try adding Savoury PPA (provides latest FFmpeg with all codecs)
+            sudo add-apt-repository -y ppa:savoury1/ffmpeg6 2>&1 | tee -a "$INSTALL_LOG" || {
+                log_warn "Savoury FFmpeg6 PPA failed, trying FFmpeg5..."
+                sudo add-apt-repository -y ppa:savoury1/ffmpeg5 2>&1 | tee -a "$INSTALL_LOG" || {
+                    log_warn "Savoury PPA failed, trying manual method..."
+                    # Manual fallback
+                    sudo mkdir -p /etc/apt/keyrings
+                    sudo curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xE996735927E427A733BB653E374C7797FB006459" 2>/dev/null | \
+                        sudo gpg --dearmor -o /etc/apt/keyrings/savoury-ffmpeg.gpg 2>/dev/null || true
+
+                    if [ -f /etc/apt/keyrings/savoury-ffmpeg.gpg ]; then
+                        echo "deb [signed-by=/etc/apt/keyrings/savoury-ffmpeg.gpg] http://ppa.launchpad.net/savoury1/ffmpeg6/ubuntu ${ffmpeg_codename} main" | \
+                            sudo tee /etc/apt/sources.list.d/ffmpeg-savoury.list
+                    else
+                        log_warn "Could not add Savoury FFmpeg PPA, will use default Ubuntu packages"
+                    fi
+                }
+            }
+            log_info "FFmpeg Savoury repository configured for ${ffmpeg_codename}"
+        fi
     fi
 
     # Update package lists
@@ -3778,6 +3871,87 @@ if [ $RESUME_STEP -le 17 ]; then
     export FFPROBE_BIN
 
     # -------------------------------------------------------------------------
+    # Create Symlinks for FFmpeg/FFprobe in all binary directories
+    # -------------------------------------------------------------------------
+    log_info "Creating FFmpeg/FFprobe symlinks for system-wide access..."
+
+    # Define all target directories for symlinks
+    SYMLINK_DIRS=(
+        "/usr/local/bin"
+        "/usr/bin"
+        "/bin"
+        "${HOME_DIR}/.local/bin"
+        "${HOME_DIR}/bin"
+        "/opt/bin"
+        "/snap/bin"
+    )
+
+    # Create symlinks for ffmpeg
+    for dir in "${SYMLINK_DIRS[@]}"; do
+        # Skip if this is where ffmpeg is already installed
+        if [ "$FFMPEG_BIN" = "${dir}/ffmpeg" ]; then
+            continue
+        fi
+
+        # Create directory if it doesn't exist (only for user directories)
+        if [[ "$dir" == "${HOME_DIR}"* ]]; then
+            mkdir -p "$dir" 2>/dev/null || true
+        fi
+
+        # Create symlink if directory exists and ffmpeg doesn't already exist there
+        if [ -d "$dir" ]; then
+            if [ ! -e "${dir}/ffmpeg" ]; then
+                sudo ln -sf "$FFMPEG_BIN" "${dir}/ffmpeg" 2>/dev/null && \
+                    log_info "Created symlink: ${dir}/ffmpeg -> ${FFMPEG_BIN}" || \
+                    log_warn "Could not create symlink in ${dir}"
+            else
+                log_info "ffmpeg already exists in ${dir}, skipping symlink"
+            fi
+        fi
+    done
+
+    # Create symlinks for ffprobe
+    for dir in "${SYMLINK_DIRS[@]}"; do
+        # Skip if this is where ffprobe is already installed
+        if [ "$FFPROBE_BIN" = "${dir}/ffprobe" ]; then
+            continue
+        fi
+
+        # Create directory if it doesn't exist (only for user directories)
+        if [[ "$dir" == "${HOME_DIR}"* ]]; then
+            mkdir -p "$dir" 2>/dev/null || true
+        fi
+
+        # Create symlink if directory exists and ffprobe doesn't already exist there
+        if [ -d "$dir" ]; then
+            if [ ! -e "${dir}/ffprobe" ]; then
+                sudo ln -sf "$FFPROBE_BIN" "${dir}/ffprobe" 2>/dev/null && \
+                    log_info "Created symlink: ${dir}/ffprobe -> ${FFPROBE_BIN}" || \
+                    log_warn "Could not create symlink in ${dir}"
+            else
+                log_info "ffprobe already exists in ${dir}, skipping symlink"
+            fi
+        fi
+    done
+
+    # Add user's local bin to PATH if not already there
+    if [[ ":$PATH:" != *":${HOME_DIR}/.local/bin:"* ]]; then
+        log_info "Adding ~/.local/bin to PATH in shell profile..."
+        if [ -f "${HOME_DIR}/.bashrc" ]; then
+            if ! grep -q "\.local/bin" "${HOME_DIR}/.bashrc" 2>/dev/null; then
+                echo 'export PATH="${HOME}/.local/bin:${PATH}"' >> "${HOME_DIR}/.bashrc"
+            fi
+        fi
+        if [ -f "${HOME_DIR}/.profile" ]; then
+            if ! grep -q "\.local/bin" "${HOME_DIR}/.profile" 2>/dev/null; then
+                echo 'export PATH="${HOME}/.local/bin:${PATH}"' >> "${HOME_DIR}/.profile"
+            fi
+        fi
+    fi
+
+    log_success "FFmpeg/FFprobe symlinks created"
+
+    # -------------------------------------------------------------------------
     # System-Level Low Latency Optimizations
     # -------------------------------------------------------------------------
     log_info "Applying low latency streaming optimizations..."
@@ -3856,10 +4030,15 @@ SYSCTL_EOF
     # -------------------------------------------------------------------------
     log_info "Creating FFmpeg streaming wrapper..."
 
-    sudo tee /usr/local/bin/ffmpeg-stream > /dev/null <<'FFMPEG_WRAPPER_EOF'
+    # Create wrapper with detected FFmpeg path
+    sudo tee /usr/local/bin/ffmpeg-stream > /dev/null <<FFMPEG_WRAPPER_EOF
 #!/usr/bin/env bash
 # FFmpeg wrapper with low-latency streaming defaults
 # Used by FOS-Streaming for optimized stream processing
+# Generated by FOS-Streaming installer
+
+# Path to FFmpeg binary (detected during installation)
+FFMPEG_BINARY="${FFMPEG_BIN}"
 
 # Default low-latency options (can be overridden by command line)
 FFMPEG_LOW_LATENCY_OPTS=(
@@ -3873,11 +4052,37 @@ FFMPEG_LOW_LATENCY_OPTS=(
 )
 
 # Prepend low-latency options, but allow overrides
-exec /usr/bin/ffmpeg "${FFMPEG_LOW_LATENCY_OPTS[@]}" "$@"
+exec "\${FFMPEG_BINARY}" "\${FFMPEG_LOW_LATENCY_OPTS[@]}" "\$@"
 FFMPEG_WRAPPER_EOF
 
     sudo chmod 755 /usr/local/bin/ffmpeg-stream
+
+    # Also create ffprobe-stream wrapper for consistent analysis
+    sudo tee /usr/local/bin/ffprobe-stream > /dev/null <<FFPROBE_WRAPPER_EOF
+#!/usr/bin/env bash
+# FFprobe wrapper for stream analysis
+# Used by FOS-Streaming for stream inspection
+# Generated by FOS-Streaming installer
+
+# Path to FFprobe binary (detected during installation)
+FFPROBE_BINARY="${FFPROBE_BIN}"
+
+# Default options for quick stream analysis
+FFPROBE_OPTS=(
+    -v "quiet"
+    -print_format "json"
+    -show_format
+    -show_streams
+)
+
+# Execute with default options (can be overridden)
+exec "\${FFPROBE_BINARY}" "\${FFPROBE_OPTS[@]}" "\$@"
+FFPROBE_WRAPPER_EOF
+
+    sudo chmod 755 /usr/local/bin/ffprobe-stream
+
     log_info "FFmpeg streaming wrapper created at /usr/local/bin/ffmpeg-stream"
+    log_info "FFprobe streaming wrapper created at /usr/local/bin/ffprobe-stream"
 
     # -------------------------------------------------------------------------
     # Configure sudoers for FFmpeg (no password required for streaming)
@@ -3886,10 +4091,11 @@ FFMPEG_WRAPPER_EOF
     sudo rm -f /etc/sudoers.d/fos-ffmpeg 2>/dev/null || true
 
     sudo tee /etc/sudoers.d/fos-ffmpeg > /dev/null <<SUDOERS_EOF
-# FOS-Streaming FFmpeg sudo access
+# FOS-Streaming FFmpeg/FFprobe sudo access
 ${USER} ALL = (root) NOPASSWD: ${FFMPEG_BIN}
 ${USER} ALL = (root) NOPASSWD: ${FFPROBE_BIN}
 ${USER} ALL = (root) NOPASSWD: /usr/local/bin/ffmpeg-stream
+${USER} ALL = (root) NOPASSWD: /usr/local/bin/ffprobe-stream
 SUDOERS_EOF
 
     sudo chmod 0440 /etc/sudoers.d/fos-ffmpeg
