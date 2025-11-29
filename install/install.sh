@@ -3140,23 +3140,49 @@ CURRENT_STEP=5
 
 if [ $RESUME_STEP -le 5 ]; then
     log_step "Step 5: Setting up PHP ${PHP_VERSION}"
-    log_progress "Installing PHP ${PHP_VERSION} packages (one by one)"
+    log_progress "Installing PHP ${PHP_VERSION} packages"
 
-    PHP_PACKAGES=(
+    # Fix any broken packages first
+    log_info "Fixing any broken packages..."
+    sudo apt-get -f install -y 2>/dev/null || true
+    sudo dpkg --configure -a 2>/dev/null || true
+
+    # Install system dependencies needed by PHP extensions
+    log_info "Installing system dependencies for PHP extensions..."
+    SYSTEM_DEPS=(
+        "libpng-dev"
+        "libjpeg-dev"
+        "libwebp-dev"
+        "libfreetype6-dev"
+        "libzip-dev"
+        "libicu-dev"
+        "libmagickwand-dev"
+        "imagemagick"
+    )
+    for dep in "${SYSTEM_DEPS[@]}"; do
+        apt_quiet install "$dep" 2>/dev/null || true
+    done
+
+    # Critical PHP packages (installation fails if these fail)
+    PHP_CRITICAL=(
         "php${PHP_VERSION}"
         "php${PHP_VERSION}-cli"
         "php${PHP_VERSION}-fpm"
         "php${PHP_VERSION}-common"
         "php${PHP_VERSION}-mysql"
         "php${PHP_VERSION}-curl"
-        "php${PHP_VERSION}-gd"
         "php${PHP_VERSION}-mbstring"
         "php${PHP_VERSION}-xml"
+        "php${PHP_VERSION}-opcache"
+        "php${PHP_VERSION}-readline"
+    )
+
+    # Optional PHP packages (installation continues if these fail)
+    PHP_OPTIONAL=(
+        "php${PHP_VERSION}-gd"
         "php${PHP_VERSION}-zip"
         "php${PHP_VERSION}-bcmath"
         "php${PHP_VERSION}-intl"
-        "php${PHP_VERSION}-opcache"
-        "php${PHP_VERSION}-readline"
         "php${PHP_VERSION}-bz2"
         "php${PHP_VERSION}-soap"
         "php${PHP_VERSION}-xsl"
@@ -3164,9 +3190,35 @@ if [ $RESUME_STEP -le 5 ]; then
         "php${PHP_VERSION}-imagick"
     )
 
-    install_packages_individually "${PHP_PACKAGES[@]}" || {
+    # Install critical packages
+    log_info "Installing critical PHP packages..."
+    install_packages_individually "${PHP_CRITICAL[@]}" || {
         handle_error 5 "Critical PHP packages failed to install"
     }
+
+    # Install optional packages (don't fail if some don't install)
+    log_info "Installing optional PHP packages..."
+    OPTIONAL_FAILED=()
+    for pkg in "${PHP_OPTIONAL[@]}"; do
+        if ! install_package "$pkg" 2>/dev/null; then
+            OPTIONAL_FAILED+=("$pkg")
+        fi
+    done
+
+    if [ ${#OPTIONAL_FAILED[@]} -gt 0 ]; then
+        log_warn "Some optional PHP packages could not be installed:"
+        log_warn "  ${OPTIONAL_FAILED[*]}"
+        log_info "These are not critical - the application will work without them."
+        log_info "You can try installing them manually later if needed."
+    fi
+
+    # Verify PHP is working
+    if command -v php &>/dev/null && php -v &>/dev/null; then
+        PHP_INSTALLED_VERSION=$(php -v | head -n1 | awk '{print $2}')
+        log_success "PHP ${PHP_INSTALLED_VERSION} installed successfully"
+    else
+        handle_error 5 "PHP installation verification failed"
+    fi
 
     save_state 5
 else
