@@ -1022,6 +1022,7 @@ run_bootstrap() {
         "bzip2"
         "coreutils"
         "lsb-release"
+        "net-tools"
         "ca-certificates"
         "apt-transport-https"
     )
@@ -1432,6 +1433,105 @@ has_systemd() {
         return 0
     fi
     return 1
+}
+
+# Try to enable systemd on WSL if not present
+# This is useful for WSL2 environments that support systemd but don't have it enabled
+# Usage: try_enable_wsl_systemd
+try_enable_wsl_systemd() {
+    # Only run on WSL
+    if ! is_wsl; then
+        return 1
+    fi
+
+    # If systemd is already working, nothing to do
+    if has_systemd; then
+        log_info "Systemd is already enabled and running on WSL"
+        return 0
+    fi
+
+    log_info "WSL environment without systemd detected"
+    log_info "Attempting to enable systemd support..."
+
+    # Check if this is WSL2 (WSL1 doesn't support systemd)
+    if [ -f /proc/version ]; then
+        if ! grep -qi "microsoft.*WSL2" /proc/version 2>/dev/null; then
+            # Could be WSL1 or unclear - check for WSL2 indicator
+            if [ ! -f /mnt/wslg/.X11-unix ] && [ ! -d /run/WSL ]; then
+                log_warn "This may be WSL1 which does not support systemd"
+                log_info "Consider upgrading to WSL2 for full systemd support"
+                return 1
+            fi
+        fi
+    fi
+
+    # Check if wsl.conf exists and has systemd setting
+    local wsl_conf="/etc/wsl.conf"
+    local needs_restart=false
+
+    if [ -f "$wsl_conf" ]; then
+        if grep -q "^\[boot\]" "$wsl_conf" 2>/dev/null; then
+            if grep -q "^systemd=true" "$wsl_conf" 2>/dev/null; then
+                log_info "systemd is configured in wsl.conf but not running"
+                log_warn "You need to restart WSL: wsl --shutdown (from Windows PowerShell)"
+                needs_restart=true
+            else
+                # Add systemd=true under existing [boot] section
+                log_info "Adding systemd=true to existing wsl.conf [boot] section"
+                sudo sed -i '/^\[boot\]/a systemd=true' "$wsl_conf"
+                needs_restart=true
+            fi
+        else
+            # Add [boot] section with systemd=true
+            log_info "Adding [boot] section with systemd support to wsl.conf"
+            sudo tee -a "$wsl_conf" > /dev/null <<'WSLCONF'
+
+[boot]
+systemd=true
+WSLCONF
+            needs_restart=true
+        fi
+    else
+        # Create wsl.conf with systemd enabled
+        log_info "Creating wsl.conf with systemd support"
+        sudo tee "$wsl_conf" > /dev/null <<'WSLCONF'
+# WSL Configuration for FOS-Streaming
+[boot]
+systemd=true
+
+[interop]
+enabled=true
+appendWindowsPath=true
+WSLCONF
+        needs_restart=true
+    fi
+
+    # Try to install systemd package if not present
+    if ! dpkg -l systemd 2>/dev/null | grep -q "^ii"; then
+        log_info "Installing systemd package..."
+        if apt_quiet install systemd systemd-sysv; then
+            log_success "systemd package installed"
+        else
+            log_warn "Failed to install systemd package"
+        fi
+    fi
+
+    if [ "$needs_restart" = true ]; then
+        log_warn "=========================================="
+        log_warn "WSL RESTART REQUIRED FOR SYSTEMD"
+        log_warn "=========================================="
+        log_info "Systemd has been configured but requires WSL restart."
+        log_info "After this installation completes:"
+        log_info "  1. Open Windows PowerShell (as Administrator)"
+        log_info "  2. Run: wsl --shutdown"
+        log_info "  3. Start WSL again"
+        log_info ""
+        log_info "For now, services will be managed using fallback methods."
+        echo ""
+        sleep 3
+    fi
+
+    return 1  # Return 1 to indicate systemd is not yet active
 }
 
 # =============================================================================
@@ -3357,6 +3457,12 @@ if [ $RESUME_STEP -le 9 ]; then
     # Detect environment type for service management
     if ! has_systemd; then
         log_warn "Non-systemd environment detected (WSL or container)"
+
+        # Try to enable systemd on WSL if possible
+        if is_wsl; then
+            try_enable_wsl_systemd
+        fi
+
         log_info "Services will be managed using alternative methods"
     fi
 
@@ -3521,27 +3627,98 @@ MARIADB_ROOT_PATH_EOF
 
     # -------------------------------------------------------------------------
     # Start MariaDB (only if not already running)
+    # Uses systemctl first, then falls back to service command for WSL/containers
     # -------------------------------------------------------------------------
+    start_mariadb_service() {
+        local started=false
+
+        # Method 1: Try systemctl if available (preferred)
+        if command -v systemctl &>/dev/null; then
+            log_info "Trying systemctl to start MariaDB..."
+            if sudo systemctl enable mariadb 2>/dev/null; then
+                log_info "MariaDB enabled via systemctl"
+            fi
+            if sudo systemctl start mariadb 2>/dev/null; then
+                log_success "MariaDB started via systemctl"
+                started=true
+            else
+                log_info "systemctl start failed, trying fallback methods..."
+            fi
+        fi
+
+        # Method 2: Try service command (for WSL/containers without systemd)
+        if [ "$started" = false ]; then
+            log_info "Trying service command to start MariaDB..."
+            if sudo service mariadb start 2>/dev/null; then
+                log_success "MariaDB started via service command"
+                started=true
+            elif sudo service mysql start 2>/dev/null; then
+                log_success "MariaDB started via service mysql command"
+                started=true
+            fi
+        fi
+
+        # Method 3: Try init.d script directly
+        if [ "$started" = false ] && [ -x /etc/init.d/mariadb ]; then
+            log_info "Trying init.d script to start MariaDB..."
+            if sudo /etc/init.d/mariadb start 2>/dev/null; then
+                log_success "MariaDB started via init.d script"
+                started=true
+            fi
+        fi
+
+        # Method 4: Try mysqld_safe as last resort
+        if [ "$started" = false ]; then
+            log_info "Trying mysqld_safe as last resort..."
+            if command -v mysqld_safe &>/dev/null; then
+                sudo mysqld_safe --user=mysql &>/dev/null &
+                sleep 3
+                if sudo mariadb -e "SELECT 1;" &>/dev/null; then
+                    log_success "MariaDB started via mysqld_safe"
+                    started=true
+                fi
+            fi
+        fi
+
+        if [ "$started" = true ]; then
+            return 0
+        else
+            return 1
+        fi
+    }
+
     if [ "$MARIADB_ALREADY_RUNNING" = true ]; then
         log_info "MariaDB is already running - skipping service start"
     else
         log_info "Starting MariaDB service..."
         # Don't stop if something is already on port 3306
         if ! ss -tlnp 2>/dev/null | grep -q ":3306 " && ! netstat -tlnp 2>/dev/null | grep -q ":3306 "; then
-            service_start "mariadb" || {
+            if ! start_mariadb_service; then
                 # If start fails, check if it's actually running anyway
                 if sudo mariadb -e "SELECT 1;" &>/dev/null; then
                     log_info "MariaDB is responding despite service start issues"
                     MARIADB_ALREADY_RUNNING=true
                 else
-                    handle_error 10 "Failed to start MariaDB"
+                    handle_error 10 "Failed to start MariaDB using any method"
                 fi
-            }
+            fi
         else
             log_info "Port 3306 already in use - assuming MariaDB is running"
             MARIADB_ALREADY_RUNNING=true
         fi
     fi
+
+    # Wait for MariaDB socket to be ready (important for socket auth)
+    log_info "Waiting for MariaDB to be fully ready..."
+    SOCKET_WAIT=0
+    SOCKET_MAX_WAIT=30
+    while [ $SOCKET_WAIT -lt $SOCKET_MAX_WAIT ]; do
+        if sudo mariadb -e "SELECT 1;" &>/dev/null; then
+            break
+        fi
+        sleep 1
+        SOCKET_WAIT=$((SOCKET_WAIT + 1))
+    done
 
     # Verify we can connect before proceeding
     if ! sudo mariadb -e "SELECT 1;" &>/dev/null; then
@@ -3550,16 +3727,39 @@ MARIADB_ROOT_PATH_EOF
             log_error "Cannot connect to MariaDB server"
             log_info "Checking what's on port 3306..."
             ss -tlnp 2>/dev/null | grep ":3306 " || netstat -tlnp 2>/dev/null | grep ":3306 " || true
+            log_info "Checking for MariaDB socket..."
+            ls -la /var/run/mysqld/ 2>/dev/null || true
+            ls -la /run/mysqld/ 2>/dev/null || true
             handle_error 10 "MariaDB connection failed"
         fi
     fi
 
-    # Secure MariaDB installation using unix_socket authentication for root
+    # -------------------------------------------------------------------------
+    # Configure unix_socket authentication for root user
     # This allows passwordless access via sudo (more secure than password auth)
-    log_info "Securing MariaDB installation..."
+    # -------------------------------------------------------------------------
+    log_info "Securing MariaDB installation with unix_socket authentication..."
+
+    # Ensure unix_socket plugin is loaded
+    sudo mariadb -e "INSTALL PLUGIN IF NOT EXISTS unix_socket SONAME 'auth_socket';" 2>/dev/null || true
 
     # Configure root to use unix_socket authentication (passwordless via sudo)
-    sudo mariadb -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket;" 2>/dev/null || true
+    # This is the recommended approach for local root access
+    log_info "Configuring root user for socket authentication..."
+    sudo mariadb -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket;" 2>/dev/null || {
+        # Fallback: try alternative syntax for older MariaDB versions
+        sudo mariadb -e "UPDATE mysql.user SET plugin='unix_socket' WHERE User='root' AND Host='localhost';" 2>/dev/null || true
+        sudo mariadb -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+    }
+
+    # Verify socket authentication works
+    if sudo mariadb -e "SELECT CURRENT_USER();" &>/dev/null; then
+        log_success "unix_socket authentication configured successfully"
+        log_info "Root can now connect with: sudo mariadb"
+    else
+        log_warn "unix_socket authentication may not be fully configured"
+        log_info "Continuing with installation..."
+    fi
 
     # Remove anonymous users
     log_info "Removing anonymous users..."
@@ -3617,14 +3817,93 @@ default-character-set = utf8mb4
 # MariaDB specific settings
 MARIADB_EOF
 
-    service_restart "mariadb" || handle_error 10 "Failed to restart MariaDB"
-    service_enable "mariadb"
+    # Restart MariaDB to apply configuration changes
+    # Uses the same fallback chain as start
+    log_info "Restarting MariaDB to apply configuration..."
+    restart_mariadb_service() {
+        local restarted=false
 
-    # Verify MariaDB is accessible
-    log_info "Verifying MariaDB installation..."
+        # Method 1: Try systemctl if available (preferred)
+        if command -v systemctl &>/dev/null && has_systemd; then
+            if sudo systemctl restart mariadb 2>/dev/null; then
+                log_info "MariaDB restarted via systemctl"
+                restarted=true
+            fi
+        fi
+
+        # Method 2: Try service command
+        if [ "$restarted" = false ]; then
+            if sudo service mariadb restart 2>/dev/null; then
+                log_info "MariaDB restarted via service command"
+                restarted=true
+            elif sudo service mysql restart 2>/dev/null; then
+                log_info "MariaDB restarted via service mysql command"
+                restarted=true
+            fi
+        fi
+
+        # Method 3: Try init.d script directly
+        if [ "$restarted" = false ] && [ -x /etc/init.d/mariadb ]; then
+            if sudo /etc/init.d/mariadb restart 2>/dev/null; then
+                log_info "MariaDB restarted via init.d script"
+                restarted=true
+            fi
+        fi
+
+        # Method 4: Stop and start as last resort
+        if [ "$restarted" = false ]; then
+            log_info "Trying stop/start sequence..."
+            sudo pkill -f mysqld 2>/dev/null || true
+            sleep 2
+            start_mariadb_service
+            restarted=$?
+        fi
+
+        if [ "$restarted" = true ]; then
+            return 0
+        else
+            return 1
+        fi
+    }
+
+    if ! restart_mariadb_service; then
+        # Check if MariaDB is actually running anyway
+        if ! sudo mariadb -e "SELECT 1;" &>/dev/null; then
+            handle_error 10 "Failed to restart MariaDB"
+        else
+            log_info "MariaDB is responding after restart attempt"
+        fi
+    fi
+
+    # Enable MariaDB to start on boot (if systemd available)
+    if has_systemd; then
+        sudo systemctl enable mariadb 2>/dev/null || true
+    fi
+
+    # Wait for MariaDB to be fully ready after restart
+    sleep 2
+    SOCKET_WAIT=0
+    while [ $SOCKET_WAIT -lt 15 ]; do
+        if sudo mariadb -e "SELECT 1;" &>/dev/null; then
+            break
+        fi
+        sleep 1
+        SOCKET_WAIT=$((SOCKET_WAIT + 1))
+    done
+
+    # Verify MariaDB is accessible via socket
+    log_info "Verifying MariaDB installation and socket authentication..."
     if sudo mariadb -e "SELECT VERSION();" > /dev/null 2>&1; then
         MARIADB_VER=$(sudo mariadb -N -e "SELECT VERSION();")
-        log_success "MariaDB ${MARIADB_VER} is running and accessible"
+        log_success "MariaDB ${MARIADB_VER} is running and accessible via socket"
+
+        # Verify socket auth works for root
+        CURRENT_USER=$(sudo mariadb -N -e "SELECT CURRENT_USER();" 2>/dev/null || echo "unknown")
+        if [[ "$CURRENT_USER" == *"root"* ]]; then
+            log_success "Socket authentication working: ${CURRENT_USER}"
+        else
+            log_info "Current database user: ${CURRENT_USER}"
+        fi
     else
         handle_error 10 "MariaDB verification failed"
     fi
