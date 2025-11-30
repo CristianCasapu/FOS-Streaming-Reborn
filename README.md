@@ -1,886 +1,441 @@
-# FOS-Streaming Reborn v70 - Enterprise IPTV SaaS Platform
+# FOS-Streaming Reborn v70
 
-An **enterprise-grade secured IPTV service platform** designed to provide ISP-resistant streaming through advanced encryption (SRT), traffic obfuscation (V2Ray), and modern protocols (QUIC/HTTP3). Built as a multi-tenant SaaS solution with zero-trust security architecture.
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-orange?style=flat-square&logo=buy-me-a-coffee)](https://buymeacoffee.com/CristianCasapu)
+[![Telegram](https://img.shields.io/badge/Telegram-Contact-blue?style=flat-square&logo=telegram)](https://t.me/CristianCasapu)
+[![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?style=flat-square&logo=php)](https://www.php.net)
+[![Vue.js](https://img.shields.io/badge/Vue.js-3.5-4FC08D?style=flat-square&logo=vue.js)](https://vuejs.org)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 
-**GitHub**: [CristianCasapu/FOS-Streaming-Reborn](https://github.com/CristianCasapu/FOS-Streaming-Reborn)
-**Architecture Plan**: See [PLATFORM_REFACTORING_MASTER_PLAN.md](docs/guides/PLATFORM_REFACTORING_MASTER_PLAN.md)
+An **enterprise-grade IPTV streaming platform** with advanced security features, modern Vue.js 3 admin panel, and comprehensive subscriber management. Built for ISP-resistant streaming with encryption, traffic obfuscation, and zero-trust architecture.
 
----
-
-## 💬 Support & Contact
-
-<div align="center">
-
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support%20Development-orange?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/CristianCasapu)
-[![Telegram](https://img.shields.io/badge/Telegram-Contact%20Me-blue?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/CristianCasapu)
-
-**Like this project? [Buy me a coffee!](https://buymeacoffee.com/CristianCasapu) ☕**
-**Need help? [Contact me on Telegram](https://t.me/CristianCasapu) 💬**
-
-</div>
+**Repository**: [CristianCasapu/FOS-Streaming-Reborn](https://github.com/CristianCasapu/FOS-Streaming-Reborn)
 
 ---
 
-## ✨ What's New in v70
+## Quick Links
 
-- 🎨 **Modern Vue.js 3 SPA Admin Panel** - Complete rewrite from legacy PHP/Blade to Vue.js with Composition API
-- 🚀 **Laravel API Backend** - RESTful APIs with Eloquent ORM
-- 🎯 **TailwindCSS UI** - Beautiful, responsive interface
-- 🔒 **Advanced Security** - UFW firewall + fail2ban integration directly in admin panel
-- 📊 **Real-time Monitoring** - Activity tracking with statistics dashboard
-- 🛠️ **FFmpeg Testing** - Built-in tools to test FFmpeg/FFprobe
-- 📱 **Mobile Responsive** - Works seamlessly on all devices
-- 🔧 **PM2 Process Manager** - Manage background workers and system services from Settings
-- 👥 **Subscriber Management** - Refactored user management with activity tracking
-- ⚡ **Latest Packages** - Vite 7, Vue 3.5, Laravel 11 components
+- [Installation](#installation)
+- [Features](#features)
+- [System Requirements](#system-requirements)
+- [Documentation](#documentation)
+- [Support](#support)
 
-## 🎯 Platform Vision & Roadmap
+---
 
-### Core Mission
-Transform FOS-Streaming into a **secured IPTV service platform** that operates as a proxy for streaming content with enterprise-grade security, delivering:
+## What's New in v70
 
-- **ISP-Resistant Streaming**: Undetectable traffic patterns through V2Ray obfuscation
-- **Military-Grade Encryption**: SRT protocol with AES-256 for all streams
-- **Zero-Trust Architecture**: Complete authentication and audit trails
-- **Multi-Tenant SaaS**: Reseller portals with white-label capabilities
-- **DPI Evasion**: Advanced techniques to bypass deep packet inspection
+- **Modern Vue.js 3 SPA Admin Panel** - Complete rewrite with Composition API
+- **Laravel 11 API Backend** - RESTful APIs with Eloquent ORM
+- **TailwindCSS UI** - Beautiful, responsive interface
+- **Advanced Security** - UFW firewall + fail2ban integration
+- **PM2 Process Manager** - Background workers management from admin UI
+- **Subscriber Management** - Packages, bouquets, subscriptions, trials
+- **Real-time Monitoring** - Activity tracking with statistics dashboard
+- **8 Background Workers** - Stream import, FFprobe analysis, health monitoring
 
-### Upcoming Features (In Development)
-
-#### Phase 1: Advanced Streaming Protocols
-- ✨ **SRT (Secure Reliable Transport)**: Low-latency encrypted streaming
-- ✨ **QUIC/HTTP3**: Next-gen web delivery with TLS 1.3
-- ✨ **ECH (Encrypted Client Hello)**: Hide server names from ISPs
-- ✨ **V2Ray Integration**: VMess/VLESS traffic obfuscation
-
-#### Phase 2: Enhanced Security
-- 🔒 **Traffic Obfuscation**: WebSocket tunneling to disguise streams
-- 🔒 **CDN Integration**: Cloudflare/Sucuri for DDoS protection
-- 🔒 **Auto-Ban System**: Detect and block port scanners instantly
-- 🔒 **Role-Based Access**: Admin, Supervisor, Support roles
-
-#### Phase 3: Enterprise Features
-- 🏢 **VOD System**: MKV containers with multi-track support
-- 🏢 **On-Demand Streaming**: Fast-start standby streams
-- 🏢 **Load Balancing**: Multi-node architecture with failover
-- 🏢 **Reseller Portal**: Complete white-label solution
-
-See [PLATFORM_REFACTORING_MASTER_PLAN.md](docs/guides/PLATFORM_REFACTORING_MASTER_PLAN.md) for detailed implementation timeline.
-
-## Features
-
-### Core Streaming Features
-- **RTMP/HLS/HTTP-FLV Streaming**: Full streaming protocol support with authentication
-- **M3U8 Playlist Generation**: Automated HLS playlist creation
-- **Transcoding Profiles**: 20+ FFmpeg parameters with multiple predefined profiles
-- **Stream Management**: Complete CRUD operations (create, start, stop, edit, delete)
-- **Mass Operations**: Bulk start/stop/delete streams
-- **Auto-Restart**: Cron-based stream monitoring and restart
-- **Import/Export**: M3U playlist import functionality
-
-### Modern Admin Panel (Vue.js 3 SPA)
-- 🎨 **Dashboard**: Real-time statistics with charts and activity feeds
-- 📺 **Streams Manager**: Full stream lifecycle management
-- 👥 **Subscriber Management**: Create, edit, delete subscribers with stream limits and activity tracking
-- 📂 **Category Manager**: Organize streams into categories
-- 🔧 **Transcode Profiles**: Manage FFmpeg transcode configurations
-- 🛡️ **Security Suite**:
-  - IP Blocks management
-  - User-Agent blocking
-  - **Advanced Security** (UFW firewall + fail2ban)
-- 👨‍💼 **Admin Manager**: Multiple administrator accounts
-- 📊 **Activity Monitor**: Track stream usage and subscriber activity
-- ⚙️ **Settings Panel**: System configuration with live FFmpeg testing and PM2 process manager
-
-### Security Features
-- **Modern Authentication**: Argon2id password hashing (PHP 8.4)
-- **CSRF Protection**: Token-based request validation on all forms
-- **Rate Limiting**: Brute-force protection (5 attempts/15 min)
-- **UFW Firewall Management**: Enable/disable firewall, manage rules via web UI
-- **fail2ban Integration**: Monitor jails, ban/unban IPs directly from admin panel
-- **Security Logging**: Comprehensive audit trail with event tracking
-- **Input Validation**: Strict input sanitization on all endpoints
-- **Security Headers**: X-Frame-Options, X-Content-Type-Options, CSP
-- **Session Security**: Secure session management with httponly cookies
+---
 
 ## System Requirements
 
-### Current Requirements (v70)
-- **OS**: Debian 12 (Bookworm)
-- **PHP**: 8.4.x
-- **MariaDB**: 11.4.x
-- **Nginx**: 1.26.x with HTTP-FLV module (includes RTMP + HTTP-FLV streaming)
-- **FFmpeg**: Latest static build
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| **OS** | Debian 12 / Ubuntu 24.04 | Debian 12 |
+| **PHP** | 8.4.x | 8.4.x |
+| **MariaDB** | 11.4.x | 11.4.x |
+| **Node.js** | 20.19+ LTS | 20 LTS |
+| **Nginx** | 1.26+ | Custom build with HTTP-FLV |
+| **RAM** | 2 GB | 4 GB+ |
+| **Disk** | 20 GB | 50 GB+ |
+| **CPU** | 2 cores | 4 cores+ |
 
-### Future Requirements (v71+)
-Additional components for enterprise features:
-- **SRT Libraries**: libsrt-dev for secure streaming
-- **QUIC Support**: libngtcp2-dev, libnghttp3-dev
-- **V2Ray Core**: For traffic obfuscation
-- **Redis**: Required for caching and queues
-- **PM2**: Extended worker management
-
-> **⚠️ Important**: Only Debian 12 is supported. Debian 11, PHP 7.x, and Nginx 1.19.x are **no longer supported**.
+---
 
 ## Installation
 
-### Quick Install - Debian 12
+### Step-by-Step Installation
+
+The installation is modular for better control and reliability. See [install/README.md](install/README.md) for the complete guide.
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/CristianCasapu/FOS-Streaming-Reborn.git
-cd FOS-Streaming-Reborn
+# Step 1: As root - Install prerequisites and create user
+apt-get update && apt-get install -y python3 git curl wget sudo ca-certificates gnupg
+curl -fsSL https://raw.githubusercontent.com/CristianCasapu/FOS-Streaming-Reborn/develop/install/01-setup-user.py -o /tmp/01-setup-user.py
+python3 /tmp/01-setup-user.py
+# Save the displayed password!
 
-# 2. Run the unified installation script
-chmod +x install/debian12-installer
-./install/debian12-installer
+# Step 2: Switch to new user and clone
+su - fosadmin
+git clone https://github.com/CristianCasapu/FOS-Streaming-Reborn.git FOS-Streaming
+cd ~/FOS-Streaming
 
-# 3. Wait for installation to complete (10-20 minutes)
+# Step 3: Install dependencies
+python3 install/02-install-deps.py
+
+# Step 4: Database setup (manual - see install/README.md)
+
+# Step 5: Configure and deploy
+cp .env.example .env
+nano .env  # Update database credentials
+composer install --no-dev --optimize-autoloader
+source ~/.nvm/nvm.sh && npm install && npm run build
+php artisan migrate && php artisan db:seed
+
+# Step 6: Service configuration
+python3 install/03-setup-services.py
+
+# Step 7: Start services
+sudo systemctl restart php8.4-fpm
+sudo systemctl start fos-nginx
+source ~/.nvm/nvm.sh && npm run pm2:start && pm2 save
 ```
 
-The installer will automatically set up:
-- Nginx 1.26.x with HTTP-FLV and RTMP modules
-- PHP 8.4 with all required extensions
-- MariaDB 11.4 with UTF8MB4 support
-- Composer 2.x for Laravel components
-- Node.js 20 LTS with NVM
-- FFmpeg latest static build
-- Vue.js 3 admin panel with production build
+### Post-Installation
 
-### What Gets Installed
+1. **Access Admin Panel**: `http://your-server:8000/admin#/login`
+2. **Default Login**: `admin` / `admin`
+3. **Change Password Immediately** - Navigate to Settings
 
-- **Nginx 1.26.x** - Custom built with HTTP-FLV and RTMP modules from `fospackv69/nginx-builder`
-- **PHP 8.2** - From Debian 12 repositories with all required extensions
-- **MariaDB 10.11** - From Debian 12 repositories
-- **FFmpeg** - From Debian repositories
-- **Node.js 20 LTS** - For frontend build tools
-- **Composer** - For PHP dependency management
-- **All Application Files** - From `fospackv69` directory and current codebase
+---
 
-### Repository Structure
+## Features
 
-- **`develop` branch** - Active development (default)
-- **`master` branch** - Stable releases only
-- **`fospackv69/`** - Contains all required packages and modules (no external downloads needed)
+### Streaming
 
-### Post-Installation Steps
+| Feature | Description |
+|---------|-------------|
+| **RTMP/HLS/HTTP-FLV** | Full protocol support with authentication |
+| **Transcoding** | 20+ FFmpeg profiles with presets |
+| **Stream Import** | M3U/M3U8 playlist import |
+| **Auto-Restart** | Automated stream monitoring and recovery |
+| **Mass Operations** | Bulk start/stop/delete streams |
 
-1. **Access Modern Admin Panel**
-   ```
-   Visit: http://your-server-ip:7777/admin#/login
-   Default credentials: admin / admin
-   ```
+### Admin Panel (Vue.js 3 SPA)
 
-2. **First Login** ⚠️ **CRITICAL SECURITY STEP**
-   - Navigate to **Admins** page
-   - Click edit on your admin account
-   - **Change the default password immediately!**
-   - Consider enabling two-factor authentication if available
+| Section | Components |
+|---------|------------|
+| **Dashboard** | Real-time stats, charts, activity feed |
+| **Streams** | Manage, Bouquets, Categories, Packages |
+| **Subscribers** | Subscribers, Subscriptions, Trials, Activity |
+| **Security** | IP Blocks, User-Agent Blocks, UFW, fail2ban |
+| **Settings** | System config, FFmpeg testing, PM2 Manager |
+| **Staff** | RBAC with Admin/Supervisor/Support roles |
 
-3. **Configure System Settings**
-   - Navigate to **Settings** page (`http://your-server-ip:7777/admin#/settings`)
-   - Update "Web IP" to your public IPv4 address
-   - Test FFmpeg and FFprobe installations
-   - Configure streaming port if needed
-   - Save settings
+### Security
 
-4. **Setup UFW Firewall** (Optional but Recommended)
-   - Navigate to **Security → Advanced Security**
-   - Enable UFW firewall
-   - Add rules for required ports:
-     - Port 7777/tcp (Web panel)
-     - Port 8000/tcp (Streaming)
-     - Port 1935/tcp (RTMP)
-     - Port 22/tcp (SSH)
+- **Argon2id Password Hashing** - PHP 8.4 native
+- **CSRF Protection** - Token-based validation
+- **Rate Limiting** - Brute-force protection (5 attempts/15 min)
+- **UFW Firewall** - Enable/disable, manage rules via web UI
+- **fail2ban Integration** - Monitor jails, ban/unban IPs
+- **Security Headers** - X-Frame-Options, X-Content-Type-Options, CSP
+- **Audit Logging** - Comprehensive event tracking
 
-5. **Configure fail2ban** (Optional)
-   - In **Security → Advanced Security**
-   - Monitor fail2ban jails status
-   - Configure IP ban/unban as needed
+### Background Workers (PM2)
 
-6. **Verify Cron Job** (Auto-restart streams)
-   ```bash
-   crontab -e
-   # Verify this line exists:
-   */2 * * * * /usr/bin/php /home/fos-streaming/fos/www/cron.php
-   ```
+| Worker | Purpose |
+|--------|---------|
+| `stream-import-worker` | M3U playlist import processing |
+| `ffprobe-worker` | Stream analysis (codec, bitrate, resolution) |
+| `stream-manager-worker` | Stream lifecycle management |
+| `stream-monitor-worker` | Health checks and logging |
+| `website-health-worker` | Website uptime monitoring |
+| `srt-proxy-worker` | SRT protocol with AES-256 encryption |
+| `quic-proxy-worker` | QUIC/HTTP3 proxy |
+| `v2ray-proxy-worker` | V2Ray traffic obfuscation |
 
-7. **Database Access** (if needed)
-   ```bash
-   cat /root/MYSQL_ROOT_PASSWORD
-   mysql -u root -p
-   ```
+---
 
+## Tech Stack
+
+### Backend
+
+- **PHP 8.4** with Laravel Illuminate components
+- **Eloquent ORM** for database operations
+- **MariaDB 11.4** with UTF8MB4 support
+- **Redis** for caching and sessions
+
+### Frontend
+
+- **Vue.js 3.5** with Composition API
+- **Pinia** for state management
+- **Vue Router** (hash mode)
+- **TailwindCSS 3.4**
+- **Vite 7** for builds
+
+### Streaming
+
+- **Nginx** with HTTP-FLV module
+- **FFmpeg** for transcoding
+- **PM2** for worker management
+- **Node.js 20 LTS**
+
+---
+
+## Project Structure
+
+```
+FOS-Streaming/
+├── app/                    # Laravel application classes
+│   ├── Console/           # Artisan commands
+│   ├── Http/              # Middleware and controllers
+│   └── Services/          # Business logic services
+├── database/
+│   ├── migrations/        # SQL migrations
+│   └── seeders/           # Database seeders
+├── docs/                   # Documentation
+│   ├── guides/            # Feature guides
+│   ├── install/           # Installation docs
+│   └── database/          # Database docs
+├── install/               # Installation scripts
+│   ├── config/            # Config templates
+│   │   ├── nginx/         # Nginx vhosts
+│   │   └── php-fpm/       # PHP-FPM pools
+│   ├── 01-setup-user.py   # User setup
+│   ├── 02-install-deps.py # Dependencies
+│   └── 03-setup-services.py # Service config
+├── models/                 # Eloquent models (35 models)
+├── public/admin/
+│   ├── api/               # REST API endpoints (30 endpoints)
+│   └── index.html         # Vue SPA entry
+├── resources/
+│   ├── js/
+│   │   ├── views/         # Vue components (44 views)
+│   │   ├── components/    # Reusable components
+│   │   ├── stores/        # Pinia stores
+│   │   ├── services/      # API service layer
+│   │   └── router/        # Vue Router config
+│   └── css/               # TailwindCSS styles
+├── workers/               # PM2 background workers (8 workers)
+├── fospackv69/            # Nginx build and binaries
+├── .env.example           # Environment template
+├── composer.json          # PHP dependencies
+├── package.json           # Node.js dependencies
+├── ecosystem.config.js    # PM2 configuration
+└── vite.config.js         # Frontend build config
+```
+
+---
+
+## Common Commands
+
+### Frontend
+
+```bash
+npm run dev              # Development server (port 5173)
+npm run build            # Production build
+npm run watch            # Watch mode
+```
+
+### Backend
+
+```bash
+composer install         # Install dependencies
+composer test            # Run all tests
+composer lint            # Auto-fix code style
+composer analyze         # Static analysis (PHPStan)
+composer check           # Run lint + analyze + test
+```
+
+### Database
+
+```bash
+php artisan migrate      # Run migrations
+php artisan migrate:fresh --seed  # Fresh database
+php artisan db:seed      # Seed data
+```
+
+### PM2 Workers
+
+```bash
+npm run pm2:start        # Start all workers
+npm run pm2:stop         # Stop all workers
+npm run pm2:status       # View status
+npm run pm2:logs         # View logs
+npm run pm2:monit        # Interactive monitoring
+```
+
+### Services
+
+```bash
+sudo systemctl start fos-nginx      # Start Nginx
+sudo systemctl status fos-nginx     # Check status
+sudo systemctl restart php8.4-fpm   # Restart PHP-FPM
+```
+
+---
 
 ## Configuration
 
-### Change Panel Port
+### Environment Variables
 
-1. Change port in web interface: Settings → Web Port
-2. Edit nginx configuration:
-   ```bash
-   nano /home/fos-streaming/fos/nginx/conf/nginx.conf
-   # Change: listen 7777; to your desired port
-   ```
-3. Restart nginx:
-   ```bash
-   killall nginx; killall nginx_fos
-   /home/fos-streaming/fos/nginx/sbin/nginx
-   ```
+Key settings in `.env`:
 
-### Service Management
+```ini
+# Application
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=http://your-domain.com
 
-```bash
-# Nginx
-systemctl start fos-nginx
-systemctl stop fos-nginx
-systemctl restart fos-nginx
-systemctl status fos-nginx
+# Database
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_DATABASE=fos_streaming
+DB_USERNAME=fos
+DB_PASSWORD=your_password
 
-# PHP-FPM
-systemctl start php8.4-fpm
-systemctl stop php8.4-fpm
-systemctl restart php8.4-fpm
-systemctl status php8.4-fpm
+# Ports
+WEB_PORT=8000
+STREAMING_PORT=8080
+RTMP_PORT=1935
 
-# MariaDB
-systemctl start mariadb
-systemctl stop mariadb
-systemctl restart mariadb
-systemctl status mariadb
+# Redis (optional)
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=your_redis_password
 ```
 
-## Usage
+### Ports
 
-### Adding Your First Stream
+| Port | Service | Description |
+|------|---------|-------------|
+| 8000 | Web Panel | Admin dashboard and API |
+| 8080 | Streaming | HLS/HTTP-FLV delivery |
+| 1935 | RTMP | Stream ingestion |
 
-1. **Create User**
-   - Navigate to Users → Add User
-   - Set username, password, and stream limits
+---
 
-2. **Add Stream**
-   - Navigate to Streams → Add Stream
-   - Select transcode profile: **Default 1** (recommended)
-   - Enter stream source URL
-   - Save and start stream
+## Streaming URLs
 
-3. **Access Stream**
-   - Format: `http://your-ip:8000/live/{username}/{password}/{stream-id}`
-   - Or use the web player: Streams → Play
+| Format | URL |
+|--------|-----|
+| **HLS** | `http://your-ip:8080/live/{user}/{pass}/{stream}/index.m3u8` |
+| **Direct** | `http://your-ip:8080/live/{user}/{pass}/{stream}` |
 
-### Transcoding Profiles
+---
 
-The most stable configuration is using **Default 1** transcode profile without proxy mode.
+## Documentation
 
-Proxy mode is available but depends on your use case and network configuration.
+| Document | Description |
+|----------|-------------|
+| [install/README.md](install/README.md) | Complete installation guide |
+| [docs/guides/PLATFORM_REFACTORING_MASTER_PLAN.md](docs/guides/PLATFORM_REFACTORING_MASTER_PLAN.md) | Architecture roadmap |
+| [docs/guides/LARAVEL_COMPONENTS_USAGE.md](docs/guides/LARAVEL_COMPONENTS_USAGE.md) | Laravel integration |
+| [docs/guides/PM2_BACKGROUND_WORKERS_GUIDE.md](docs/guides/PM2_BACKGROUND_WORKERS_GUIDE.md) | PM2 worker guide |
+| [docs/guides/SUBSCRIBER_MANAGEMENT_COMPLETED.md](docs/guides/SUBSCRIBER_MANAGEMENT_COMPLETED.md) | Subscriber system |
+| [docs/guides/ENV_CONFIGURATION_GUIDE.md](docs/guides/ENV_CONFIGURATION_GUIDE.md) | Environment setup |
 
-## Security Best Practices
-
-1. **Change Default Credentials**
-   ```bash
-   # Change admin password immediately after installation
-   ```
-
-2. **Configure Firewall**
-   ```bash
-   # Using UFW
-   ufw allow 7777/tcp   # Web panel
-   ufw allow 8000/tcp   # Streaming port
-   ufw allow 1935/tcp   # RTMP port
-   ufw allow 22/tcp     # SSH
-   ufw enable
-   ```
-
-3. **Setup SSL/TLS** (Recommended for production)
-   ```bash
-   # Install certbot
-   apt-get install certbot
-
-   # Get certificate
-   certbot certonly --standalone -d your-domain.com
-
-   # Update nginx configuration to use SSL
-   ```
-
-4. **Monitor Security Logs**
-   ```bash
-   tail -f /home/fos-streaming/fos/logs/security.log
-   tail -f /home/fos-streaming/fos/logs/auth.log
-   ```
-
-5. **Regular Updates**
-   ```bash
-   apt-get update
-   apt-get upgrade
-   ```
+---
 
 ## Troubleshooting
 
-### Streams Not Starting
-
-1. Check FFmpeg:
-   ```bash
-   /usr/local/bin/ffmpeg -version
-   ```
-
-2. Check logs:
-   ```bash
-   tail -f /home/fos-streaming/fos/logs/error.log
-   tail -f /home/fos-streaming/fos/logs/php-fpm.log
-   ```
-
-3. Verify permissions:
-   ```bash
-   ls -la /home/fos-streaming/fos/www/hl/
-   # Should be owned by nginx:nginx
-   ```
-
 ### Web Panel Not Accessible
 
-1. Check nginx status:
-   ```bash
-   systemctl status fos-nginx
-   ```
+```bash
+# Check nginx status
+sudo systemctl status fos-nginx
 
-2. Verify port is listening:
-   ```bash
-   netstat -tlnp | grep 7777
-   ```
+# Verify port is listening
+ss -tlnp | grep 8000
 
-3. Check PHP-FPM:
-   ```bash
-   systemctl status php8.4-fpm
-   ```
+# Check PHP-FPM
+sudo systemctl status php8.4-fpm
+```
 
-### Database Connection Errors
+### Database Connection Issues
 
-1. Check MariaDB status:
-   ```bash
-   systemctl status mariadb
-   ```
+```bash
+# Check MariaDB status
+sudo systemctl status mariadb
 
-2. Verify database credentials:
-   ```bash
-   cat /home/fos-streaming/fos/www/config.php
-   ```
+# Test connection
+mariadb -u fos -p fos_streaming -e "SELECT VERSION();"
+```
 
-3. Test connection:
-   ```bash
-   mysql -u fos -p
-   # Enter password from /root/MYSQL_ROOT_PASSWORD
-   ```
+### PM2 Worker Issues
+
+```bash
+# Check status
+pm2 status
+
+# View logs
+pm2 logs <worker-name> --err --lines 50
+
+# Restart all
+pm2 restart all
+```
 
 ### Permission Issues
 
 ```bash
 # Fix ownership
-chown -R nginx:nginx /home/fos-streaming/fos/www
-chown -R nginx:nginx /home/fos-streaming/fos/www1
-chown -R fosstreaming:fosstreaming /home/fos-streaming/fos/nginx
+sudo chown -R $(whoami):$(whoami) ~/FOS-Streaming
 
-# Fix permissions
-chmod 777 /home/fos-streaming/fos/www/hl
-chmod 777 /home/fos-streaming/fos/www/cache
+# Fix storage permissions
+chmod -R 775 storage cache logs
 ```
 
-## File Locations
+---
 
-### Important Directories
+## Roadmap
 
-- **Web Root**: `/home/fos-streaming/fos/www/`
-- **Streaming Root**: `/home/fos-streaming/fos/www1/`
-- **Nginx Config**: `/home/fos-streaming/fos/nginx/conf/nginx.conf`
-- **PHP-FPM Config**: `/etc/php/8.4/fpm/pool.d/www.conf`
-- **Logs**: `/home/fos-streaming/fos/logs/`
-- **HLS Output**: `/home/fos-streaming/fos/www/hl/`
+### Phase 1: Advanced Streaming (In Progress)
 
-### Log Files
+- SRT (Secure Reliable Transport) with AES-256
+- QUIC/HTTP3 with TLS 1.3
+- V2Ray integration (VMess/VLESS)
 
-- **Nginx Error**: `/home/fos-streaming/fos/logs/error.log`
-- **Nginx Access**: `/home/fos-streaming/fos/logs/access.log`
-- **PHP-FPM**: `/home/fos-streaming/fos/logs/php-fpm.log`
-- **Security**: `/home/fos-streaming/fos/logs/security.log`
-- **Authentication**: `/home/fos-streaming/fos/logs/auth.log`
+### Phase 2: Enhanced Security
 
-## Architecture
+- Traffic obfuscation via WebSocket tunneling
+- CDN integration (Cloudflare/Sucuri)
+- Auto-ban system for port scanners
 
-### Components
+### Phase 3: Enterprise Features
 
-1. **Nginx with HTTP-FLV Module**
-   - Handles HTTP/HTTPS requests
-   - RTMP streaming ingress
-   - HTTP-FLV streaming
-   - HLS segment generation
-   - FastCGI to PHP-FPM
+- VOD system with MKV multi-track support
+- Load balancing with automatic failover
+- Complete reseller portal
 
-2. **PHP 8.4 with FPM**
-   - Web panel application
-   - Stream management API
-   - User authentication
-   - Database operations
+See [PLATFORM_REFACTORING_MASTER_PLAN.md](docs/guides/PLATFORM_REFACTORING_MASTER_PLAN.md) for details.
 
-3. **MariaDB 11.4**
-   - User data storage
-   - Stream configuration
-   - Settings and metadata
+---
 
-4. **FFmpeg**
-   - Stream transcoding
-   - Format conversion
-   - Bitrate adaptation
+## Support
 
-### Data Flow
+- **Issues**: [GitHub Issues](https://github.com/CristianCasapu/FOS-Streaming-Reborn/issues)
+- **Telegram**: [@CristianCasapu](https://t.me/CristianCasapu)
+- **Support Development**: [Buy Me a Coffee](https://buymeacoffee.com/CristianCasapu)
 
-```
-RTMP Source → Nginx RTMP → FFmpeg Transcode → HLS Output → Nginx HTTP → Client
-                ↓
-           PHP Management → MariaDB
-```
-
-## API Endpoints
-
-### Streaming URLs
-
-- **HLS Playlist**: `http://your-ip:8000/live/{user}/{pass}/{stream}/index.m3u8`
-- **Direct Stream**: `http://your-ip:8000/live/{user}/{pass}/{stream}`
-
-### Management Panel (Vue.js SPA)
-
-- **Login**: `http://your-ip:7777/admin#/login`
-- **Dashboard**: `http://your-ip:7777/admin#/dashboard`
-- **Streams**: `http://your-ip:7777/admin#/streams`
-- **Users**: `http://your-ip:7777/admin#/users`
-- **Categories**: `http://your-ip:7777/admin#/categories`
-- **Transcodes**: `http://your-ip:7777/admin#/transcodes`
-- **Security**: `http://your-ip:7777/admin#/security/ipblocks` (with dropdown menu)
-- **Activities**: `http://your-ip:7777/admin#/activities`
-- **Admins**: `http://your-ip:7777/admin#/admins`
-- **Settings**: `http://your-ip:7777/admin#/settings`
-
-
-## Development
-
-### Tech Stack
-
-- **Backend**: PHP 8.4 (Laravel Components)
-  - Eloquent ORM for database operations
-  - Validation, Cache, Queue, Mail, Events
-  - Authentication, Session, Encryption
-  - HTTP Client (Guzzle), Redis, Logging (Monolog)
-  - RESTful API endpoints
-- **Frontend**: Vue.js 3 + Vite 5
-  - Composition API with `<script setup>`
-  - Pinia for state management
-  - Vue Router (hash mode)
-  - TailwindCSS for styling
-  - Axios for HTTP requests
-- **Streaming**: Nginx-HTTP-FLV, FFmpeg
-- **Database**: MariaDB 11.4 (UTF8MB4)
-- **Cache/Queue**: Redis (optional)
-- **Development**: Laravel Sail (Docker), NVM, Node.js 20 LTS
-
-### Docker Development (Laravel Sail)
-
-For a complete Docker-based development environment, see [LARAVEL_SAIL_GUIDE.md](LARAVEL_SAIL_GUIDE.md).
-
-Quick start:
-```bash
-# Copy environment file
-cp .env.example .env
-
-# Start containers
-./vendor/bin/sail up -d
-
-# Access application
-# Web Panel: http://localhost:7777
-# Streaming: http://localhost:8000
-```
-
-### Available Laravel Components
-
-- **Cache**: File, Redis, Database drivers
-- **Queue**: Sync, Database, Redis workers
-- **Mail**: SMTP, Mailgun, SES, Mailpit (development)
-- **Validation**: Form requests, custom rules
-- **Events**: Broadcasting, listeners
-- **Notifications**: Email, SMS, Slack
-- **Logging**: Daily, Single, Syslog channels
-- **HTTP Client**: Guzzle-based API calls
-- **Encryption**: AES-256-CBC
-- **Hashing**: Argon2id, bcrypt
-
-### Project Structure
-
-```
-FOS-Streaming-v70/
-├── Root (14 PHP files - streaming endpoints + bootstrap)
-│   ├── index.php, server.php, artisan      # Entry points
-│   ├── config.php, helpers.php, functions.php  # Bootstrap
-│   ├── stream.php, playlist.php, retrieve.php  # Streaming
-│   ├── getfile.php, play.php, cron.php        # Utilities
-│   └── not_encrypted_stream.php, api.php, clientsgen.php
-│
-├── public/admin/                   # Modern Vue.js SPA
-│   ├── index.html                  # Vue app entry point
-│   ├── api/                        # 13 Laravel-style API endpoints
-│   │   ├── auth.php                # Authentication
-│   │   ├── dashboard.php           # Stats & charts
-│   │   ├── streams.php             # Stream CRUD
-│   │   ├── users.php               # User management
-│   │   ├── categories.php          # Category management
-│   │   ├── transcodes.php          # Transcode profiles
-│   │   ├── ipblocks.php            # IP blocking
-│   │   ├── useragents.php          # User-agent blocking
-│   │   ├── security.php            # UFW/fail2ban (NEW!)
-│   │   ├── admins.php              # Admin accounts
-│   │   ├── activities.php          # Activity logs
-│   │   ├── settings.php            # System config
-│   │   └── middleware.php          # API middleware
-│   └── build/                      # Vite production builds
-│
-├── resources/js/                   # Vue.js 3 Frontend
-│   ├── app.js                      # Main entry point
-│   ├── views/                      # 16 Vue components
-│   │   ├── Login.vue
-│   │   ├── DashboardEnhanced.vue
-│   │   ├── Streams/StreamsList.vue
-│   │   ├── Users/UsersList.vue
-│   │   ├── Categories/CategoriesList.vue
-│   │   ├── Transcodes/TranscodesList.vue
-│   │   ├── Security/
-│   │   │   ├── IPBlocks.vue
-│   │   │   ├── UserAgentBlocks.vue
-│   │   │   └── AdvancedSecurity.vue  # NEW!
-│   │   ├── Admins/AdminsList.vue
-│   │   ├── Activities/ActivitiesList.vue
-│   │   └── Settings/Settings.vue
-│   ├── components/
-│   │   ├── AppLayout.vue           # Main layout with nav
-│   │   └── subscriber/             # Subscriber components
-│   ├── stores/
-│   │   ├── auth.js                 # Pinia auth store
-│   │   └── dashboard.js            # Dashboard state
-│   ├── services/
-│   │   └── api.js                  # Axios API service
-│   └── router/
-│       └── index.js                # Vue Router config
-│
-├── models/                         # Eloquent ORM Models
-│   ├── Stream.php, User.php
-│   ├── Category.php, Transcode.php
-│   ├── IPBlock.php, UserAgentBlock.php
-│   ├── Admin.php, Activity.php
-│   └── BannedIP.php, SecurityEvent.php
-│
-├── views/                          # Blade Templates (legacy)
-│   ├── main.blade.php
-│   ├── clientsgen.blade.php
-│   ├── play.blade.php
-│   └── stream_importer.blade.php
-│
-├── scripts/                        # Utilities (NEW!)
-│   ├── install_database_tables.php
-│   ├── migrate_passwords.php
-│   └── stream_importer.php
-│
-├── docs/                           # Documentation
-│   ├── guides/                     # 17+ guide documents
-│   ├── database/                   # Database docs
-│   └── install/                    # Installation docs
-│
-├── install/                        # Installation Scripts
-│   └── debian12-installer          # Unified installer
-│
-├── vendor/                         # Composer dependencies
-├── node_modules/                   # Node.js dependencies
-├── package.json, vite.config.js    # Frontend build config
-├── composer.json, composer.lock    # PHP dependencies
-├── .env.example, .env              # Environment config
-├── .gitignore                      # Git ignore rules
-└── README.md                       # This file
-```
+---
 
 ## Contributing
-
-Contributions are welcome! Please follow these guidelines:
 
 1. Fork the repository
 2. Create a feature branch
 3. Test thoroughly on Debian 12
 4. Submit a pull request with detailed description
 
-## Support
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for guidelines.
 
-- **GitHub Issues**: https://github.com/theraw/FOS-Streaming-v70/issues
-- **Documentation**: See [MIGRATION_PLAN.md](MIGRATION_PLAN.md) for detailed technical information
+---
 
 ## License
 
-All Rights Reserved - FOS-Streaming
-
-## Sources & Credits
-
-1. FOS-Streaming-v1
-2. FFmpeg - https://ffmpeg.org
-3. Nginx - https://nginx.org
-4. nginx-http-flv-module - https://github.com/winshining/nginx-http-flv-module
-5. nginx-geoip2-module - https://github.com/leev/ngx_http_geoip2_module
-6. MariaDB - https://mariadb.org
-7. PHP - https://www.php.net
-
-## Migration to Vue.js (v70)
-
-FOS-Streaming v70 represents a **complete modernization** of the admin interface from legacy PHP/Blade to Vue.js 3 SPA:
-
-### What Changed
-- ✅ **35 legacy PHP/Blade files** deleted
-- ✅ **13 RESTful API endpoints** created with 60+ actions
-- ✅ **16 Vue.js components** built with Composition API
-- ✅ **13 routes** with authentication guards
-- ✅ **Security dropdown** with 3 organized pages
-- ✅ **Production build:** 196 kB (gzipped: 42.46 kB)
-- ✅ **Zero legacy dependencies** - Pure Vue.js 3 + TailwindCSS
-
-### Architecture Benefits
-- **Separation of Concerns**: Clean API/frontend split
-- **Modern Stack**: Vue.js 3, Vite 5, TailwindCSS, Pinia
-- **Type Safety**: Better code organization with Composition API
-- **Performance**: Lazy loading, code splitting, optimized builds
-- **Maintainability**: Component-based architecture
-- **Developer Experience**: Hot module replacement, fast rebuilds
-
-### Migration Documentation
-See [/docs/guides/MIGRATION_PROGRESS.md](docs/guides/MIGRATION_PROGRESS.md) for complete migration details.
+MIT License - See [LICENSE](LICENSE) for details.
 
 ---
 
-## Changelog
+## Credits
 
-### Version 70.6 - Architecture Refactoring & Enterprise Foundation (2025-11-24)
-
-**Major Refactoring:**
-- 🔄 **Channels → Streams Simplification** - Removed redundant `channels` table and `bouquet_channel` pivot
-  - Bouquets now directly reference streams via `stream_ids` JSON column
-  - Cleaner data model, improved query performance
-- 🔄 **Users → Subscribers Rename** - Industry-standard terminology throughout platform
-  - Updated navigation, API endpoints, and Vue components
-  - Enhanced activity tracking for subscriber behavior
-- 🔄 **PM2 Workers Modernization** - Converted all workers from .js to .cjs (CommonJS)
-  - 5 core workers converted + 3 new protocol workers added
-  - Better Node.js 20+ compatibility and PM2 integration
-
-**Enterprise Foundation (85% Complete):**
-- ✅ **Reseller System** - Multi-tenant SaaS infrastructure (3 tables)
-- ✅ **Staff Management** - RBAC with Admin/Supervisor/Support roles
-- ✅ **Advanced Security** - Device locking, fingerprinting, audit trails (7 tables)
-- ✅ **V2Ray Integration** - Traffic obfuscation infrastructure (4 tables)
-- ✅ **Enhanced Streams** - 24 new fields for SRT, VOD, proxy-only modes
-
-**New Services:**
-- `SRTService` - SRT protocol with AES-256 encryption
-- `CDNService` - Multi-provider CDN (Cloudflare, Sucuri, Bunny)
-- `HealthCheckService` - Comprehensive system monitoring
-- `V2RayService` - VMess/VLESS traffic obfuscation
-- `DeviceFingerprintService` - Device binding and tracking
-
-**New Models:** 11 enterprise models (AuditLog, Reseller, Staff, V2Ray, Device management)
-
-**API Updates:** New audit_logs.php, enhanced packages/bouquets/subscriptions, removed channels/users
-
-**Frontend:** 15+ new Vue components, reorganized navigation (Streams/Subscribers dropdowns)
-
-**Stats:** 53 files modified, ~5,000 lines of code, 18 new database tables, 20+ documentation guides
-
-**Documentation:** See `docs/guides/FORUM_UPDATE_2025-11-24.md` for comprehensive details
-
-### Version 70.5 - Platform Vision & Refactoring Plan (2025-11-24)
-
-**Documentation & Planning:**
-- Created comprehensive platform refactoring master plan
-- Documented enterprise IPTV SaaS vision and roadmap
-- Analyzed and planned SRT, QUIC/HTTP3, V2Ray integration
-- Updated CLAUDE.md and README.md with platform purpose
-- Established 16-week implementation timeline
-
-**Added:**
-- **Master Refactoring Plan** (`docs/guides/PLATFORM_REFACTORING_MASTER_PLAN.md`)
-  - 8 implementation phases with detailed tasks
-  - Technology stack upgrades and requirements
-  - Security implementation specifications
-  - Performance optimization strategies
-  - Migration and testing strategies
-- **Platform Vision** documentation in README and CLAUDE.md
-- **Roadmap** for enterprise features and security enhancements
-
-### Version 70.4 - PM2 Workers & Package Upgrades (2025-11-23)
-
-**Major Changes:**
-- Upgraded all packages to latest versions (Vite 7, Vue 3.5, Laravel 11)
-- Added PM2 Process Manager UI in Settings page
-- Refactored Users to Subscribers with enhanced activity tracking
-- Fixed multiple bugs in streams management
-- Implemented background worker architecture with PM2
-
-**Added:**
-- **PM2 Process Manager** - Control workers and system services from Settings
-  - Manage PM2 workers (stream-import, ffprobe)
-  - Control system services (Nginx, MariaDB, PHP-FPM)
-  - Real-time job queue statistics
-  - Auto-refresh every 30 seconds
-- **Background Workers** with PM2
-  - Stream Import Worker (Node.js)
-  - FFprobe Analysis Worker (Node.js Cluster, 2 instances)
-  - Job queue system with status tracking
-- **Enhanced Subscriber Management**
-  - Renamed from "Users" to "Subscribers"
-  - Improved activity tracking
-  - Better UI/UX
-- **Package Upgrades**
-  - Vite 5 → 7.2.4 (major upgrade, ESM-only)
-  - Vue 3.4 → 3.5.13 (56% memory reduction, 10x faster arrays)
-  - Laravel/Illuminate 10 → 11.46.1 (15% faster bootstrap)
-  - Carbon 2.x → 3.10.3 (major upgrade)
-  - PHPUnit 10 → 11.5.44
-  - PHPStan 1.x → 2.1.32
-  - Symfony 6.x → 7.3.x
-  - All other packages to latest stable versions
-
-**Fixed:**
-- Streams management bugs and edge cases
-- Activity tracking for subscribers
-- Vite 7 ESM compatibility (updated vite.config.js)
-- Laravel 11 breaking changes compatibility
-- Node.js version requirements (now 20.19+)
-
-**Documentation:**
-- `docs/PM2_MANAGEMENT_UI.md` - PM2 UI implementation details
-- `docs/PM2_WORKERS_IMPLEMENTATION.md` - Worker architecture
-- `docs/PM2_SUDO_PASSWORD_UPDATE.md` - Sudo configuration guide
-- `docs/guides/PM2_BACKGROUND_WORKERS_GUIDE.md` - Complete PM2 guide
-- `docs/guides/PACKAGE_UPGRADE_2025.md` - Package upgrade documentation
-- `docs/UPGRADE_SUMMARY.txt` - Quick upgrade summary
-
-### Version 70.3 - Vue.js SPA Complete (2025-11-22)
-
-**Major Changes:**
-- Complete migration to Vue.js 3 SPA admin interface
-- Added Advanced Security page (UFW + fail2ban integration)
-- Created Security dropdown menu
-- Unified installation script (debian12-installer)
-- Reorganized project structure
-
-**Added:**
-- Vue.js 3 admin panel with 16 components
-- 13 RESTful API endpoints
-- Advanced Security management (UFW/fail2ban)
-- Activity monitoring with statistics
-- FFmpeg testing tools in Settings
-- Security dropdown navigation
-- `/scripts/` directory for utilities
-- Comprehensive documentation in `/docs/`
-
-**Removed:**
-- 35 legacy PHP/Blade admin files
-- 3 duplicate installation scripts
-- index-secure.php (replaced by Vue.js login)
-- 18+ markdown files from root (moved to /docs/)
-
-**Changed:**
-- Moved utilities to `/scripts/` directory
-- Unified installation to `debian12-installer`
-- Updated all documentation references
-- Modernized README with current architecture
-
-### Version 70.2 - Debian 12 Support (2025-11-21)
-
-**Added:**
-- Debian 12 (Bookworm) support
-- PHP 8.4 compatibility
-- MariaDB 11.4 support
-- Nginx 1.26+ with HTTP/2, HTTP/3
-- Argon2id password hashing
-- CSRF token protection
-- Rate limiting
-- Security logging and audit trails
-- Input validation and sanitization
-- Modern security headers
-- Systemd service files
-- Comprehensive migration tools
-
-**Security Improvements:**
-- Replaced MD5 with Argon2id for passwords
-- Added CSRF protection to all forms
-- Implemented login rate limiting (5 attempts/15 min)
-- Added security event logging
-- Enhanced session security
-- Input validation for all user inputs
-- Security headers via nginx
-- DDoS protection via rate limiting
-
-**Changed:**
-- Updated installation script for Debian 12
-- Modernized PHP-FPM configuration
-- Enhanced nginx configuration
-- Improved error handling
-- Better log management with rotation
-
-**Documentation:**
-- Added MIGRATION_PLAN.md
-- Updated README with Debian 12 instructions
-- Added security best practices
-- Added troubleshooting guide
-
-### Version 70 - Original Release
-
-**Features:**
-- Multi-user streaming platform
-- RTMP/HLS support
-- Transcoding with multiple profiles
-- Web-based management panel
-- User and stream management
-- IP and User-Agent blocking
-- Playlist import
-- Auto-restart via cron
+- FOS-Streaming Development Team (Original)
+- [FFmpeg](https://ffmpeg.org)
+- [Nginx](https://nginx.org)
+- [nginx-http-flv-module](https://github.com/winshining/nginx-http-flv-module)
+- [MariaDB](https://mariadb.org)
+- [Vue.js](https://vuejs.org)
+- [Laravel](https://laravel.com)
 
 ---
 
-## 💬 Support & Contact
+**Version**: 70.0.0 | **Codename**: Security Fortress | **Released**: 2025-11-21
 
-<div align="center">
-
-### Enjoying FOS-Streaming Reborn?
-
-Your support helps keep this project alive and growing! 🚀
-
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support%20Development-orange?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/CristianCasapu)
-
-**☕ [Support the project with a coffee!](https://buymeacoffee.com/CristianCasapu)**
-
----
-
-### Need Help or Have Questions?
-
-I'm available on Telegram for support, feedback, and feature requests!
-
-[![Telegram](https://img.shields.io/badge/Telegram-Contact%20Me-blue?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/CristianCasapu)
-
-**💬 [Contact me on Telegram](https://t.me/CristianCasapu)**
-
----
-
-### Other Ways to Contribute
-
-- ⭐ **Star this repository** on GitHub
-- 🐛 **Report bugs** via GitHub Issues
-- 💡 **Suggest features** via GitHub Discussions
-- 🔧 **Submit pull requests** to improve the code
-- 📖 **Improve documentation** and tutorials
-- 📢 **Share with others** who might benefit
-
-Every contribution, no matter how small, makes a difference! ❤️
-
-</div>
-
----
-
-**Copyright © 2025 FOS-Streaming. All Rights Reserved.**
+Copyright 2025 FOS-Streaming. All Rights Reserved.
