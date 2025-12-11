@@ -103,6 +103,7 @@ pnpm-debug.log*
 
 # Database
 *.sql
+!database/migrations/*.sql
 *.sqlite
 *.sqlite3
 *.db
@@ -149,6 +150,19 @@ fospackv69/fos/streams/dash/*
 !fospackv69/fos/streams/dash/.gitkeep
 fospackv69/fos/streams/hls/*
 !fospackv69/fos/streams/hls/.gitkeep
+
+# FOS Pack - Generated configs (environment-specific, regenerated on each server)
+fospackv69/fos/nginx/conf/nginx-streaming.conf
+fospackv69/fos/nginx/conf/nginx-streaming.conf.bak.*
+fospackv69/fos/php/etc/php-fpm-streaming.conf
+fospackv69/fos/php/etc/pool.d-streaming/*.conf
+
+# FOS Pack - Logs (environment-specific)
+fospackv69/fos/logs/*.log
+
+# FOS Pack - PID files (runtime)
+fospackv69/fos/php/*.pid
+fospackv69/fos/nginx/*.pid
 
 # FOS Pack - Nginx builder source (varies by version)
 fospackv69/nginx-builder/nginx-*/
