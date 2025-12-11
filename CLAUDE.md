@@ -317,13 +317,45 @@ Navigation organization:
 **Environment Configuration**: Database credentials in `.env` (never commit), loaded via `vlucas/phpdotenv`. Access with `env('DB_HOST')` or `config('database.host')`.
 
 **Database Migrations (IMPORTANT)**:
-- **ALWAYS** create migration files for any database schema changes
+- **ALWAYS** create Laravel PHP migration files for any database schema changes
 - **NEVER** modify the database directly with raw SQL in scripts or CLI
-- Migration files ensure changes are reproducible for new deployments
-- **SQL migrations**: Create in `/database/migrations/` with naming format `YYYY-MM-DD_description.sql`
-- **PHP migrations**: Create in `/database/migrations/laravel/` for complex operations
-- Run SQL migrations: `source .env && mariadb -u "$DB_USERNAME" -p"$DB_PASSWORD" "$DB_DATABASE" < database/migrations/YOUR_FILE.sql`
-- Run PHP migrations: `php artisan migrate`
+- **NEVER** create raw SQL migration files - use Laravel migrations exclusively
+- Migration files ensure changes are reproducible and tracked via `php artisan migrate`
+- **Location**: All migrations in `/database/migrations/laravel/` with Laravel naming format `YYYY_MM_DD_HHMMSS_description.php`
+- **Run migrations**: `php artisan migrate`
+- **Check status**: `php artisan migrate:status`
+- **Rollback**: `php artisan migrate:rollback`
+
+**Migration Template**:
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Capsule\Manager as Capsule;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $schema = Capsule::schema();
+
+        // Check before creating/modifying
+        if (!$schema->hasTable('table_name')) {
+            $schema->create('table_name', function (Blueprint $table) {
+                $table->increments('id');
+                // ... columns
+                $table->timestamps();
+            });
+        }
+    }
+
+    public function down(): void
+    {
+        Capsule::schema()->dropIfExists('table_name');
+    }
+};
+```
 
 ### Frontend Build System
 
@@ -516,7 +548,7 @@ export const newFeatureAPI = {
 - `.env.example` (template)
 - `composer.lock` (dependency versions)
 - `package-lock.json` (NPM versions)
-- `/database/migrations/*.sql` (schema changes)
+- `/database/migrations/laravel/*.php` (Laravel migrations)
 
 ---
 
@@ -531,8 +563,8 @@ touch models/FeatureName.php
 # Create API endpoint
 touch public/admin/api/feature_name.php
 
-# Create migration (if needed)
-touch database/migrations/2025-11-23_create_feature_name_table.sql
+# Create Laravel migration (if needed)
+touch database/migrations/laravel/2025_11_23_100000_create_feature_name_table.php
 ```
 
 ### 2. Create Frontend Components
@@ -656,5 +688,5 @@ chmod -R 775 storage cache
 
 ---
 
-**Last Updated**: 2025-11-23
+**Last Updated**: 2025-12-11
 **Maintained By**: Claude Code + Development Team
