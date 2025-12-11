@@ -67,6 +67,12 @@ return new class extends Migration
                 echo "✓ Added created_at column to system_command_logs\n";
             }
 
+            // Fix started_at column to have a default value
+            if ($schema->hasColumn('system_command_logs', 'started_at')) {
+                Capsule::statement("ALTER TABLE system_command_logs MODIFY COLUMN started_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP");
+                echo "✓ Fixed started_at column default value\n";
+            }
+
             // Copy data from old columns to new columns
             Capsule::statement("
                 UPDATE system_command_logs
