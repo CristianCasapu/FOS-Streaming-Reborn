@@ -395,13 +395,16 @@ def configure_redis(password: str) -> bool:
     """Configure Redis with password authentication."""
     log_info("Configuring Redis...")
 
-    redis_conf = Path('/etc/redis/redis.conf')
-    if not redis_conf.exists():
+    redis_conf = '/etc/redis/redis.conf'
+
+    # Check if config exists using sudo (avoid permission error)
+    result = subprocess.run(['sudo', 'test', '-f', redis_conf], capture_output=True)
+    if result.returncode != 0:
         log_warn("Redis config not found, skipping configuration")
         return False
 
     # Backup original config
-    run_cmd(['sudo', 'cp', str(redis_conf), str(redis_conf) + '.backup'], check=False)
+    run_cmd(['sudo', 'cp', redis_conf, redis_conf + '.backup'], check=False)
 
     # Configure Redis
     config_commands = f'''
