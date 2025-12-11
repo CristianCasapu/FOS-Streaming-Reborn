@@ -1223,6 +1223,21 @@ nvm use 20
 nvm alias default 20
 ```
 
+### NPM Build Fails with "Permission Denied"
+
+If `npm run build` fails with `vite: Permission denied`:
+
+```bash
+# Fix npm binary permissions
+chmod +x node_modules/.bin/*
+
+# Then retry
+npm run build
+
+# Alternative: use npx
+npx vite build
+```
+
 ### Database Connection Issues
 
 ```bash
@@ -1342,7 +1357,9 @@ python3 install/02-install-deps.py
 cp .env.example .env
 nano .env  # Update database credentials
 composer install --no-dev --optimize-autoloader
-source ~/.nvm/nvm.sh && npm install && npm run build
+source ~/.nvm/nvm.sh && npm install
+chmod +x node_modules/.bin/*  # Fix npm binary permissions
+npm run build
 php artisan migrate
 php artisan db:seed
 

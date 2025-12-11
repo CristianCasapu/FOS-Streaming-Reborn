@@ -342,3 +342,85 @@ if (!function_exists('method_field')) {
         return '<input type="hidden" name="_method" value="' . strtoupper($method) . '">';
     }
 }
+
+if (!function_exists('vite')) {
+    /**
+     * Get Vite asset paths from manifest
+     *
+     * Returns HTML tags for CSS and JS assets with proper hashed filenames.
+     * Automatically detects development vs production mode:
+     * - Development: APP_ENV=local and Vite dev server running (hot module reload)
+     * - Production: Reads hashed filenames from Vite manifest
+     *
+     * @param string|array $entrypoints Entry point(s) like 'resources/js/app.js'
+     * @return string HTML tags for the assets
+     */
+    function vite($entrypoints): string
+    {
+        $entrypoints = (array) $entrypoints;
+        $basePath = dirname(__FILE__);
+        $manifestPath = $basePath . '/public/build/.vite/manifest.json';
+        $hotFilePath = $basePath . '/public/hot';
+
+        // Check for development mode:
+        // 1. APP_ENV is 'local' or 'development'
+        // 2. Hot file exists (created by `npm run dev`)
+        $appEnv = env('APP_ENV', 'production');
+        $isDev = in_array($appEnv, ['local', 'development']) &&
+                 file_exists($hotFilePath);
+
+        // Development mode - use Vite dev server
+        if ($isDev) {
+            // Read dev server URL from hot file (default to localhost:5173)
+            $devServerUrl = trim(file_get_contents($hotFilePath)) ?: 'http://localhost:5173';
+            $devServerUrl = rtrim($devServerUrl, '/');
+
+            $html = '<script type="module" src="' . $devServerUrl . '/@vite/client"></script>' . "\n";
+            foreach ($entrypoints as $entry) {
+                $html .= '<script type="module" src="' . $devServerUrl . '/' . $entry . '"></script>' . "\n";
+            }
+            return $html;
+        }
+
+        // Production mode - read from manifest
+        if (!file_exists($manifestPath)) {
+            // Fallback if manifest doesn't exist - return empty to avoid broken pages
+            // This can happen if npm run build wasn't run
+            return '<!-- Vite manifest not found. Run: npm run build -->' . "\n";
+        }
+
+        $manifest = json_decode(file_get_contents($manifestPath), true);
+        if (!$manifest) {
+            return '<!-- Vite manifest parse error -->' . "\n";
+        }
+
+        $html = '';
+        $loadedCss = [];
+
+        foreach ($entrypoints as $entry) {
+            if (!isset($manifest[$entry])) {
+                $html .= '<!-- Vite entry not found: ' . htmlspecialchars($entry) . ' -->' . "\n";
+                continue;
+            }
+
+            $asset = $manifest[$entry];
+
+            // Load CSS files
+            if (isset($asset['css'])) {
+                foreach ($asset['css'] as $css) {
+                    if (!in_array($css, $loadedCss)) {
+                        $html .= '<link rel="stylesheet" href="/build/' . $css . '">' . "\n";
+                        $loadedCss[] = $css;
+                    }
+                }
+            }
+
+            // Load the JS file
+            if (isset($asset['file'])) {
+                $html .= '<script type="module" src="/build/' . $asset['file'] . '"></script>' . "\n";
+            }
+        }
+
+        return $html;
+    }
+}
