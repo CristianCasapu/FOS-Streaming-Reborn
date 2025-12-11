@@ -19,7 +19,7 @@ return new class extends Migration
             // Add is_default column
             if (!$schema->hasColumn('ufw_rules', 'is_default')) {
                 $schema->table('ufw_rules', function (Blueprint $table) {
-                    $table->boolean('is_default')->default(false)->after('is_active');
+                    $table->boolean('is_default')->default(false);
                     $table->index('is_default', 'idx_is_default');
                 });
                 echo "✓ Added is_default column to ufw_rules\n";
@@ -28,7 +28,7 @@ return new class extends Migration
             // Add priority column
             if (!$schema->hasColumn('ufw_rules', 'priority')) {
                 $schema->table('ufw_rules', function (Blueprint $table) {
-                    $table->unsignedInteger('priority')->default(100)->after('is_default');
+                    $table->unsignedInteger('priority')->default(100);
                     $table->index('priority', 'idx_priority');
                 });
                 echo "✓ Added priority column to ufw_rules\n";

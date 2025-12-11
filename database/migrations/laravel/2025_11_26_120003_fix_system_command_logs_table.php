@@ -19,7 +19,7 @@ return new class extends Migration
             // Add missing columns
             if (!$schema->hasColumn('system_command_logs', 'admin_id')) {
                 $schema->table('system_command_logs', function (Blueprint $table) {
-                    $table->unsignedInteger('admin_id')->nullable()->after('id');
+                    $table->unsignedInteger('admin_id')->nullable();
                     $table->index('admin_id', 'idx_admin_id');
                 });
                 echo "✓ Added admin_id column to system_command_logs\n";
@@ -27,42 +27,42 @@ return new class extends Migration
 
             if (!$schema->hasColumn('system_command_logs', 'description')) {
                 $schema->table('system_command_logs', function (Blueprint $table) {
-                    $table->string('description', 255)->nullable()->after('command');
+                    $table->string('description', 255)->nullable();
                 });
                 echo "✓ Added description column to system_command_logs\n";
             }
 
             if (!$schema->hasColumn('system_command_logs', 'execution_time')) {
                 $schema->table('system_command_logs', function (Blueprint $table) {
-                    $table->float('execution_time')->nullable()->after('exit_code');
+                    $table->float('execution_time')->nullable();
                 });
                 echo "✓ Added execution_time column to system_command_logs\n";
             }
 
             if (!$schema->hasColumn('system_command_logs', 'success')) {
                 $schema->table('system_command_logs', function (Blueprint $table) {
-                    $table->boolean('success')->default(false)->after('execution_time');
+                    $table->boolean('success')->default(false);
                 });
                 echo "✓ Added success column to system_command_logs\n";
             }
 
             if (!$schema->hasColumn('system_command_logs', 'ip_address')) {
                 $schema->table('system_command_logs', function (Blueprint $table) {
-                    $table->string('ip_address', 45)->nullable()->after('success');
+                    $table->string('ip_address', 45)->nullable();
                 });
                 echo "✓ Added ip_address column to system_command_logs\n";
             }
 
             if (!$schema->hasColumn('system_command_logs', 'user_agent')) {
                 $schema->table('system_command_logs', function (Blueprint $table) {
-                    $table->text('user_agent')->nullable()->after('ip_address');
+                    $table->text('user_agent')->nullable();
                 });
                 echo "✓ Added user_agent column to system_command_logs\n";
             }
 
             if (!$schema->hasColumn('system_command_logs', 'created_at')) {
                 $schema->table('system_command_logs', function (Blueprint $table) {
-                    $table->timestamp('created_at')->nullable()->useCurrent()->after('user_agent');
+                    $table->timestamp('created_at')->nullable()->useCurrent();
                 });
                 echo "✓ Added created_at column to system_command_logs\n";
             }

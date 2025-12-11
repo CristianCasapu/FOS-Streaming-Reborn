@@ -42,7 +42,7 @@ return new class extends Migration
         // Add user_agent_id to streams table
         if ($schema->hasTable('streams') && !$schema->hasColumn('streams', 'user_agent_id')) {
             $schema->table('streams', function (Blueprint $table) {
-                $table->unsignedInteger('user_agent_id')->nullable()->after('trans_id');
+                $table->unsignedInteger('user_agent_id')->nullable();
                 $table->foreign('user_agent_id', 'fk_streams_user_agent')
                     ->references('id')->on('user_agents')->onDelete('set null');
             });

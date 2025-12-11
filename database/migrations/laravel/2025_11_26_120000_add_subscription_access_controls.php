@@ -23,7 +23,7 @@ return new class extends Migration
         if ($schema->hasTable('subscriptions')) {
             if (!$schema->hasColumn('subscriptions', 'access_token')) {
                 $schema->table('subscriptions', function (Blueprint $table) {
-                    $table->string('access_token', 128)->nullable()->after('status');
+                    $table->string('access_token', 128)->nullable();
                     $table->index('access_token', 'idx_subscriptions_access_token');
                 });
                 echo "✓ Added access_token column to subscriptions\n";
@@ -31,21 +31,21 @@ return new class extends Migration
 
             if (!$schema->hasColumn('subscriptions', 'token_expires_at')) {
                 $schema->table('subscriptions', function (Blueprint $table) {
-                    $table->dateTime('token_expires_at')->nullable()->after('access_token');
+                    $table->dateTime('token_expires_at')->nullable();
                 });
                 echo "✓ Added token_expires_at column to subscriptions\n";
             }
 
             if (!$schema->hasColumn('subscriptions', 'allowed_isps')) {
                 $schema->table('subscriptions', function (Blueprint $table) {
-                    $table->json('allowed_isps')->nullable()->after('token_expires_at');
+                    $table->json('allowed_isps')->nullable();
                 });
                 echo "✓ Added allowed_isps column to subscriptions\n";
             }
 
             if (!$schema->hasColumn('subscriptions', 'allowed_ips')) {
                 $schema->table('subscriptions', function (Blueprint $table) {
-                    $table->json('allowed_ips')->nullable()->after('allowed_isps');
+                    $table->json('allowed_ips')->nullable();
                 });
                 echo "✓ Added allowed_ips column to subscriptions\n";
             }
