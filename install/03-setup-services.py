@@ -326,8 +326,8 @@ def restart_services(php_version: str):
 
     # Verify pools are running
     log_info("Verifying PHP-FPM pools...")
-    admin_sock = Path("/run/php/php8.4-fpm-admin.sock")
-    streaming_sock = Path("/run/php/php8.4-fpm-streaming.sock")
+    admin_sock = Path(f"/run/php/php{php_version}-fpm-admin.sock")
+    streaming_sock = Path(f"/run/php/php{php_version}-fpm-streaming.sock")
 
     # Give it a moment to start
     import time

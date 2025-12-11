@@ -476,7 +476,7 @@ def main():
         log_info("This installer supports Debian and Ubuntu only.")
         sys.exit(1)
 
-    total_steps = 8
+    total_steps = 9
     current_step = 0
 
     # =========================================================================
@@ -638,7 +638,28 @@ def main():
         log_info("Skipping Node.js installation (--skip-node)")
 
     # =========================================================================
-    # Step 7: Install Redis
+    # Step 7: Setup MariaDB Repository & Client
+    # =========================================================================
+    current_step += 1
+    log_step(current_step, total_steps, f"Setting up MariaDB {MARIADB_VERSION}")
+
+    # Setup MariaDB repository for latest version
+    setup_mariadb_repository(os_type, os_codename)
+
+    # Install MariaDB client only (server installation is manual for security)
+    mariadb_packages = ["mariadb-client"]
+    installed, failed = install_packages(mariadb_packages)
+
+    if installed > 0:
+        result = subprocess.run(['mariadb', '--version'], capture_output=True, text=True)
+        if result.returncode == 0:
+            log_success(f"MariaDB client installed: {result.stdout.strip()}")
+        log_info("NOTE: MariaDB SERVER installation is manual - see README.md Step 4")
+    else:
+        log_warn("MariaDB client not installed - install manually later")
+
+    # =========================================================================
+    # Step 8: Install Redis
     # =========================================================================
     current_step += 1
     log_step(current_step, total_steps, "Installing Redis")
@@ -662,7 +683,7 @@ def main():
         log_info("Skipping Redis installation (--skip-redis)")
 
     # =========================================================================
-    # Step 8: Install FFmpeg
+    # Step 9: Install FFmpeg
     # =========================================================================
     current_step += 1
     log_step(current_step, total_steps, "Installing FFmpeg")
