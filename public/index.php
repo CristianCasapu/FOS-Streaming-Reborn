@@ -55,7 +55,28 @@ $adminPath = rtrim($adminPath, '/'); // Remove trailing slash
 // Check if this is an admin route
 $isAdminRoute = $uri === $adminPath || strpos($uri, $adminPath . '/') === 0;
 
-// Simple router
+// Check if this is an admin API call (e.g., /adminx/api/auth.php)
+$isAdminApi = $isAdminRoute && strpos($uri, $adminPath . '/api/') === 0;
+
+// Handle admin API requests - route to the actual PHP files in /public/admin/api/
+if ($isAdminApi) {
+    // Convert /adminx/api/auth.php to /admin/api/auth.php
+    $apiPath = str_replace($adminPath . '/api/', '/admin/api/', $uri);
+    $apiFile = __DIR__ . $apiPath;
+
+    if (is_file($apiFile) && pathinfo($apiFile, PATHINFO_EXTENSION) === 'php') {
+        require $apiFile;
+        exit;
+    }
+
+    // API file not found
+    http_response_code(404);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'API endpoint not found']);
+    exit;
+}
+
+// Simple router for admin UI
 if ($isAdminRoute) {
     // Admin UI - Serve Vue SPA
     require __DIR__.'/app.html';
