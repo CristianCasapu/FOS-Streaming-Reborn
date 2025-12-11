@@ -519,20 +519,6 @@
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm space-x-2">
                                     <button
-                                        @click="controlService(service.name, 'start')"
-                                        :disabled="processingService"
-                                        class="text-green-600 hover:text-green-900 disabled:opacity-50"
-                                    >
-                                        Start
-                                    </button>
-                                    <button
-                                        @click="controlService(service.name, 'stop')"
-                                        :disabled="processingService"
-                                        class="text-red-600 hover:text-red-900 disabled:opacity-50"
-                                    >
-                                        Stop
-                                    </button>
-                                    <button
                                         @click="controlService(service.name, 'restart')"
                                         :disabled="processingService"
                                         class="text-indigo-600 hover:text-indigo-900 disabled:opacity-50"
