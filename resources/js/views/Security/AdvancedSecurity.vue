@@ -694,24 +694,46 @@ const reseedDefaults = async () => {
 const installUFW = async () => {
     if (!confirm('Install UFW firewall? This requires sudo privileges.')) return;
 
+    loading.value = true;
+    showMessage('Installing UFW firewall... Please wait, this may take a moment.');
+
     try {
-        await systemCommandsAPI.installPackage('ufw');
-        showMessage('UFW installation initiated. Please wait...');
-        setTimeout(loadStatus, 3000);
+        const response = await systemCommandsAPI.installPackage('ufw');
+
+        if (response.data.success) {
+            showMessage('UFW installed successfully!', 'success');
+        } else {
+            showMessage('UFW installation failed: ' + (response.data.data?.output || response.data.message || 'Unknown error'), 'error');
+        }
+
+        // Refresh status to reflect new installation state
+        await loadStatus();
     } catch (error) {
         showMessage('Error installing UFW: ' + (error.response?.data?.message || error.message), 'error');
+        loading.value = false;
     }
 };
 
 const installFail2ban = async () => {
     if (!confirm('Install fail2ban? This requires sudo privileges.')) return;
 
+    loading.value = true;
+    showMessage('Installing fail2ban... Please wait, this may take a moment.');
+
     try {
-        await systemCommandsAPI.installPackage('fail2ban');
-        showMessage('fail2ban installation initiated. Please wait...');
-        setTimeout(loadStatus, 3000);
+        const response = await systemCommandsAPI.installPackage('fail2ban');
+
+        if (response.data.success) {
+            showMessage('fail2ban installed successfully!', 'success');
+        } else {
+            showMessage('fail2ban installation failed: ' + (response.data.data?.output || response.data.message || 'Unknown error'), 'error');
+        }
+
+        // Refresh status to reflect new installation state
+        await loadStatus();
     } catch (error) {
         showMessage('Error installing fail2ban: ' + (error.response?.data?.message || error.message), 'error');
+        loading.value = false;
     }
 };
 
