@@ -39,8 +39,8 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            // Redirect to login on 401
-            window.location.href = '/#/login';
+            // Redirect to login on 401 (use dynamic ADMIN_PATH)
+            window.location.href = `${ADMIN_PATH}/login`;
         }
         return Promise.reject(error);
     }

@@ -4,6 +4,7 @@
 
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { ADMIN_PATH } from '../config';
 
 // Import views
 import Login from '../views/Login.vue';
@@ -210,7 +211,7 @@ const routes = [
 ];
 
 const router = createRouter({
-    history: createWebHistory('/admin'),
+    history: createWebHistory(ADMIN_PATH),
     routes,
 });
 

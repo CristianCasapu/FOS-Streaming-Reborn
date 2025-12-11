@@ -2,10 +2,16 @@
  * FOS Streaming v70 - Frontend Configuration
  */
 
-// Admin base path - reads from Vite env or falls back to detecting from current URL
-// Set VITE_ADMIN_PATH in .env to override (e.g., VITE_ADMIN_PATH=/adminx)
+// Admin base path - reads from PHP-injected meta tag (runtime) or falls back to URL detection
+// The meta tag is injected by app.html from the ADMIN_PATH environment variable
 function getAdminPath() {
-    // First, check Vite environment variable
+    // First, check for PHP-injected meta tag (most reliable - runtime value from .env)
+    const adminPathMeta = document.querySelector('meta[name="admin-path"]');
+    if (adminPathMeta && adminPathMeta.content) {
+        return adminPathMeta.content;
+    }
+
+    // Second, check Vite environment variable (build-time value)
     if (import.meta.env.VITE_ADMIN_PATH) {
         return import.meta.env.VITE_ADMIN_PATH;
     }
