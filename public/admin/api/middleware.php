@@ -9,13 +9,22 @@
  * Check if request is coming from admin path
  */
 function requireAdminPath() {
-    $adminPath = $_ENV['ADMIN_PATH'] ?? '/admin';
+    // Use env() helper which properly checks $_ENV, $_SERVER, and getenv()
+    $adminPath = function_exists('env') ? env('ADMIN_PATH', '/admin') : ($_ENV['ADMIN_PATH'] ?? '/admin');
     $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
-    if (strpos($requestUri, $adminPath) !== 0) {
+    // Normalize paths (remove trailing slashes for comparison)
+    $adminPath = rtrim($adminPath, '/');
+
+    // Check if request URI starts with admin path
+    // Must match exactly or be followed by a slash (to prevent /adminx matching /admin)
+    $isAdminPath = $requestUri === $adminPath ||
+                   strpos($requestUri, $adminPath . '/') === 0;
+
+    if (!$isAdminPath) {
         http_response_code(403);
         header('Content-Type: application/json');
-        echo json_encode(['error' => 'Forbidden']);
+        echo json_encode(['error' => 'Forbidden', 'debug' => "Path '$requestUri' does not match admin path '$adminPath'"]);
         exit;
     }
 }
