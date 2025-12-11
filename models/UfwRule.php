@@ -89,37 +89,49 @@ class UfwRule extends FosStreaming
      */
     public function toUfwCommand(): string
     {
-        $parts = ['sudo', 'ufw'];
+        // Simple format: sudo ufw allow 22/tcp
+        // Extended format: sudo ufw allow from 192.168.1.0/24 to any port 22 proto tcp
 
-        // Add action
-        $parts[] = $this->action;
+        $hasAdvancedOptions = $this->from_ip || $this->to_ip || $this->interface;
 
-        // Add direction if specified
-        if ($this->direction !== 'both') {
+        if (!$hasAdvancedOptions) {
+            // Simple format: sudo ufw allow 22/tcp
+            $protocol = $this->protocol !== 'both' ? "/{$this->protocol}" : '';
+            return "sudo ufw {$this->action} {$this->port}{$protocol}";
+        }
+
+        // Extended format for complex rules
+        $parts = ['sudo', 'ufw', $this->action];
+
+        // Add direction if not 'both'
+        if ($this->direction && $this->direction !== 'both') {
             $parts[] = $this->direction;
         }
 
         // Add interface if specified
         if ($this->interface) {
-            $parts[] = "on {$this->interface}";
+            $parts[] = "on";
+            $parts[] = $this->interface;
         }
 
         // Add from IP if specified
         if ($this->from_ip) {
-            $parts[] = "from {$this->from_ip}";
+            $parts[] = "from";
+            $parts[] = $this->from_ip;
         }
 
-        // Add to IP if specified
-        if ($this->to_ip) {
-            $parts[] = "to {$this->to_ip}";
-        }
+        // Add 'to any' for port specification
+        $parts[] = "to";
+        $parts[] = $this->to_ip ?: "any";
 
         // Add port
-        $parts[] = "port {$this->port}";
+        $parts[] = "port";
+        $parts[] = $this->port;
 
         // Add protocol if not 'both'
         if ($this->protocol !== 'both') {
-            $parts[] = "proto {$this->protocol}";
+            $parts[] = "proto";
+            $parts[] = $this->protocol;
         }
 
         return implode(' ', $parts);

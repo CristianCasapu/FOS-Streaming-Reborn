@@ -157,6 +157,16 @@ fospackv69/fos/nginx/conf/nginx-streaming.conf.bak.*
 fospackv69/fos/php/etc/php-fpm-streaming.conf
 fospackv69/fos/php/etc/pool.d-streaming/*.conf
 
+# FOS Pack - Deployment configs (site-specific, should not be overwritten by git pull)
+# After deployment, run: git update-index --skip-worktree <file> for each config
+fospackv69/fos/nginx/conf/nginx.conf
+fospackv69/fos/php/etc/php-fpm.conf
+fospackv69/fos/php/etc/pool.d/www.conf
+
+# Install configs (site-specific, should not be overwritten by git pull)
+install/config/nginx/*.conf
+install/config/php-fpm/*.conf
+
 # FOS Pack - Logs (environment-specific)
 fospackv69/fos/logs/*.log
 

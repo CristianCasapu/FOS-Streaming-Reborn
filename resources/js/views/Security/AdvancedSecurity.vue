@@ -106,7 +106,14 @@
                                     </td>
                                     <td class="px-4 py-3 whitespace-nowrap">
                                         <span v-if="rule.applied" class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">✓ Applied</span>
-                                        <span v-else class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">Pending</span>
+                                        <button v-else-if="rule.enabled" @click="applySingleRule(rule)" :disabled="applyingRule === rule.id" class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800 hover:bg-yellow-200 cursor-pointer flex items-center">
+                                            <svg v-if="applyingRule === rule.id" class="animate-spin h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                            </svg>
+                                            {{ applyingRule === rule.id ? 'Applying...' : 'Apply Now' }}
+                                        </button>
+                                        <span v-else class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-500">Disabled</span>
                                     </td>
                                     <td class="px-4 py-3 whitespace-nowrap text-right text-sm">
                                         <button v-if="!rule.is_protected" @click="deleteRule(rule)" class="text-red-600 hover:text-red-800 ml-3">
@@ -163,17 +170,68 @@
                         </div>
 
                         <div v-else>
+                            <!-- UFW Stats -->
+                            <div class="grid grid-cols-3 gap-4 mb-4">
+                                <div class="bg-gray-50 rounded-lg p-3 text-center">
+                                    <div class="text-2xl font-bold text-gray-900">{{ ufwStatus.rules_count || 0 }}</div>
+                                    <div class="text-xs text-gray-500">Total Rules</div>
+                                </div>
+                                <div class="bg-green-50 rounded-lg p-3 text-center">
+                                    <div class="text-2xl font-bold text-green-600">{{ appliedRulesCount }}</div>
+                                    <div class="text-xs text-gray-500">Applied</div>
+                                </div>
+                                <div class="bg-yellow-50 rounded-lg p-3 text-center">
+                                    <div class="text-2xl font-bold text-yellow-600">{{ pendingRulesCount }}</div>
+                                    <div class="text-xs text-gray-500">Pending</div>
+                                </div>
+                            </div>
+
+                            <!-- UFW Controls -->
                             <div class="mb-4">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-sm font-medium text-gray-700">Firewall Status</span>
-                                    <div class="flex space-x-2">
-                                        <button @click="toggleUFW(true)" :disabled="ufwStatus.active" class="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
-                                            Enable
-                                        </button>
-                                        <button @click="toggleUFW(false)" :disabled="!ufwStatus.active" class="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">
-                                            Disable
-                                        </button>
-                                    </div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-gray-700">Service Control</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button @click="toggleUFW(true)" :disabled="ufwStatus.active || ufwActionLoading" class="px-3 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center justify-center">
+                                        <svg v-if="ufwActionLoading === 'enable'" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                        <svg v-else class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Enable
+                                    </button>
+                                    <button @click="toggleUFW(false)" :disabled="!ufwStatus.active || ufwActionLoading" class="px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 flex items-center justify-center">
+                                        <svg v-if="ufwActionLoading === 'disable'" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                        <svg v-else class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                        Disable
+                                    </button>
+                                    <button @click="reloadUFW" :disabled="!ufwStatus.active || ufwActionLoading" class="px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center">
+                                        <svg v-if="ufwActionLoading === 'reload'" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                        <svg v-else class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        Reload
+                                    </button>
+                                    <button @click="resetUFW" :disabled="ufwActionLoading" class="px-3 py-2 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 flex items-center justify-center">
+                                        <svg v-if="ufwActionLoading === 'reset'" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                        <svg v-else class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Reset
+                                    </button>
                                 </div>
                             </div>
 
@@ -249,16 +307,70 @@
                         </div>
 
                         <div v-else>
-                            <div class="mb-4 flex space-x-2">
-                                <button v-if="!fail2banStatus.running" @click="enableFail2ban" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
-                                    Enable fail2ban
-                                </button>
-                                <button @click="reloadFail2ban" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                                    <svg class="h-5 w-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                    Reload fail2ban
-                                </button>
+                            <!-- fail2ban Stats -->
+                            <div class="grid grid-cols-3 gap-4 mb-4">
+                                <div class="bg-gray-50 rounded-lg p-3 text-center">
+                                    <div class="text-2xl font-bold text-gray-900">{{ fail2banStatus.jails_count || 0 }}</div>
+                                    <div class="text-xs text-gray-500">Active Jails</div>
+                                </div>
+                                <div class="bg-red-50 rounded-lg p-3 text-center">
+                                    <div class="text-2xl font-bold text-red-600">{{ fail2banStatus.banned_count || 0 }}</div>
+                                    <div class="text-xs text-gray-500">Banned IPs</div>
+                                </div>
+                                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                                    <div class="text-2xl font-bold text-blue-600">{{ availableJails.filter(j => j.can_enable).length }}</div>
+                                    <div class="text-xs text-gray-500">Available</div>
+                                </div>
+                            </div>
+
+                            <!-- fail2ban Controls -->
+                            <div class="mb-4">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-sm font-medium text-gray-700">Service Control</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button v-if="!fail2banStatus.running" @click="enableFail2ban" :disabled="fail2banActionLoading" class="px-3 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center justify-center">
+                                        <svg v-if="fail2banActionLoading === 'enable'" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                        <svg v-else class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Start
+                                    </button>
+                                    <button v-if="fail2banStatus.running" @click="stopFail2ban" :disabled="fail2banActionLoading" class="px-3 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 flex items-center justify-center">
+                                        <svg v-if="fail2banActionLoading === 'stop'" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                        <svg v-else class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                                        </svg>
+                                        Stop
+                                    </button>
+                                    <button @click="reloadFail2ban" :disabled="!fail2banStatus.running || fail2banActionLoading" class="px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center">
+                                        <svg v-if="fail2banActionLoading === 'reload'" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                        <svg v-else class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        Reload
+                                    </button>
+                                    <button @click="restartFail2ban" :disabled="!fail2banStatus.running || fail2banActionLoading" class="px-3 py-2 text-sm bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center">
+                                        <svg v-if="fail2banActionLoading === 'restart'" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                        <svg v-else class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        Restart
+                                    </button>
+                                </div>
                             </div>
 
                             <h3 class="text-sm font-medium text-gray-700 mb-2">Active Jails</h3>
@@ -266,9 +378,14 @@
                                 <div v-for="jail in jails" :key="jail" class="p-3">
                                     <div class="flex items-center justify-between">
                                         <span class="font-medium">{{ jail }}</span>
-                                        <button @click="loadJailStatus(jail)" class="text-indigo-600 hover:text-indigo-800 text-sm">
-                                            View Details
-                                        </button>
+                                        <div class="flex space-x-2">
+                                            <button @click="loadJailStatus(jail)" class="text-indigo-600 hover:text-indigo-800 text-sm">
+                                                Status
+                                            </button>
+                                            <button @click="showJailDetails(jail)" class="text-blue-600 hover:text-blue-800 text-sm">
+                                                Details
+                                            </button>
+                                        </div>
                                     </div>
                                     <div v-if="jailDetails[jail]" class="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
                                         <div class="grid grid-cols-3 gap-2">
@@ -285,8 +402,13 @@
                                         <div v-if="jailDetails[jail].banned_ips && jailDetails[jail].banned_ips.length > 0" class="mt-2">
                                             <span class="font-medium">Banned IPs:</span>
                                             <div class="flex flex-wrap gap-1 mt-1">
-                                                <span v-for="ip in jailDetails[jail].banned_ips" :key="ip" class="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-mono">
+                                                <span v-for="ip in jailDetails[jail].banned_ips" :key="ip" class="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-mono flex items-center">
                                                     {{ ip }}
+                                                    <button @click="unbanIP(jail, ip)" class="ml-1 text-red-600 hover:text-red-800" title="Unban this IP">
+                                                        <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
                                                 </span>
                                             </div>
                                         </div>
@@ -297,6 +419,201 @@
                                 No active jails
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- fail2ban Available Jails Section -->
+            <div v-if="fail2banStatus.installed" class="mt-6 bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                    <div class="flex items-center">
+                        <svg class="h-6 w-6 text-indigo-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                        <h2 class="text-xl font-semibold text-gray-900">Manage Jails</h2>
+                    </div>
+                    <button @click="loadAvailableJails" class="text-indigo-600 hover:text-indigo-800">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <p class="text-sm text-gray-600 mb-4">
+                        Enable or disable jails based on your running services. Jails for non-running services are automatically disabled to prevent errors.
+                    </p>
+                    <div v-if="loadingAvailableJails" class="text-center py-8">
+                        <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                    <div v-else-if="availableJails.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div v-for="jail in availableJails" :key="jail.id" class="border rounded-lg p-4 hover:shadow-md transition-shadow" :class="jail.can_enable ? '' : 'bg-gray-50 opacity-75'">
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="font-semibold text-gray-900">{{ jail.name }}</h4>
+                                <button
+                                    @click="toggleJailEnabled(jail)"
+                                    :disabled="!jail.can_enable || togglingJail === jail.id"
+                                    class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    :class="jail.is_enabled ? 'bg-indigo-600' : 'bg-gray-200'"
+                                    :title="!jail.can_enable ? 'Service not running' : (jail.is_enabled ? 'Click to disable' : 'Click to enable')"
+                                >
+                                    <span v-if="togglingJail === jail.id" class="absolute inset-0 flex items-center justify-center">
+                                        <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                    </span>
+                                    <span v-else class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform" :class="jail.is_enabled ? 'translate-x-6' : 'translate-x-1'"></span>
+                                </button>
+                            </div>
+                            <p class="text-sm text-gray-600 mb-3">{{ jail.description }}</p>
+                            <div class="space-y-2 text-xs">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-gray-500">Service:</span>
+                                    <span :class="jail.service_running ? 'text-green-600' : 'text-red-600'" class="font-medium flex items-center">
+                                        <span v-if="jail.service_running" class="mr-1">&#10003;</span>
+                                        <span v-else class="mr-1">&#10007;</span>
+                                        {{ jail.service_running ? 'Running' : 'Not Running' }}
+                                    </span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-gray-500">Log File:</span>
+                                    <span :class="jail.log_exists ? 'text-green-600' : 'text-yellow-600'" class="font-medium flex items-center" :title="!jail.log_exists && jail.service_running ? 'Will be created automatically when enabled' : ''">
+                                        <span v-if="jail.log_exists" class="mr-1">&#10003;</span>
+                                        <span v-else class="mr-1">&#9888;</span>
+                                        {{ jail.log_exists ? 'Found' : (jail.service_running ? 'Auto-create' : 'Missing') }}
+                                    </span>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-gray-500">Status:</span>
+                                    <span :class="jail.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'" class="px-2 py-0.5 rounded-full">
+                                        {{ jail.is_active ? 'Active' : 'Inactive' }}
+                                    </span>
+                                </div>
+                                <div class="pt-2 border-t border-gray-100">
+                                    <span class="text-gray-400 font-mono text-xs truncate block" :title="jail.log_path">{{ jail.log_path }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-8 text-gray-500">
+                        <p>No jail configurations available.</p>
+                        <button @click="loadAvailableJails" class="mt-2 text-indigo-600 hover:text-indigo-800 text-sm">
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- fail2ban Jail Configuration Section -->
+            <div v-if="fail2banStatus.installed" class="mt-6 bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                    <div class="flex items-center">
+                        <svg class="h-6 w-6 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <h2 class="text-xl font-semibold text-gray-900">fail2ban Jail Configuration</h2>
+                    </div>
+                    <button @click="loadFail2banConfig" class="text-indigo-600 hover:text-indigo-800">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <div v-if="loadingConfig" class="text-center py-8">
+                        <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                    <div v-else-if="fail2banConfig.jails && Object.keys(fail2banConfig.jails).length > 0">
+                        <div class="mb-4">
+                            <p class="text-sm text-gray-600">
+                                Configuration file: <code class="bg-gray-100 px-2 py-1 rounded text-xs">{{ fail2banConfig.config_file }}</code>
+                            </p>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div v-for="(config, jailName) in fail2banConfig.jails" :key="jailName" class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h4 class="font-semibold text-gray-900">{{ jailName }}</h4>
+                                    <span :class="['px-2 py-1 rounded-full text-xs', config.enabled === 'true' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800']">
+                                        {{ config.enabled === 'true' ? 'Enabled' : 'Disabled' }}
+                                    </span>
+                                </div>
+                                <div class="space-y-2 text-sm">
+                                    <div v-if="config.port" class="flex justify-between">
+                                        <span class="text-gray-500">Port:</span>
+                                        <span class="font-mono">{{ config.port }}</span>
+                                    </div>
+                                    <div v-if="config.maxretry" class="flex justify-between">
+                                        <span class="text-gray-500">Max Retry:</span>
+                                        <span>{{ config.maxretry }}</span>
+                                    </div>
+                                    <div v-if="config.findtime" class="flex justify-between">
+                                        <span class="text-gray-500">Find Time:</span>
+                                        <span>{{ formatTime(config.findtime) }}</span>
+                                    </div>
+                                    <div v-if="config.bantime" class="flex justify-between">
+                                        <span class="text-gray-500">Ban Time:</span>
+                                        <span>{{ formatTime(config.bantime) }}</span>
+                                    </div>
+                                    <div v-if="config.filter" class="flex justify-between">
+                                        <span class="text-gray-500">Filter:</span>
+                                        <span class="font-mono text-xs">{{ config.filter }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-8 text-gray-500">
+                        <p>No jail configuration found.</p>
+                        <p class="text-sm mt-2">Copy the configuration files from <code class="bg-gray-100 px-2 py-1 rounded">security/fail2ban/</code> to <code class="bg-gray-100 px-2 py-1 rounded">/etc/fail2ban/</code></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- fail2ban Logs Section -->
+            <div v-if="fail2banStatus.installed && fail2banStatus.running" class="mt-6 bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                    <div class="flex items-center">
+                        <svg class="h-6 w-6 text-yellow-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <h2 class="text-xl font-semibold text-gray-900">fail2ban Logs</h2>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <select v-model="selectedJailFilter" @change="loadFail2banLogs" class="text-sm border-gray-300 rounded-md">
+                            <option value="">All Jails</option>
+                            <option v-for="jail in jails" :key="jail" :value="jail">{{ jail }}</option>
+                        </select>
+                        <button @click="loadFail2banLogs" class="text-indigo-600 hover:text-indigo-800">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div v-if="loadingLogs" class="text-center py-8">
+                        <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                    <div v-else-if="fail2banLogs.length > 0" class="bg-gray-900 text-green-400 p-4 rounded font-mono text-xs max-h-96 overflow-y-auto">
+                        <div v-for="(log, index) in fail2banLogs" :key="index" class="mb-1 hover:bg-gray-800 px-1 rounded">
+                            <span class="text-gray-500">{{ log.timestamp }}</span>
+                            <span :class="getLogLevelClass(log.level)">{{ log.level }}</span>
+                            <span v-if="log.jail" class="text-blue-400">[{{ log.jail }}]</span>
+                            <span class="text-gray-300">{{ log.message }}</span>
+                        </div>
+                    </div>
+                    <div v-else class="text-center py-4 text-gray-500 text-sm">
+                        No fail2ban logs available
                     </div>
                 </div>
             </div>
@@ -465,12 +782,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import AppLayout from '../../components/AppLayout.vue';
 import { securityAPI, ufwRulesAPI, systemCommandsAPI } from '../../services/api';
 
 const loading = ref(false);
 const loadingRules = ref(false);
+const loadingConfig = ref(false);
+const loadingLogs = ref(false);
+const loadingAvailableJails = ref(false);
+const togglingJail = ref(null);
+const applyingRule = ref(null);
+const ufwActionLoading = ref(null);
+const fail2banActionLoading = ref(null);
 const message = ref(null);
 
 const ufwStatus = ref({ installed: false, active: false, rules_count: 0 });
@@ -480,11 +804,24 @@ const customRules = ref([]);
 const jails = ref([]);
 const jailDetails = ref({});
 const securityLogs = ref([]);
+const fail2banConfig = ref({});
+const fail2banLogs = ref([]);
+const selectedJailFilter = ref('');
+const availableJails = ref([]);
 
 const showAddRuleModal = ref(false);
 const showSafetyModal = ref(false);
 const missingServices = ref([]);
 const pendingUFWAction = ref(null);
+
+// Computed properties for rule counts
+const appliedRulesCount = computed(() => {
+    return [...defaultRules.value, ...customRules.value].filter(r => r.applied && r.enabled).length;
+});
+
+const pendingRulesCount = computed(() => {
+    return [...defaultRules.value, ...customRules.value].filter(r => !r.applied && r.enabled).length;
+});
 
 const newRule = ref({
     port: '',
@@ -510,6 +847,11 @@ const loadStatus = async () => {
 
         if (data.fail2ban.installed) {
             await loadJails();
+            await loadFail2banConfig();
+            await loadAvailableJails();
+            if (data.fail2ban.running) {
+                await loadFail2banLogs();
+            }
         }
 
         await loadSecurityLogs();
@@ -602,12 +944,15 @@ const toggleUFW = async (enable) => {
     const confirmed = confirm(`Are you sure you want to ${enable ? 'ENABLE' : 'DISABLE'} the firewall?${!enable ? '\n\nWARNING: This may leave your server unprotected!' : ''}`);
     if (!confirmed) return;
 
+    ufwActionLoading.value = enable ? 'enable' : 'disable';
     try {
         await securityAPI.toggleUFW(enable);
         showMessage(`Firewall ${enable ? 'enabled' : 'disabled'} successfully`);
         await loadStatus();
     } catch (error) {
         showMessage('Error toggling firewall: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        ufwActionLoading.value = null;
     }
 };
 
@@ -679,6 +1024,51 @@ const applyAllRules = async () => {
     }
 };
 
+const applySingleRule = async (rule) => {
+    applyingRule.value = rule.id;
+    try {
+        const response = await ufwRulesAPI.applySingle(rule.id);
+        showMessage(response.data.message);
+        await loadDefaultRules();
+        await loadCustomRules();
+    } catch (error) {
+        showMessage('Error applying rule: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        applyingRule.value = null;
+    }
+};
+
+const reloadUFW = async () => {
+    ufwActionLoading.value = 'reload';
+    try {
+        await securityAPI.reloadUFW();
+        showMessage('UFW reloaded successfully');
+        await loadStatus();
+    } catch (error) {
+        showMessage('Error reloading UFW: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        ufwActionLoading.value = null;
+    }
+};
+
+const resetUFW = async () => {
+    if (!confirm('Reset UFW to defaults?\n\nWARNING: This will remove ALL firewall rules and disable UFW!\n\nYou will need to re-apply rules after reset.')) return;
+
+    ufwActionLoading.value = 'reset';
+    try {
+        await securityAPI.resetUFW();
+        showMessage('UFW reset successfully. All rules have been removed.');
+        // Mark all rules as unapplied in the database
+        await loadDefaultRules();
+        await loadCustomRules();
+        await loadStatus();
+    } catch (error) {
+        showMessage('Error resetting UFW: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        ufwActionLoading.value = null;
+    }
+};
+
 const reseedDefaults = async () => {
     if (!confirm('Reseed default UFW rules? This will run the intelligent port detection again.')) return;
 
@@ -740,22 +1130,172 @@ const installFail2ban = async () => {
 const enableFail2ban = async () => {
     if (!confirm('Enable and start fail2ban service?')) return;
 
+    fail2banActionLoading.value = 'enable';
     try {
-        await systemCommandsAPI.restartService('fail2ban');
-        showMessage('fail2ban service started successfully');
+        const response = await securityAPI.enableFail2ban();
+        showMessage(response.data.message || 'fail2ban service enabled and started successfully');
         await loadStatus();
+        await loadAvailableJails();
     } catch (error) {
         showMessage('Error starting fail2ban: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        fail2banActionLoading.value = null;
+    }
+};
+
+const stopFail2ban = async () => {
+    if (!confirm('Stop fail2ban service? This will disable intrusion prevention.')) return;
+
+    fail2banActionLoading.value = 'stop';
+    try {
+        await securityAPI.stopFail2ban();
+        showMessage('fail2ban service stopped successfully');
+        await loadStatus();
+    } catch (error) {
+        showMessage('Error stopping fail2ban: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        fail2banActionLoading.value = null;
     }
 };
 
 const reloadFail2ban = async () => {
+    fail2banActionLoading.value = 'reload';
     try {
         await securityAPI.reloadFail2ban();
         showMessage('fail2ban reloaded successfully');
         await loadJails();
+        await loadAvailableJails();
     } catch (error) {
         showMessage('Error reloading fail2ban: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        fail2banActionLoading.value = null;
+    }
+};
+
+const restartFail2ban = async () => {
+    if (!confirm('Restart fail2ban service? This will briefly interrupt intrusion prevention.')) return;
+
+    fail2banActionLoading.value = 'restart';
+    try {
+        await securityAPI.restartFail2ban();
+        showMessage('fail2ban restarted successfully');
+        await loadStatus();
+        await loadJails();
+        await loadAvailableJails();
+    } catch (error) {
+        showMessage('Error restarting fail2ban: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        fail2banActionLoading.value = null;
+    }
+};
+
+const loadFail2banConfig = async () => {
+    loadingConfig.value = true;
+    try {
+        const response = await securityAPI.getFail2banConfig();
+        fail2banConfig.value = response.data.data;
+    } catch (error) {
+        console.error('Error loading fail2ban config:', error);
+    } finally {
+        loadingConfig.value = false;
+    }
+};
+
+const loadAvailableJails = async () => {
+    loadingAvailableJails.value = true;
+    try {
+        const response = await securityAPI.getAvailableJails();
+        availableJails.value = response.data.data;
+    } catch (error) {
+        console.error('Error loading available jails:', error);
+        showMessage('Error loading available jails: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        loadingAvailableJails.value = false;
+    }
+};
+
+const toggleJailEnabled = async (jail) => {
+    if (!jail.can_enable && !jail.is_enabled) {
+        showMessage('Cannot enable this jail: service is not running', 'error');
+        return;
+    }
+
+    const newState = !jail.is_enabled;
+    const action = newState ? 'enable' : 'disable';
+
+    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} jail "${jail.name}"?`)) return;
+
+    togglingJail.value = jail.id;
+    try {
+        const response = await securityAPI.toggleJail(jail.id, newState);
+        showMessage(response.data.message);
+        await loadAvailableJails();
+        await loadJails();
+    } catch (error) {
+        showMessage('Error toggling jail: ' + (error.response?.data?.message || error.message), 'error');
+    } finally {
+        togglingJail.value = null;
+    }
+};
+
+const loadFail2banLogs = async () => {
+    loadingLogs.value = true;
+    try {
+        const response = await securityAPI.getFail2banLogs(selectedJailFilter.value);
+        fail2banLogs.value = response.data.data;
+    } catch (error) {
+        console.error('Error loading fail2ban logs:', error);
+    } finally {
+        loadingLogs.value = false;
+    }
+};
+
+const showJailDetails = async (jail) => {
+    try {
+        const response = await securityAPI.getJailDetails(jail);
+        jailDetails.value[jail] = response.data.data.status;
+        // Could open a modal here with more details
+        console.log('Jail details:', response.data.data);
+    } catch (error) {
+        showMessage('Error loading jail details: ' + (error.response?.data?.message || error.message), 'error');
+    }
+};
+
+const unbanIP = async (jail, ip) => {
+    if (!confirm(`Unban IP ${ip} from jail ${jail}?`)) return;
+
+    try {
+        await securityAPI.unbanIP({ jail, ip });
+        showMessage(`IP ${ip} unbanned from ${jail}`);
+        await loadJailStatus(jail);
+    } catch (error) {
+        showMessage('Error unbanning IP: ' + (error.response?.data?.message || error.message), 'error');
+    }
+};
+
+const formatTime = (seconds) => {
+    const num = parseInt(seconds);
+    if (isNaN(num)) return seconds;
+    if (num >= 86400) return `${Math.floor(num / 86400)}d`;
+    if (num >= 3600) return `${Math.floor(num / 3600)}h`;
+    if (num >= 60) return `${Math.floor(num / 60)}m`;
+    return `${num}s`;
+};
+
+const getLogLevelClass = (level) => {
+    switch (level?.toUpperCase()) {
+        case 'WARNING':
+        case 'WARN':
+            return 'text-yellow-400';
+        case 'ERROR':
+        case 'CRITICAL':
+            return 'text-red-400';
+        case 'INFO':
+            return 'text-blue-400';
+        case 'NOTICE':
+            return 'text-purple-400';
+        default:
+            return 'text-gray-400';
     }
 };
 

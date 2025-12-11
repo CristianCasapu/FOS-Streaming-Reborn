@@ -392,10 +392,24 @@ export const securityAPI = {
     deleteUFWRule: (ruleNumber) => api.post(`${ADMIN_API_PREFIX}/security.php?action=delete_ufw_rule`, { rule_number: ruleNumber }),
     getFail2banJails: () => api.get(`${ADMIN_API_PREFIX}/security.php?action=get_fail2ban_jails`),
     getJailStatus: (jail) => api.get(`${ADMIN_API_PREFIX}/security.php?action=get_jail_status&jail=${jail}`),
+    getJailDetails: (jail) => api.get(`${ADMIN_API_PREFIX}/security.php?action=get_jail_details&jail=${jail}`),
     banIP: (data) => api.post(`${ADMIN_API_PREFIX}/security.php?action=ban_ip`, data),
     unbanIP: (data) => api.post(`${ADMIN_API_PREFIX}/security.php?action=unban_ip`, data),
+    enableFail2ban: () => api.post(`${ADMIN_API_PREFIX}/security.php?action=enable_fail2ban`, {}),
+    stopFail2ban: () => api.post(`${ADMIN_API_PREFIX}/security.php?action=stop_fail2ban`, {}),
     reloadFail2ban: () => api.post(`${ADMIN_API_PREFIX}/security.php?action=reload_fail2ban`, {}),
+    getFail2banConfig: () => api.get(`${ADMIN_API_PREFIX}/security.php?action=get_fail2ban_config`),
+    getFail2banLogs: (jail = '', limit = 100) => api.get(`${ADMIN_API_PREFIX}/security.php?action=get_fail2ban_logs&jail=${jail}&limit=${limit}`),
     getSecurityLogs: (limit = 50) => api.get(`${ADMIN_API_PREFIX}/security.php?action=get_security_logs&limit=${limit}`),
+    // Jail management
+    getAvailableJails: () => api.get(`${ADMIN_API_PREFIX}/security.php?action=get_available_jails`),
+    toggleJail: (jail, enable) => api.post(`${ADMIN_API_PREFIX}/security.php?action=toggle_jail`, { jail, enable }),
+    updateJailConfig: (data) => api.post(`${ADMIN_API_PREFIX}/security.php?action=update_jail_config`, data),
+    // UFW service controls
+    reloadUFW: () => api.post(`${ADMIN_API_PREFIX}/security.php?action=reload_ufw`, {}),
+    resetUFW: () => api.post(`${ADMIN_API_PREFIX}/security.php?action=reset_ufw`, {}),
+    // fail2ban service controls
+    restartFail2ban: () => api.post(`${ADMIN_API_PREFIX}/security.php?action=restart_fail2ban`, {}),
 };
 
 /**
