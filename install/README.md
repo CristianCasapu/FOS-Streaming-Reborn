@@ -757,15 +757,16 @@ ls -la /run/php/php8.4-fpm-streaming.sock
 
 The custom Nginx includes HTTP-FLV module for live streaming support.
 
-#### Check for Pre-built Binary
+#### Why You Must Build Nginx
 
-```bash
-ls -la ~/FOS-Streaming/fospackv69/fos/nginx/sbin/nginx_fos
-```
+> **IMPORTANT**: The nginx binary in the repository (if present) was compiled on the developer's machine
+> with paths specific to that environment. Nginx hardcodes paths like `--prefix`, `--error-log-path`,
+> and temp directories directly into the binary at compile time.
+>
+> **You must rebuild nginx on your server** so the paths match your installation directory.
+> The build script auto-detects your FOS directory and user, making this process seamless.
 
-If the binary exists, skip to "Verify Configuration" below.
-
-#### Build Nginx from Source
+#### Build Nginx from Source (Required)
 
 ```bash
 cd ~/FOS-Streaming/fospackv69/nginx-builder
@@ -1351,10 +1352,10 @@ php artisan db:seed
 python3 install/03-setup-services.py
 
 # ============================================
-# STEP 7: Nginx Setup (if not using pre-built binary)
+# STEP 7: Nginx Setup (REQUIRED - must build on your server)
 # ============================================
-# Build FOS nginx from source (optional):
-# cd fospackv69/nginx-builder && sudo bash build-debian12.sh
+cd ~/FOS-Streaming/fospackv69/nginx-builder
+sudo bash build-fos-nginx.sh
 
 # ============================================
 # STEP 8: Start All Services

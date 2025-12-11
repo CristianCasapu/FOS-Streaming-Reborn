@@ -26,7 +26,11 @@ set -e
 # Configuration
 # =============================================================================
 NGINX_VERSION="1.26.2"
+
+# Get script directory (works with sudo and symlinks)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks to get real path
+SCRIPT_DIR="$(cd "$SCRIPT_DIR" && pwd -P)"
 BUILD_DIR="${SCRIPT_DIR}"
 NGINX_SRC_DIR="${BUILD_DIR}/nginx-${NGINX_VERSION}"
 
@@ -35,6 +39,13 @@ FOS_DIR=""
 FOS_USER="${SUDO_USER:-$(whoami)}"
 FOS_GROUP="${FOS_USER}"
 CLEAN_BUILD=false
+
+# Auto-detect FOS_USER's home directory (works with sudo)
+if [ -n "$SUDO_USER" ]; then
+    FOS_USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+else
+    FOS_USER_HOME="$HOME"
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -60,12 +71,34 @@ show_help() {
 detect_fos_dir() {
     # Try to auto-detect FOS directory
     if [ -z "$FOS_DIR" ]; then
-        # Script is in fospackv69/nginx-builder, go up two levels
+        # Method 1: Script is in fospackv69/nginx-builder, go up two levels
         local parent_dir="$(dirname "$(dirname "$SCRIPT_DIR")")"
         if [ -f "${parent_dir}/config.php" ] && [ -f "${parent_dir}/composer.json" ]; then
             FOS_DIR="$parent_dir"
+            log_info "Auto-detected FOS directory from script location"
         else
-            log_error "Could not auto-detect FOS directory. Use --fos-dir option."
+            # Method 2: Look for common installation paths
+            local common_paths=(
+                "${FOS_USER_HOME}/FOS-Streaming"
+                "${FOS_USER_HOME}/FOS-Streaming-v69"
+                "${FOS_USER_HOME}/fos-streaming"
+                "/opt/FOS-Streaming"
+                "/var/www/FOS-Streaming"
+            )
+
+            for path in "${common_paths[@]}"; do
+                if [ -f "${path}/config.php" ] && [ -f "${path}/composer.json" ]; then
+                    FOS_DIR="$path"
+                    log_info "Found FOS directory at: $path"
+                    break
+                fi
+            done
+        fi
+
+        if [ -z "$FOS_DIR" ]; then
+            log_error "Could not auto-detect FOS directory."
+            log_error "Use --fos-dir option to specify the installation path."
+            log_error "Example: sudo bash $0 --fos-dir /home/${FOS_USER}/FOS-Streaming"
             exit 1
         fi
     fi
@@ -75,6 +108,30 @@ detect_fos_dir() {
         log_error "Invalid FOS directory: ${FOS_DIR}"
         log_error "config.php not found"
         exit 1
+    fi
+}
+
+check_existing_nginx() {
+    # Check if there's an existing nginx binary with wrong paths
+    local existing_nginx="${FOS_DIR}/fospackv69/fos/nginx/sbin/nginx"
+
+    if [ -f "$existing_nginx" ]; then
+        log_info "Found existing nginx binary"
+
+        # Check if it has paths that don't match current FOS_DIR
+        local binary_paths=$("$existing_nginx" -V 2>&1 | grep -oP '(?<=--prefix=|--error-log-path=|--http-log-path=)[^\s]+' | head -1)
+
+        if [ -n "$binary_paths" ] && [[ "$binary_paths" != "${FOS_DIR}"* ]]; then
+            log_warn "Existing nginx binary has incorrect paths hardcoded!"
+            log_warn "Binary expects: $binary_paths"
+            log_warn "Your FOS_DIR:   ${FOS_DIR}"
+            log_warn ""
+            log_warn "This happens when using a pre-built binary from another machine."
+            log_warn "The nginx binary MUST be compiled on each server with correct paths."
+            log_info ""
+            log_info "Proceeding with rebuild to fix this..."
+            echo ""
+        fi
     fi
 }
 
@@ -155,6 +212,7 @@ fi
 
 check_os
 detect_fos_dir
+check_existing_nginx
 
 # Set paths based on FOS_DIR
 INSTALL_PREFIX="${FOS_DIR}/fospackv69/fos/nginx"
