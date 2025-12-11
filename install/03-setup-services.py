@@ -10,12 +10,18 @@ This script installs and configures:
 
 Run this AFTER 02-install-deps.py and BEFORE starting services.
 
+REINSTALL SUPPORT:
+- Existing configs are backed up before overwriting
+- PHP-FPM is automatically restarted
+- Use --reinstall to force overwrite all configs
+
 Usage:
     python3 03-setup-services.py [--user USERNAME] [--fos-dir /path/to/FOS-Streaming]
 
 Example:
     python3 03-setup-services.py
     python3 03-setup-services.py --user fosadmin --fos-dir /home/fosadmin/FOS-Streaming
+    python3 03-setup-services.py --reinstall  # Force reinstall with backups
 """
 
 import os
@@ -25,6 +31,7 @@ import shutil
 import argparse
 import re
 from pathlib import Path
+from datetime import datetime
 
 # ANSI Colors
 RED = '\033[0;31m'
@@ -97,6 +104,29 @@ def replace_in_file(file_path: Path, replacements: dict) -> str:
     return content
 
 
+def backup_file(file_path: Path, backup_dir: Path = None) -> Path:
+    """Backup a file if it exists. Returns backup path or None."""
+    if not file_path.exists():
+        return None
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"{file_path.name}.backup.{timestamp}"
+
+    if backup_dir:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup_path = backup_dir / backup_name
+    else:
+        backup_path = file_path.parent / backup_name
+
+    # Use sudo for system files
+    if str(file_path).startswith('/etc/'):
+        run_cmd(f"sudo cp {file_path} {backup_path}", check=False)
+    else:
+        shutil.copy2(file_path, backup_path)
+
+    return backup_path
+
+
 def install_php_fpm_pools(fos_dir: Path, user: str, php_version: str):
     """Install PHP-FPM pool configurations."""
     log_step("Installing PHP-FPM Pool Configurations")
@@ -108,11 +138,14 @@ def install_php_fpm_pools(fos_dir: Path, user: str, php_version: str):
         log_error(f"PHP-FPM pool directory not found: {fpm_pool_dir}")
         return False
 
-    # Replacements for config files
+    # Replacements for config files (new placeholder format)
     replacements = {
+        "__FOS_USER__": user,
+        "__FOS_DIR__": str(fos_dir),
+        "__PHP_VERSION__": php_version,
+        # Legacy format for backwards compatibility
         "fosadmin": user,
         "/home/fosadmin/FOS-Streaming": str(fos_dir),
-        "php8.4": f"php{php_version}",
     }
 
     pools = [
@@ -128,13 +161,17 @@ def install_php_fpm_pools(fos_dir: Path, user: str, php_version: str):
             log_warn(f"Source file not found: {source}")
             continue
 
+        # Backup existing config if present
+        if dest.exists():
+            backup_path = backup_file(dest)
+            if backup_path:
+                log_info(f"Backed up existing {pool_file} to {backup_path.name}")
+
         # Read and modify content
         content = replace_in_file(source, replacements)
 
         # Write to destination
         log_info(f"Installing {description}: {dest}")
-        success, _ = run_cmd(f"sudo tee {dest} > /dev/null", check=False)
-
         proc = subprocess.run(
             ['sudo', 'tee', str(dest)],
             input=content,
@@ -145,7 +182,7 @@ def install_php_fpm_pools(fos_dir: Path, user: str, php_version: str):
         if proc.returncode == 0:
             log_success(f"Installed {pool_file}")
         else:
-            log_error(f"Failed to install {pool_file}")
+            log_error(f"Failed to install {pool_file}: {proc.stderr}")
 
     # Disable default www pool if both custom pools are installed
     default_pool = fpm_pool_dir / "www.conf"
@@ -156,14 +193,18 @@ def install_php_fpm_pools(fos_dir: Path, user: str, php_version: str):
     return True
 
 
-def install_nginx_configs(fos_dir: Path, user: str, use_system_nginx: bool):
+def install_nginx_configs(fos_dir: Path, user: str, php_version: str, use_system_nginx: bool):
     """Install Nginx configurations."""
     log_step("Installing Nginx Configurations")
 
     config_dir = fos_dir / "install" / "config" / "nginx"
 
-    # Replacements
+    # Replacements (new placeholder format)
     replacements = {
+        "__FOS_USER__": user,
+        "__FOS_DIR__": str(fos_dir),
+        "__PHP_VERSION__": php_version,
+        # Legacy format for backwards compatibility
         "fosadmin": user,
         "/home/fosadmin/FOS-Streaming": str(fos_dir),
     }
@@ -394,6 +435,8 @@ def main():
                         help='FOS-Streaming installation directory')
     parser.add_argument('--system-nginx', action='store_true',
                         help='Configure for system nginx instead of FOS nginx')
+    parser.add_argument('--reinstall', action='store_true',
+                        help='Force reinstall (existing configs will be backed up)')
     args = parser.parse_args()
 
     print(f"""
@@ -427,7 +470,7 @@ def main():
 
     # Install configurations
     install_php_fpm_pools(fos_dir, args.user, php_version)
-    install_nginx_configs(fos_dir, args.user, args.system_nginx)
+    install_nginx_configs(fos_dir, args.user, php_version, args.system_nginx)
     create_directories(fos_dir, args.user)
     create_systemd_services(fos_dir, args.user, php_version)
     restart_services(php_version)

@@ -770,15 +770,21 @@ If the binary exists, skip to "Verify Configuration" below.
 ```bash
 cd ~/FOS-Streaming/fospackv69/nginx-builder
 
-# Install build dependencies
-sudo apt-get install -y build-essential libpcre3 libpcre3-dev zlib1g-dev \
-    libssl-dev libgeoip-dev libgd-dev libxslt1-dev libperl-dev
+# Build nginx with HTTP-FLV module (recommended script)
+sudo bash build-fos-nginx.sh
 
-# Build for Debian 12 / Ubuntu 24.04
-sudo bash build-debian12.sh
+# Or with custom options
+sudo bash build-fos-nginx.sh \
+    --fos-dir ~/FOS-Streaming \
+    --user $(whoami)
+
+# Alternative: use the legacy build script
+# sudo bash build-debian12.sh
 ```
 
 **Build time**: 5-15 minutes depending on system specs.
+
+> **Note**: See `docs/guides/NGINX_SETUP_GUIDE.md` for detailed build options and troubleshooting.
 
 #### Configuration Files (Pre-configured)
 
@@ -1380,4 +1386,12 @@ The modular approach provides better control, easier troubleshooting, and more r
 
 ---
 
-*Version: 70.0.0 | Last Updated: 2025-11-30*
+*Version: 70.0.0 | Last Updated: 2025-12-11*
+
+---
+
+## Additional Documentation
+
+- **Nginx Setup Guide**: See `docs/guides/NGINX_SETUP_GUIDE.md` for detailed nginx build and configuration
+- **Laravel Components**: See `docs/guides/LARAVEL_COMPONENTS_USAGE.md`
+- **PM2 Workers**: See `docs/guides/PM2_BACKGROUND_WORKERS_GUIDE.md`
