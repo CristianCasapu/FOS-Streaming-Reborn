@@ -28,29 +28,33 @@ try {
                 ]
             ];
 
-            // Check UFW status
-            exec('which ufw 2>/dev/null', $output, $returnCode);
-            if ($returnCode === 0) {
+            // Check UFW status - use separate output variable
+            $ufwWhichOutput = [];
+            exec('which ufw 2>/dev/null', $ufwWhichOutput, $ufwWhichCode);
+            if ($ufwWhichCode === 0 && !empty($ufwWhichOutput)) {
                 $status['ufw']['installed'] = true;
 
-                exec('sudo ufw status 2>/dev/null', $ufwOutput, $ufwCode);
-                if ($ufwCode === 0 && !empty($ufwOutput)) {
-                    $status['ufw']['active'] = strpos(implode('', $ufwOutput), 'Status: active') !== false;
-                    $status['ufw']['rules_count'] = max(0, count($ufwOutput) - 3);
+                $ufwStatusOutput = [];
+                exec('sudo ufw status 2>/dev/null', $ufwStatusOutput, $ufwStatusCode);
+                if ($ufwStatusCode === 0 && !empty($ufwStatusOutput)) {
+                    $status['ufw']['active'] = strpos(implode('', $ufwStatusOutput), 'Status: active') !== false;
+                    $status['ufw']['rules_count'] = max(0, count($ufwStatusOutput) - 3);
                 }
             }
 
-            // Check fail2ban status
-            exec('which fail2ban-client 2>/dev/null', $output, $returnCode);
-            if ($returnCode === 0) {
+            // Check fail2ban status - use separate output variable
+            $f2bWhichOutput = [];
+            exec('which fail2ban-client 2>/dev/null', $f2bWhichOutput, $f2bWhichCode);
+            if ($f2bWhichCode === 0 && !empty($f2bWhichOutput)) {
                 $status['fail2ban']['installed'] = true;
 
-                exec('sudo fail2ban-client status 2>/dev/null', $f2bOutput, $f2bCode);
-                if ($f2bCode === 0) {
+                $f2bStatusOutput = [];
+                exec('sudo fail2ban-client status 2>/dev/null', $f2bStatusOutput, $f2bStatusCode);
+                if ($f2bStatusCode === 0) {
                     $status['fail2ban']['running'] = true;
 
                     // Count jails
-                    foreach ($f2bOutput as $line) {
+                    foreach ($f2bStatusOutput as $line) {
                         if (strpos($line, 'Jail list:') !== false) {
                             preg_match_all('/\w+/', $line, $matches);
                             $status['fail2ban']['jails_count'] = max(0, count($matches[0]) - 2);

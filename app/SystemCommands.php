@@ -120,31 +120,37 @@ class SystemCommands
 
             // Build command (with or without sudo)
             if ($needsSudo) {
-                if (empty($setting->sudo_password)) {
-                    throw new \Exception('Sudo password not configured. Go to Settings to configure sudo credentials.');
+                // First, check if NOPASSWD sudo is available
+                $nopasswdSudo = false;
+                exec('sudo -n true 2>/dev/null', $testOutput, $testCode);
+                if ($testCode === 0) {
+                    $nopasswdSudo = true;
                 }
 
-                if (empty($setting->sudo_user)) {
-                    throw new \Exception('Sudo user not configured. Go to Settings to configure sudo credentials.');
+                if ($nopasswdSudo) {
+                    // NOPASSWD sudo available - use simple sudo command
+                    $fullCommand = sprintf('sudo %s 2>&1', $command);
+                } else {
+                    // Password-based sudo required
+                    if (empty($setting->sudo_password)) {
+                        throw new \Exception('Sudo password not configured. Go to Settings to configure sudo credentials.');
+                    }
+
+                    if (empty($setting->sudo_user)) {
+                        throw new \Exception('Sudo user not configured. Go to Settings to configure sudo credentials.');
+                    }
+
+                    // Decrypt sudo password
+                    $sudoPassword = Crypt::decryptString($setting->sudo_password);
+
+                    // Build the sudo command
+                    // Using sudo -S to read password from stdin, -p '' suppresses prompt
+                    $fullCommand = sprintf(
+                        'echo %s | sudo -S -p "" %s 2>&1',
+                        escapeshellarg($sudoPassword),
+                        $command
+                    );
                 }
-
-                // Decrypt sudo password
-                $sudoPassword = Crypt::decryptString($setting->sudo_password);
-                // sudo_user is the user account that has sudo privileges (must match who PHP runs as)
-                $sudoUser = $setting->sudo_user;
-
-                // Get the current user running PHP
-                $currentUser = get_current_user();
-
-                // Build the sudo command
-                // Using sudo -S to read password from stdin, -p '' suppresses prompt
-                // IMPORTANT: The current user running PHP must match sudo_user or have sudo privileges
-                // The password provided must be for the user running PHP, not sudo_user
-                $fullCommand = sprintf(
-                    'echo %s | sudo -S -p "" %s 2>&1',
-                    escapeshellarg($sudoPassword),
-                    $command
-                );
             } else {
                 // Execute without sudo
                 $fullCommand = $command . ' 2>&1';
