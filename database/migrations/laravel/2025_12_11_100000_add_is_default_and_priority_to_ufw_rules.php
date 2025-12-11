@@ -53,8 +53,8 @@ return new class extends Migration
 
                 if (!$exists) {
                     Capsule::table('ufw_rules')->insert(array_merge($rule, [
-                        'created_at' => now(),
-                        'updated_at' => now(),
+                        'created_at' => date('Y-m-d H:i:s'),
+                        'updated_at' => date('Y-m-d H:i:s'),
                     ]));
                 }
             }
