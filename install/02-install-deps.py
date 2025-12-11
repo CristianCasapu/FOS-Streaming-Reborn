@@ -570,6 +570,7 @@ def main():
         setup_php_repository(os_type, os_codename)
 
         # Critical PHP packages
+        # Note: php-xml provides both xml and dom extensions
         php_critical = [
             f"php{PHP_VERSION}",
             f"php{PHP_VERSION}-cli",
@@ -578,28 +579,43 @@ def main():
             f"php{PHP_VERSION}-mysql",
             f"php{PHP_VERSION}-curl",
             f"php{PHP_VERSION}-mbstring",
-            f"php{PHP_VERSION}-xml",
+            f"php{PHP_VERSION}-xml",      # Provides xml, dom, simplexml, xmlreader, xmlwriter
+            f"php{PHP_VERSION}-dom",      # Explicit dom (may be included in xml, but install explicitly)
             f"php{PHP_VERSION}-opcache",
             f"php{PHP_VERSION}-readline",
+            f"php{PHP_VERSION}-gd",       # Image processing (required by many packages)
+            f"php{PHP_VERSION}-zip",      # Archive handling (required by Composer)
+            f"php{PHP_VERSION}-intl",     # Internationalization (required by Laravel)
         ]
 
         log_info("Installing critical PHP packages...")
-        installed, failed = install_packages(php_critical, critical=True)
+        installed, failed = install_packages(php_critical, critical=False)
 
-        if failed:
-            log_error(f"Critical PHP packages failed: {', '.join(failed)}")
+        # Check if truly critical packages failed (dom might be included in xml)
+        truly_critical = [f"php{PHP_VERSION}", f"php{PHP_VERSION}-cli", f"php{PHP_VERSION}-fpm",
+                         f"php{PHP_VERSION}-mysql", f"php{PHP_VERSION}-curl", f"php{PHP_VERSION}-xml"]
+        critical_failed = [pkg for pkg in failed if pkg in truly_critical]
+
+        if critical_failed:
+            log_error(f"Critical PHP packages failed: {', '.join(critical_failed)}")
             log_error("Cannot continue without PHP. Please check the log file.")
             sys.exit(1)
+        elif failed:
+            log_warn(f"Some PHP packages not available separately: {', '.join(failed)}")
+            log_info("These may be included in other packages (e.g., dom in xml)")
 
-        # Optional PHP packages
+        # Optional PHP packages (nice to have, but not blocking)
         php_optional = [
-            f"php{PHP_VERSION}-gd",
-            f"php{PHP_VERSION}-zip",
-            f"php{PHP_VERSION}-bcmath",
-            f"php{PHP_VERSION}-intl",
-            f"php{PHP_VERSION}-bz2",
-            f"php{PHP_VERSION}-redis",
-            f"php{PHP_VERSION}-imagick",
+            f"php{PHP_VERSION}-bcmath",    # Arbitrary precision math
+            f"php{PHP_VERSION}-bz2",       # Bzip2 compression
+            f"php{PHP_VERSION}-redis",     # Redis extension for caching/sessions
+            f"php{PHP_VERSION}-imagick",   # ImageMagick for advanced image processing
+            f"php{PHP_VERSION}-soap",      # SOAP web services
+            f"php{PHP_VERSION}-sqlite3",   # SQLite support
+            f"php{PHP_VERSION}-xsl",       # XSL transformations
+            f"php{PHP_VERSION}-gd",        # Image processing (backup if not in critical)
+            f"php{PHP_VERSION}-zip",       # Archive handling (backup if not in critical)
+            f"php{PHP_VERSION}-intl",      # Internationalization (backup if not in critical)
         ]
 
         log_info("Installing optional PHP packages...")

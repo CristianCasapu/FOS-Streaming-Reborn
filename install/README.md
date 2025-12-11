@@ -23,7 +23,7 @@ All software is installed at their **latest stable release**:
 
 | Software | Version | Notes |
 |----------|---------|-------|
-| PHP | 8.4.x | Latest stable via sury.org/ondrej PPA |
+| PHP | 8.4.x / 8.5.x | Latest stable via sury.org/ondrej PPA |
 | MariaDB | 11.4.x | Latest LTS stable |
 | Node.js | 20.x LTS | Via NVM |
 | Nginx | 1.26.x | Custom build with HTTP-FLV module |

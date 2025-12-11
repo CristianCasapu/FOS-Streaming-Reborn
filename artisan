@@ -35,9 +35,11 @@ $artisan = new Application($app, $events, 'FOS Streaming v70');
 |--------------------------------------------------------------------------
 */
 
-// Register Sail commands
-$artisan->resolve(\Laravel\Sail\Console\InstallCommand::class);
-$artisan->resolve(\Laravel\Sail\Console\PublishCommand::class);
+// Register Sail commands (only if Sail is installed - it's a dev dependency)
+if (class_exists(\Laravel\Sail\Console\InstallCommand::class)) {
+    $artisan->resolve(\Laravel\Sail\Console\InstallCommand::class);
+    $artisan->resolve(\Laravel\Sail\Console\PublishCommand::class);
+}
 
 // Register built-in commands
 require_once __DIR__.'/app/Console/Commands/ServeCommand.php';
