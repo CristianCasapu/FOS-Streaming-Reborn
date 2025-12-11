@@ -49,7 +49,8 @@ $requestMethod = $_SERVER['REQUEST_METHOD'];
 $uri = parse_url($requestUri, PHP_URL_PATH);
 
 // Get admin path from environment (default: /admin)
-$adminPath = $_ENV['ADMIN_PATH'] ?? '/admin';
+// Use env() helper which checks $_ENV, $_SERVER, and getenv()
+$adminPath = env('ADMIN_PATH', '/admin');
 $adminPath = rtrim($adminPath, '/'); // Remove trailing slash
 
 // Check if this is an admin route
