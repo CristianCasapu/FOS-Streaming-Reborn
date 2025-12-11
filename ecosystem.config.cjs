@@ -14,7 +14,7 @@ module.exports = {
   apps: [
     {
       name: 'stream-import-worker',
-      script: './workers/stream-import-worker.js',
+      script: './workers/stream-import-worker.cjs',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -40,7 +40,7 @@ module.exports = {
     },
     {
       name: 'ffprobe-worker',
-      script: './workers/ffprobe-worker.js',
+      script: './workers/ffprobe-worker.cjs',
       instances: 2,
       exec_mode: 'cluster',
       autorestart: true,
@@ -66,7 +66,7 @@ module.exports = {
     },
     {
       name: 'stream-manager-worker',
-      script: './workers/stream-manager-worker.js',
+      script: './workers/stream-manager-worker.cjs',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -92,7 +92,7 @@ module.exports = {
     },
     {
       name: 'stream-monitor-worker',
-      script: './workers/stream-monitor-worker.js',
+      script: './workers/stream-monitor-worker.cjs',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -118,7 +118,7 @@ module.exports = {
     },
     {
       name: 'website-health-worker',
-      script: './workers/website-health-worker.js',
+      script: './workers/website-health-worker.cjs',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
