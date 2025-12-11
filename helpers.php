@@ -405,7 +405,7 @@ if (!function_exists('vite')) {
 
             $asset = $manifest[$entry];
 
-            // Load CSS files
+            // Load CSS files referenced by this entry
             if (isset($asset['css'])) {
                 foreach ($asset['css'] as $css) {
                     if (!in_array($css, $loadedCss)) {
@@ -415,9 +415,19 @@ if (!function_exists('vite')) {
                 }
             }
 
-            // Load the JS file
+            // Load the file (JS or CSS)
             if (isset($asset['file'])) {
-                $html .= '<script type="module" src="/build/' . $asset['file'] . '"></script>' . "\n";
+                $file = $asset['file'];
+                // Check if this is a CSS file (direct CSS entry like resources/css/app.css)
+                if (str_ends_with($file, '.css')) {
+                    if (!in_array($file, $loadedCss)) {
+                        $html .= '<link rel="stylesheet" href="/build/' . $file . '">' . "\n";
+                        $loadedCss[] = $file;
+                    }
+                } else {
+                    // JavaScript file
+                    $html .= '<script type="module" src="/build/' . $file . '"></script>' . "\n";
+                }
             }
         }
 
