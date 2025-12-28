@@ -167,7 +167,8 @@
       "@composer install --no-dev --optimize-autoloader",
       "@migrate --force",
       "@optimize"
-    ]
+    ],
+    "reset-staff-password": "@php scripts/reset-staff-password.php"
   },
   "config": {
     "optimize-autoloader": true,

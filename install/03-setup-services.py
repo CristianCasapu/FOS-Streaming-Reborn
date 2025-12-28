@@ -104,7 +104,7 @@ def replace_in_file(file_path: Path, replacements: dict) -> str:
     return content
 
 
-def backup_file(file_path: Path, backup_dir: Path = None) -> Path:
+def backup_file(file_path: Path, backup_dir: Path = None) -> Path | None:
     """Backup a file if it exists. Returns backup path or None."""
     if not file_path.exists():
         return None
@@ -258,14 +258,10 @@ def install_nginx_configs(fos_dir: Path, user: str, php_version: str, use_system
             dest.write_text(content)
             log_success(f"Installed main nginx.conf to {dest}")
 
-        # Copy vhost configs to install/config/nginx (they're already there)
-        # Just update them with correct paths
-        for conf_file in ["fos-admin.conf", "fos-streaming.conf", "fos-rtmp.conf"]:
-            source = config_dir / conf_file
-            if source.exists():
-                content = replace_in_file(source, replacements)
-                source.write_text(content)
-                log_success(f"Updated {conf_file} with correct paths")
+        # Note: Template files in install/config/nginx/ are preserved as-is
+        # They serve as reusable templates for future installations
+        # The actual installed configs are in fospackv69/fos/nginx/conf/
+        log_info("Template files preserved in install/config/nginx/")
 
     return True
 
