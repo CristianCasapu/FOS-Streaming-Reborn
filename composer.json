@@ -136,12 +136,14 @@
     "migrate:status": "@php artisan migrate:status",
     "db:seed": "@php artisan db:seed",
     "db:wipe": "@php artisan db:wipe --force",
-    "clear-cache": [
+    "clear-all-cache": [
       "@php -r \"array_map('unlink', glob('cache/*.php'));\"",
-      "@php artisan optimize:clear"
+      "@php -r \"if (file_exists('bootstrap/cache/config.php')) unlink('bootstrap/cache/config.php');\"",
+      "@php -r \"if (file_exists('bootstrap/cache/routes.php')) unlink('bootstrap/cache/routes.php');\"",
+      "@php -r \"if (is_dir('storage/framework/cache/data')) { array_map('unlink', glob('storage/framework/cache/data/*/*')); }\""
     ],
-    "cache:clear": "@clear-cache",
-    "optimize": "@php artisan optimize",
+    "cache:clear": "@clear-all-cache",
+    "optimize": "@php -r \"echo 'No optimization needed for this application.\\n';\"",
     "ide-helper": [
       "@php artisan ide-helper:generate",
       "@php artisan ide-helper:models --nowrite"
@@ -159,24 +161,17 @@
       "@test"
     ],
     "dev": [
-      "@clear-cache",
+      "@clear-all-cache",
       "@migrate",
       "@serve"
     ],
     "prod:deploy": [
       "@composer install --no-dev --optimize-autoloader",
       "@migrate --force",
-      "@optimize"
+      "@clear-all-cache"
     ],
     "reset-staff-password": "@php scripts/reset-staff-password.php",
-    "rebuild": [
-      "@clear-cache",
-      "npm ci",
-      "npm run build",
-      "@php artisan optimize",
-      "sudo systemctl reload fos-nginx",
-      "sudo systemctl reload php8.4-fpm"
-    ]
+    "rebuild": "bash scripts/rebuild-system.sh"
   },
   "config": {
     "optimize-autoloader": true,
