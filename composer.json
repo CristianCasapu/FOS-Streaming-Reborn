@@ -168,7 +168,15 @@
       "@migrate --force",
       "@optimize"
     ],
-    "reset-staff-password": "@php scripts/reset-staff-password.php"
+    "reset-staff-password": "@php scripts/reset-staff-password.php",
+    "rebuild": [
+      "@clear-cache",
+      "npm ci",
+      "npm run build",
+      "@php artisan optimize",
+      "sudo systemctl reload fos-nginx",
+      "sudo systemctl reload php8.4-fpm"
+    ]
   },
   "config": {
     "optimize-autoloader": true,
