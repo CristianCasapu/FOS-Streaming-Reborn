@@ -145,9 +145,9 @@ $capsule = new Capsule;
 $capsule->addConnection([
     'driver'    => env('DB_CONNECTION', 'mysql'),
     'host'      => env('DB_HOST', 'localhost'),
-    'database'  => env('DB_DATABASE', 'fos_dev'),
-    'username'  => env('DB_USERNAME', 'fos_dev'),
-    'password'  => env('DB_PASSWORD', 'fos_dev_password'),
+    'database'  => env('DB_DATABASE'),
+    'username'  => env('DB_USERNAME'),
+    'password'  => env('DB_PASSWORD'),
     'charset'   => env('DB_CHARSET', 'utf8mb4'),
     'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
     'prefix'    => env('DB_PREFIX', ''),
@@ -196,7 +196,7 @@ if (file_exists($portsConfigFile)) {
     define('FOS_RTMP_PORT', $portsConfig['rtmp_port']);
 } else {
     // Fallback to environment variables, then default ports
-    define('FOS_WEB_PORT', env('APP_PORT', 7777));
-    define('FOS_STREAM_PORT', env('STREAMING_PORT', 8000));
-    define('FOS_RTMP_PORT', env('RTMP_PORT', 1935));
+    define('FOS_WEB_PORT', env('WEB_PORT') ?: 8000);
+    define('FOS_STREAM_PORT', env('STREAMING_PORT') ?: 8080);
+    define('FOS_RTMP_PORT', env('RTMP_PORT') ?: 1935);
 }

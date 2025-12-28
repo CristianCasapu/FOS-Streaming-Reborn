@@ -1,7 +1,7 @@
 <?php
 include('config.php');
 if (isset($_SESSION['user_id'])) {
-    header("location: dashboard.php");
+    header("location: http://" . $_SERVER['SERVER_NAME'] . ":" . (defined('FOS_WEB_PORT') ? FOS_WEB_PORT : '8000') . "/adminx/dashboard.php");
 }
 
 $error = '';
@@ -16,7 +16,7 @@ if (isset($_POST['submit'])) {
 
         if ($userfind > 0) {
             $_SESSION['user_id'] = $username;
-            header("location: dashboard.php");
+            header("location: http://" . $_SERVER['SERVER_NAME'] . ":" . (defined('FOS_WEB_PORT') ? FOS_WEB_PORT : '8000') . "/adminx/dashboard.php");
         } else {
 
             $error = "Username or Password is invalid";
