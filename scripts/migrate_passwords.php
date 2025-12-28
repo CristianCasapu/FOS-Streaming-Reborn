@@ -40,20 +40,20 @@ try {
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
     // Check if password_type column exists
-    $stmt = $pdo->query("SHOW COLUMNS FROM admins LIKE 'password_type'");
+    $stmt = $pdo->query("SHOW COLUMNS FROM staff LIKE 'password_type'");
     if ($stmt->rowCount() == 0) {
         echo "  Adding password_type column...\n";
-        $pdo->exec("ALTER TABLE admins ADD COLUMN password_type VARCHAR(20) DEFAULT 'md5' AFTER password");
+        $pdo->exec("ALTER TABLE staff ADD COLUMN password_type VARCHAR(20) DEFAULT 'md5' AFTER password");
         echo "  ✓ Column added\n";
     } else {
         echo "  ✓ Column already exists\n";
     }
 
     // Check if last_password_change column exists
-    $stmt = $pdo->query("SHOW COLUMNS FROM admins LIKE 'last_password_change'");
+    $stmt = $pdo->query("SHOW COLUMNS FROM staff LIKE 'last_password_change')");
     if ($stmt->rowCount() == 0) {
         echo "  Adding last_password_change column...\n";
-        $pdo->exec("ALTER TABLE admins ADD COLUMN last_password_change DATETIME NULL AFTER password_type");
+        $pdo->exec("ALTER TABLE staff ADD COLUMN last_password_change DATETIME NULL AFTER password_type");
         echo "  ✓ Column added\n";
     } else {
         echo "  ✓ Column already exists\n";
@@ -67,7 +67,7 @@ echo "\n[2/3] Analyzing admin accounts...\n";
 
 try {
     // Get all admins
-    $admins = Admin::all();
+    $admins = Staff::all();
     echo "  Found " . count($admins) . " admin account(s)\n\n";
 
     $migratedCount = 0;
@@ -121,7 +121,7 @@ echo "\n[3/3] Creating default admin with secure password (if needed)...\n";
 
 try {
     // Check if 'admin' user exists
-    $adminUser = Admin::where('username', 'admin')->first();
+    $adminUser = Staff::where('username', 'admin')->first();
 
     if ($adminUser) {
         echo "  'admin' user already exists\n";
@@ -147,7 +147,7 @@ try {
     } else {
         echo "  Creating default 'admin' user...\n";
 
-        $newAdmin = new Admin();
+        $newAdmin = new Staff();
         $newAdmin->username = 'admin';
         $newAdmin->password = Security::hashPassword('admin');
         $newAdmin->password_type = 'argon2id';

@@ -17,7 +17,7 @@ try {
             $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
             $perPage = isset($_GET['per_page']) ? (int)$_GET['per_page'] : 20;
 
-            $query = Admin::query();
+            $query = Staff::query();
 
             if ($search) {
                 $query->where('username', 'LIKE', "%{$search}%");
@@ -52,7 +52,7 @@ try {
             $id = $_GET['id'] ?? null;
             if (!$id) throw new Exception('Admin ID required');
 
-            $admin = Admin::find($id);
+            $admin = Staff::find($id);
             if (!$admin) throw new Exception('Admin not found');
 
             echo json_encode([
@@ -77,12 +77,12 @@ try {
             }
 
             // Check for duplicate username
-            $exists = Admin::where('username', '=', $input['username'])->count();
+            $exists = Staff::where('username', '=', $input['username'])->count();
             if ($exists > 0) {
                 throw new Exception('Username already exists');
             }
 
-            $admin = new Admin();
+            $admin = new Staff();
             $admin->username = $input['username'];
             $admin->password = password_hash($input['password'], PASSWORD_DEFAULT);
             $admin->save();
@@ -98,14 +98,14 @@ try {
             $id = $_GET['id'] ?? null;
             if (!$id) throw new Exception('Admin ID required');
 
-            $admin = Admin::find($id);
+            $admin = Staff::find($id);
             if (!$admin) throw new Exception('Admin not found');
 
             $input = json_decode(file_get_contents('php://input'), true);
 
             if (isset($input['username']) && !empty($input['username'])) {
                 // Check for duplicate username (excluding current admin)
-                $exists = Admin::where('username', '=', $input['username'])
+                $exists = Staff::where('username', '=', $input['username'])
                     ->where('id', '!=', $id)
                     ->count();
                 if ($exists > 0) {
@@ -133,7 +133,7 @@ try {
                 throw new Exception('Cannot delete the main administrator account');
             }
 
-            $admin = Admin::find($id);
+            $admin = Staff::find($id);
             if (!$admin) throw new Exception('Admin not found');
 
             $admin->delete();

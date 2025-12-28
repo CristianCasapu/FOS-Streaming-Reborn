@@ -12,7 +12,7 @@ if (isset($_POST['submit'])) {
         $username = stripslashes($_POST['username']);
         $password = stripslashes($_POST['password']);
 
-        $userfind = Admin::where('username', '=', $username)->where('password', '=', md5($password))->count();
+        $userfind = Staff::where('username', '=', $username)->where('password', '=', md5($password))->count();
 
         if ($userfind > 0) {
             $_SESSION['user_id'] = $username;

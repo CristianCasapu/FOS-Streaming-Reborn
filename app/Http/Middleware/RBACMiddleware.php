@@ -3,7 +3,7 @@
 namespace App\Http\Middleware;
 
 use Closure;
-use Admin;
+use Staff;
 
 /**
  * Role-Based Access Control (RBAC) Middleware
@@ -32,7 +32,7 @@ class RBACMiddleware
         $adminId = $request->session()->get('admin_id');
 
         try {
-            $admin = Admin::findOrFail($adminId);
+            $admin = Staff::findOrFail($adminId);
 
             // Check if admin account is active
             if ($admin->status !== 'active') {

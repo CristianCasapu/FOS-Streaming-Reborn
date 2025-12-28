@@ -42,7 +42,7 @@ try {
                 $username = $input['username'] ?? '';
                 $password = $input['password'] ?? '';
 
-                $user = Admin::where('username', '=', $username)
+                $user = Staff::where('username', '=', $username)
                             ->where('password', '=', md5($password))
                             ->first();
 
