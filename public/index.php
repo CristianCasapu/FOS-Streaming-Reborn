@@ -61,14 +61,10 @@ $isAdminApi = $isAdminRoute && strpos($uri, $adminPath . '/api/') === 0;
 
 // Handle admin API requests - route to the actual PHP files in /public/admin/api/
 if ($isAdminApi) {
-    // Convert /adminx/api/auth.php to /admin/api/auth.php (maintain the original adminPath in the file path)
+    // Always convert admin path to /admin/api/ for the actual file location
+    // /adminx/api/auth.php -> /admin/api/auth.php (maps to public/admin/api/auth.php)
     $apiPath = str_replace($adminPath . '/api/', '/admin/api/', $uri);
     $apiFile = __DIR__ . $apiPath;
-
-    // If the converted path doesn't exist, try the original path (for adminx -> admin conversion)
-    if (!is_file($apiFile)) {
-        $apiFile = __DIR__ . $uri;
-    }
 
     if (is_file($apiFile) && pathinfo($apiFile, PATHINFO_EXTENSION) === 'php') {
         require $apiFile;
@@ -78,7 +74,13 @@ if ($isAdminApi) {
     // API file not found
     http_response_code(404);
     header('Content-Type: application/json');
-    echo json_encode(['error' => 'API endpoint not found', 'debug' => ['requested' => $uri, 'tried' => $apiFile]]);
+    echo json_encode(['error' => 'API endpoint not found', 'debug' => [
+        'requested' => $uri,
+        'converted' => $apiPath,
+        'file_path' => $apiFile,
+        'file_exists' => file_exists($apiFile),
+        'admin_path' => $adminPath
+    ]]);
     exit;
 }
 
