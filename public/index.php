@@ -67,6 +67,12 @@ if ($isAdminApi) {
     $apiFile = __DIR__ . $apiPath;
 
     if (is_file($apiFile) && pathinfo($apiFile, PATHINFO_EXTENSION) === 'php') {
+        // Preserve query parameters for API files
+        $queryString = parse_url($_SERVER['REQUEST_URI'], PHP_URL_QUERY);
+        if ($queryString) {
+            parse_str($queryString, $_GET);
+        }
+        
         require $apiFile;
         exit;
     }
