@@ -97,7 +97,7 @@ class Staff extends Model
         
         $updateData = [
             'password' => $hashedPassword,
-            'password_changed_at' => now()
+            'password_changed_at' => date('Y-m-d H:i:s')
         ];
 
         if ($forceChange) {
@@ -177,7 +177,7 @@ class Staff extends Model
             'details' => json_encode($details),
             'ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'CLI',
             'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'Composer Script',
-            'created_at' => now()
+            'created_at' => date('Y-m-d H:i:s')
         ];
 
         // Insert into audit logs if table exists
