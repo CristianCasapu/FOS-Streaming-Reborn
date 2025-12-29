@@ -177,6 +177,29 @@ fospackv69/fos/nginx/*.pid
 # FOS Pack - Nginx builder source (varies by version)
 fospackv69/nginx-builder/nginx-*/
 
+# Additional Cache & Build Directories
+*.cache
+*.tmp
+*.temp
+build/
+dist/
+compiled/
+*.compiled
+.cache/
+
+# Additional Log Files
+*.log
+logs/
+log/
+
+# Additional Config Files (non-example)
+*.local
+*.local.conf
+*.local.ini
+*.local.config
+config.local.*
+settings.local.*
+
 # Uploaded Files
 /public/uploads/logos/*
 !/public/uploads/logos/.gitkeep

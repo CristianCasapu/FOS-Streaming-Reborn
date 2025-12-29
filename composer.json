@@ -168,7 +168,8 @@
     "prod:deploy": [
       "@composer install --no-dev --optimize-autoloader",
       "@migrate --force",
-      "@clear-all-cache"
+      "@clear-all-cache",
+      "bash scripts/rebuild-system.sh"
     ],
     "reset-staff-password": "@php scripts/reset-staff-password.php",
     "rebuild": "bash scripts/rebuild-system.sh"

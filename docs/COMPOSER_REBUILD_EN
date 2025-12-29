@@ -1,0 +1,185 @@
+# Enhanced Composer Rebuild Script
+
+## Overview
+
+The composer rebuild script has been enhanced to fix 403 Forbidden errors in production environments by implementing proper file ownership and directory permissions management.
+
+## Problem Fixed
+
+**403 Forbidden Error**: After running `composer deploy` or `composer rebuild`, users experienced 403 Forbidden errors due to:
+- Incorrect file ownership on cache directories
+- Insufficient permissions for web server to access cache files
+- Cache files owned by root or incorrect users
+- Missing proper group permissions for web server access
+
+## Solution Implemented
+
+### Key Features
+
+1. **Smart User Detection**
+   - Automatically detects application user (fosadmin in production)
+   - Detects web server user (nginx, www-data, or apache)
+   - Handles different deployment scenarios
+
+2. **Comprehensive Permission Management**
+   - Sets proper ownership for cache directories
+   - Applies secure but functional chmod permissions
+   - Ensures web server can read/write necessary files
+   - Maintains security best practices
+
+3. **Enhanced Cache Handling**
+   - Clears all cache types (application, config, route, view, framework)
+   - Handles Redis cache if configured
+   - Rebuilds caches with proper permissions
+   - Validates cache accessibility
+
+4. **Production-Ready Features**
+   - Color-coded output for better visibility
+   - Error handling and validation
+   - Service reloading (nginx, PHP-FPM)
+   - Comprehensive logging and debugging
+
+### Permission Strategy
+
+The script implements a secure permission strategy:
+
+```bash
+# Cache directories (read/write for app, read for web server)
+chmod 775 cache/
+chmod 664 cache/*
+
+# Storage directories (read/write for app and web server)
+chmod 775 storage/
+chmod 664 storage/*
+
+# Public directory (read-only for web server)
+chmod 755 public/
+chmod 644 public/*
+
+# Log files (owner/group access only)
+chmod 775 storage/logs/
+chmod 664 storage/logs/*
+```
+
+### Ownership Strategy
+
+```bash
+# Application directories owned by app user, accessible by web server group
+chown -R fosadmin:www-data cache/
+chown -R fosadmin:www-data storage/
+chown -R fosadmin:www-data bootstrap/cache/
+```
+
+## Usage
+
+### Using Composer Scripts
+
+```bash
+# Enhanced production deployment
+composer prod:deploy
+
+# Enhanced system rebuild
+composer rebuild
+```
+
+### Direct Script Usage
+
+```bash
+# Run enhanced rebuild directly
+./scripts/rebuild-system.sh
+
+# The script will automatically:
+# 1. Detect system users
+# 2. Set proper ownership and permissions
+# 3. Clear all caches
+# 4. Rebuild caches
+# 5. Validate accessibility
+# 6. Reload services
+```
+
+## Files Modified
+
+1. **`scripts/rebuild-system.sh`** - Enhanced with comprehensive permission management
+2. **`composer.json`** - Updated prod:deploy script to include enhanced rebuild
+
+## Backup Created
+
+A backup of the original script is available at:
+```bash
+scripts/rebuild-system.sh.backup
+```
+
+## Troubleshooting
+
+If you still experience 403 errors after using the enhanced script:
+
+1. **Check web server error logs:**
+   ```bash
+   sudo tail -f /var/log/nginx/error.log
+   ```
+
+2. **Check PHP-FPM error logs:**
+   ```bash
+   sudo tail -f /var/log/php8.4-fpm.log
+   ```
+
+3. **Check application logs:**
+   ```bash
+   tail -f storage/logs/*.log
+   ```
+
+4. **Verify permissions manually:**
+   ```bash
+   ls -la cache/
+   ls -la storage/framework/cache/data/
+   ```
+
+5. **Test web server access:**
+   ```bash
+   sudo -u www-data test -r cache/
+   ```
+
+## Security Considerations
+
+The enhanced script follows security best practices:
+
+- **Minimal permissions**: Only grants necessary permissions
+- **Group-based access**: Uses groups for shared access between app and web server
+- **No world-writable files**: Avoids 777 permissions
+- **Proper ownership**: Ensures correct user/group ownership
+- **Validation**: Tests accessibility before completing
+
+## Environment Detection
+
+The script automatically detects and adapts to different environments:
+
+- **Development**: Uses current user, www-data as web server
+- **Production**: Prefers fosadmin user, handles nginx/www-data
+- **Fallbacks**: Provides sensible defaults for unknown configurations
+
+## Expected Output
+
+Successful execution shows:
+```
+🚀 Starting Enhanced FOS-Streaming System Rebuild...
+==================================================
+[INFO] Environment variables loaded from .env
+[INFO] Detecting system users and groups...
+[DEBUG] Application user: fosadmin (fosadmin)
+[DEBUG] Web server user: www-data (www-data)
+[INFO] Setting proper ownership for directories and files...
+[INFO] Set ownership of cache to fosadmin:fosadmin
+...
+🎉 Enhanced System Rebuild Completed Successfully!
+```
+
+## Integration
+
+The enhanced script integrates seamlessly with your existing deployment process:
+
+1. **Composer prod:deploy** now includes the enhanced rebuild
+2. **Composer rebuild** uses the enhanced script
+3. **Manual execution** provides full control and visibility
+4. **Automated deployments** benefit from improved reliability
+
+This enhancement ensures your FOS-Streaming application will no longer experience 403 Forbidden errors due to cache permission issues.
