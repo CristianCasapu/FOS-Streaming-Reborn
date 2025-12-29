@@ -166,13 +166,18 @@
       "@serve"
     ],
     "prod:deploy": [
-      "@composer install --no-dev --optimize-autoloader",
+      "@composer install --no-dev --optimize-autoloader --classmap-authoritative --no-scripts",
+      "@composer dump-autoload --optimize --classmap-authoritative --no-scripts",
       "@migrate --force",
       "@clear-all-cache",
       "bash scripts/rebuild-system.sh"
     ],
     "reset-staff-password": "@php scripts/reset-staff-password.php",
-    "rebuild": "bash scripts/rebuild-system.sh"
+    "rebuild": "bash scripts/rebuild-system.sh",
+    "optimize:autoload": [
+      "@composer dump-autoload --optimize --classmap-authoritative",
+      "@php -r \"if (extension_loaded('apcu')) { echo 'APCu available - consider using --apcu for additional optimization\n'; } else { echo 'APCu not available - classmap optimization applied\n'; }\""
+    ]
   },
   "config": {
     "optimize-autoloader": true,
